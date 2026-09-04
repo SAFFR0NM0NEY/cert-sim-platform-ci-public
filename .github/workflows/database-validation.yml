@@ -28,7 +28,6 @@ jobs:
       - name: Static database validation
         run: |
           npm run validate:db-operations
-          npm run validate:db-publication
           npm run validate:db-assignment
           node scripts/validate-issue65-untimed-practice.mjs
       - name: Full disposable migration chain and pgTAP

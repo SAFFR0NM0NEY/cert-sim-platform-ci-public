@@ -1,5 +1,5 @@
 path	size	sha256
-.github/workflows/database-validation.yml	2866	5b24f1612d9f4d5772f7b9415313b3d32a9a3f7f7abf66875eb9c137abb96c0a
+.github/workflows/database-validation.yml	2824	1ed09fb7657b03b6cf1582db3ef1b36614f753004ff6d5b97f6e2e450605e6fd
 .github/workflows/edge-validation.yml	3924	84462376232003d8c43d046f2961fb7d967abf5eacd6fba8d73b80071def026b
 .github/workflows/frontend-validation.yml	1111	4af294c0ca0faf363e164c37da56a8fe764659a3c174726546971f3c4109fea5
 .gitignore	2369	4388f0ade022df5f5e868501450024e31293ad18a2ffc6021ad695201c4bd0f9
