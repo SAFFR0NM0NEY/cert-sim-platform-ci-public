@@ -1,0 +1,63 @@
+name: Database validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'candidate/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-database-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline
+      - run: npx --yes supabase@2.115.0 --version
+      - name: Static database validation
+        run: |
+          npm run validate:db-operations
+          npm run validate:db-publication
+          npm run validate:db-assignment
+          node scripts/validate-issue65-untimed-practice.mjs
+      - name: Full disposable migration chain and pgTAP
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-database"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          for suite in \
+            backend_exam_delivery_assignment.sql \
+            backend_exam_delivery_multi_exam.sql \
+            backend_exam_delivery_generic_lifecycle.sql \
+            backend_exam_delivery_practice_history.sql \
+            backend_exam_delivery_r3e_scope.sql \
+            backend_exam_delivery_runner.sql \
+            backend_exam_delivery_legacy_compatibility.sql \
+            backend_exam_delivery_issue59.sql
+          do
+            npx --yes supabase@2.115.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/$suite"
+          done
+          set -a
+          eval "$(npx --yes supabase@2.115.0 --workdir "$workdir" status -o env)"
+          set +a
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-generic-protected-lifecycle-integration.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-protected-access-history-integration.mjs
+          npx --yes supabase@2.115.0 --workdir "$workdir" db lint --local --level warning
+          npx --yes supabase@2.115.0 --workdir "$workdir" db advisors --local --type security --level info --fail-on error
+          npx --yes supabase@2.115.0 --workdir "$workdir" db advisors --local --type performance --level info --fail-on error
