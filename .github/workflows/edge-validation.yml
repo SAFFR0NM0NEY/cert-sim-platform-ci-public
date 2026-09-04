@@ -1,0 +1,74 @@
+name: Edge validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'candidate/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-edge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  edge-unit-static:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+      - run: deno check --config supabase/functions/certsim-protected-exam/deno.json supabase/functions/certsim-protected-exam/index.ts
+      - run: deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --frozen supabase/functions/certsim-protected-exam/tests
+
+  edge-disposable-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-supabase-cli-2.115.0
+      - name: Disposable local Edge lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-edge"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          cp -R supabase/functions "$workdir/supabase/functions"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          set -a
+          eval "$(npx --yes supabase@2.115.0 --workdir "$workdir" status -o env)"
+          set +a
+          AUTH_RESPONSE="$(curl -sS -X POST "$API_URL/auth/v1/signup" -H "apikey: $ANON_KEY" -H 'content-type: application/json' --data '{"email":"edge-ci@example.invalid","password":"Synthetic-only-password-65!"}')"
+          CERTSIM_USER_JWT="$(AUTH_RESPONSE="$AUTH_RESPONSE" node -e "const v=JSON.parse(process.env.AUTH_RESPONSE);if(!v.access_token)process.exit(1);process.stdout.write(v.access_token)")"
+          CERTSIM_ACTOR_ID="$(AUTH_RESPONSE="$AUTH_RESPONSE" node -e "const v=JSON.parse(process.env.AUTH_RESPONSE);if(!v.user?.id)process.exit(1);process.stdout.write(v.user.id)")"
+          unset AUTH_RESPONSE
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -v actor_id="$CERTSIM_ACTOR_ID" -f supabase/functions/tests/edge_fixture.sql >/dev/null
+          printf 'CERTSIM_ALLOWED_ORIGINS=http://localhost:5173\nCERTSIM_RUNTIME_MODE=disposable-local\nCERTSIM_PROTECTED_RUNTIME_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\nSUPABASE_SECRET_KEY=%s\n' "$SERVICE_ROLE_KEY" "$ANON_KEY" "$SERVICE_ROLE_KEY" > "$RUNNER_TEMP/certsim-edge.env"
+          npx --yes supabase@2.115.0 --workdir "$workdir" functions serve certsim-protected-exam --env-file "$RUNNER_TEMP/certsim-edge.env" >"$RUNNER_TEMP/edge.log" 2>&1 &
+          ready=0
+          for attempt in {1..60}; do
+            status="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54321/functions/v1/certsim-protected-exam/eligibility || true)"
+            if [ "$status" = 401 ]; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          CERTSIM_EDGE_URL=http://127.0.0.1:54321/functions/v1/certsim-protected-exam CERTSIM_USER_JWT="$CERTSIM_USER_JWT" CERTSIM_ACTOR_ID="$CERTSIM_ACTOR_ID" CERTSIM_ANON_KEY="$ANON_KEY" CERTSIM_DB_URL="$DB_URL" deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --allow-net=127.0.0.1:54321 --allow-run=psql --frozen supabase/functions/tests/integration_test.ts

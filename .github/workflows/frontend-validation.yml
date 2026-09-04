@@ -1,0 +1,41 @@
+name: Frontend validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'candidate/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline
+      - run: npx playwright install --with-deps chromium
+      - name: Functional browser validation
+        run: npm run test:r3g-browser
+      - name: Issue 65 and protected frontend validation
+        run: |
+          node scripts/validate-issue65-untimed-practice.mjs
+          npm run validate:history-pagination
+          npm run validate:purpose-aware-readiness
+          npm run validate:r3e
+          npm run validate:exam-library
+          npm run validate:issue59
+          node scripts/validate-protected-build-custody.mjs
+      - run: npm run build
+      - run: npm run validate:delivery-builds
+      - run: git diff --check
