@@ -49,7 +49,7 @@ jobs:
             backend_exam_delivery_runner.sql \
             backend_exam_delivery_legacy_compatibility.sql \
             backend_exam_delivery_issue59.sql \
-            backend_exam_delivery_issue21.sql
+            backend_exam_delivery_issue21.sql \
             backend_exam_delivery_issue21_compatibility.sql
           do
             npx --yes supabase@2.115.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/$suite"

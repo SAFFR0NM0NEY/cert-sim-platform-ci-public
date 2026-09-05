@@ -70,7 +70,7 @@ Deno.test("disposable authenticated HTTP lifecycle", async () => {
   noProtected(started.data);
   const attemptId = started.data.attempt.attemptId,
     itemId = started.data.items[0].itemId;
-  const current = await call("/attempts/current?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable");
+  const current = await call("/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable");
   assertEquals(current.response.status, 200);
   assertEquals(current.data.attempt.attemptId, attemptId);
   noProtected(current.data);
