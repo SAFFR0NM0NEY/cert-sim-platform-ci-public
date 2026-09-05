@@ -57,6 +57,7 @@ jobs:
           eval "$(npx --yes supabase@2.115.0 --workdir "$workdir" status -o env)"
           set +a
           SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-generic-protected-lifecycle-integration.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-issue21-canonical-form-lifecycle.mjs
           SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-protected-access-history-integration.mjs
           npx --yes supabase@2.115.0 --workdir "$workdir" db lint --local --level warning
           npx --yes supabase@2.115.0 --workdir "$workdir" db advisors --local --type security --level info --fail-on error

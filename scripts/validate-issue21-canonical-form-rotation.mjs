@@ -18,59 +18,30 @@ assert.match(sql, /set statement_timeout = '15s'/);
 assert.match(sql, /pg_advisory_xact_lock/);
 assert.match(sql, /attempts_one_canonical_form_per_cycle_idx/);
 assert.match(sql, /foreign key \(package_profile_id, package_version_id\)/);
+assert.match(sql, /foreign key \(form_id, package_profile_id, package_version_id\)/);
 assert.match(sql, /foreign key \(package_question_id, package_version_id\)/);
+assert.match(sql, /unique \(package_profile_id, package_question_id\)/);
 assert.match(sql, /canonical_form_id is not null/);
 assert.match(sql, /purpose not in \('assigned_assessment','self_directed_exam'\)/);
 assert.match(sql, /return exam_delivery\.materialize_attempt_items_issue21_unrotated_base/);
 assert.match(sql, /practice-only-until-versioned-rebalance/);
 assert.match(sql, /canonical_form_runtime_validation_failed/);
+for (const token of ['certsim-canonical-forms-v2', 'skillGroupTargets', 'requiredObjectiveKeys', 'minimumCoverageTagCounts', 'officialObjectiveKey', 'coverageTags']) assert.match(sql, new RegExp(token));
+for (const token of ['canonical_form_generic_metadata_invalid', 'json_has_exact_keys', 'jsonb_typeof']) assert.match(sql, new RegExp(token));
+assert.match(sql, /count\(distinct/);
+assert.match(sql, /not in \('easy','medium','hard','advanced'\)/);
+for (const forbidden of ['ai901Subskill', 'identify-ai-concepts-and-capabilities', 'implement-ai-solutions-with-foundry', 'blueprintTargets', 'requiredSubskills', 'minimumImplementationQuestions']) assert.doesNotMatch(sql, new RegExp(forbidden));
 assert.match(sql, /self_directed_release_policy_conflicts_with_package/);
 assert.match(sql, /\('after_submission','after_submission'\)/);
 assert.doesNotMatch(sql, /grant (?:select|insert|update|delete|all).*package_(?:forms|form_questions|reserve_questions)/i);
 assert.doesNotMatch(sql, /auth\.uid\(\)/, 'private helpers must not pretend browser identity is their execution boundary');
 
-class RotationFixture {
-  constructor() { this.attempts = []; this.requests = new Map(); }
-  start({ owner = 'learner-a', profile = 'full', purpose = 'self_directed_exam', requestId, commit = true }) {
-    if (this.requests.has(requestId)) return this.requests.get(requestId);
-    if (!['assigned_assessment', 'self_directed_exam'].includes(purpose)) return { form: null, cycle: null };
-    const scoped = this.attempts.filter((attempt) => attempt.owner === owner && attempt.profile === profile);
-    const cycle = Math.max(1, ...scoped.map((attempt) => attempt.cycle));
-    const seen = new Set(scoped.filter((attempt) => attempt.cycle === cycle).map((attempt) => attempt.form));
-    const nextCycle = seen.size === 6 ? cycle + 1 : cycle;
-    const previous = scoped.at(-1)?.form;
-    const candidates = [1, 2, 3, 4, 5, 6].filter((form) => !this.attempts.some((attempt) => attempt.owner === owner && attempt.profile === profile && attempt.cycle === nextCycle && attempt.form === form));
-    const form = candidates.find((candidate) => nextCycle === 1 || candidate !== previous) ?? candidates[0];
-    const result = { owner, profile, purpose, requestId, form, cycle: nextCycle };
-    if (commit) { this.attempts.push(result); this.requests.set(requestId, result); }
-    return result;
-  }
-}
-
-const fixture = new RotationFixture();
-const six = Array.from({ length: 6 }, (_, index) => fixture.start({ requestId: `full-${index + 1}`, purpose: index % 2 ? 'assigned_assessment' : 'self_directed_exam' }));
-assert.deepEqual(six.map(({ form }) => form), [1, 2, 3, 4, 5, 6], 'assigned and self-directed starts share one six-form cycle');
-const seventh = fixture.start({ requestId: 'full-7' });
-assert.equal(seventh.cycle, 2);
-assert.notEqual(seventh.form, six.at(-1).form, 'cycle boundary must not immediately repeat the prior form');
-assert.strictEqual(fixture.start({ requestId: 'full-7' }), seventh, 'same request is idempotent');
-const beforeFailure = fixture.attempts.length;
-fixture.start({ requestId: 'rolled-back', commit: false });
-assert.equal(fixture.attempts.length, beforeFailure, 'failed materialization consumes no form');
-assert.equal(fixture.start({ requestId: 'practice', purpose: 'weak_area' }).form, null, 'practice consumes no formal form');
-const compact = Array.from({ length: 6 }, (_, index) => fixture.start({ profile: 'compact', requestId: `compact-${index}` }));
-assert.equal(new Set(compact.map(({ form }) => form)).size, 6, 'compact has an independent six-form cycle');
-const otherLearner = fixture.start({ owner: 'learner-b', requestId: 'other-owner' });
-assert.equal(otherLearner.form, 1, 'learner cycles are isolated');
-
 console.log(JSON.stringify({
   ok: true,
   issue: 21,
   migration: migrationPath,
-  fullCycleForms: six.length,
-  compactCycleForms: compact.length,
-  seventhCycle: seventh.cycle,
-  practiceConsumesForms: false,
+  contractVersion: 'certsim-canonical-forms-v2',
+  realLifecycleFixture: 'scripts/test-issue21-canonical-form-lifecycle.mjs',
   browserTableGrants: 0,
   legacyFallbackPreserved: true,
 }));

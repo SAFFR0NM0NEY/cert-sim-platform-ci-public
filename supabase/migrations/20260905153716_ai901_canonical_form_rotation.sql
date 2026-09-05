@@ -31,17 +31,22 @@ create table exam_delivery.package_forms (
   unique (package_profile_id, form_key),
   unique (package_profile_id, form_ordinal),
   unique (id, package_version_id),
+  unique (id, package_profile_id, package_version_id),
   foreign key (package_profile_id, package_version_id)
     references exam_delivery.package_profiles(id, package_version_id) on delete restrict
 );
 
 create table exam_delivery.package_form_questions (
-  form_id uuid not null references exam_delivery.package_forms(id) on delete restrict,
+  form_id uuid not null,
+  package_profile_id uuid not null,
   package_version_id uuid not null references exam_delivery.package_versions(id) on delete restrict,
   package_question_id uuid not null references exam_delivery.package_questions(id) on delete restrict,
   presentation_ordinal integer not null check (presentation_ordinal > 0),
   primary key (form_id, package_question_id),
   unique (form_id, presentation_ordinal),
+  unique (package_profile_id, package_question_id),
+  foreign key (form_id, package_profile_id, package_version_id)
+    references exam_delivery.package_forms(id, package_profile_id, package_version_id) on delete restrict,
   foreign key (package_question_id, package_version_id)
     references exam_delivery.package_questions(id, package_version_id) on delete restrict
 );
@@ -154,9 +159,6 @@ declare
   v_reference_reserve jsonb;
   v_form_count integer;
   v_member_count integer;
-  v_concepts integer;
-  v_foundry integer;
-  v_implementation integer;
   v_medium integer;
   v_hard_advanced integer;
   v_advanced integer;
@@ -178,20 +180,45 @@ begin
   loop
     v_contract := v_profile.selection_config->'canonicalForms';
     v_release := v_profile.selection_config->'formalReleasePolicy';
-    if jsonb_typeof(v_contract) <> 'object'
-      or v_contract->>'contractVersion' <> 'certsim-canonical-forms-v1'
+    if jsonb_typeof(v_contract) is distinct from 'object' or jsonb_typeof(v_release) is distinct from 'object'
+    then raise exception 'canonical_form_contract_invalid' using errcode = '22023'; end if;
+    if not exam_delivery.json_has_exact_keys(v_contract,array['contractVersion','profileKey','questionCount','cycleLength','reservePolicy','reserveQuestionIds','skillGroupTargets','requiredObjectiveKeys','minimumCoverageTagCounts','difficultyRequirements','forms'])
+      or v_contract->>'contractVersion' <> 'certsim-canonical-forms-v2'
       or (v_contract->>'profileKey') is distinct from v_profile.profile_key
-      or (v_contract->>'questionCount')::integer <> v_profile.question_count
-      or (v_contract->>'cycleLength')::integer < 2
-      or (v_contract->>'cycleLength')::integer > 20
-      or jsonb_typeof(v_contract->'forms') <> 'array'
-      or jsonb_array_length(v_contract->'forms') <> (v_contract->>'cycleLength')::integer
-      or jsonb_typeof(v_contract->'reserveQuestionIds') <> 'array'
+      or jsonb_typeof(v_contract->'questionCount') is distinct from 'number'
+      or not (v_contract->>'questionCount' ~ '^\d+$')
+      or jsonb_typeof(v_contract->'cycleLength') is distinct from 'number'
+      or not (v_contract->>'cycleLength' ~ '^\d+$')
+      or jsonb_typeof(v_contract->'forms') is distinct from 'array'
+      or jsonb_typeof(v_contract->'reserveQuestionIds') is distinct from 'array'
+      or jsonb_typeof(v_contract->'skillGroupTargets') is distinct from 'object'
+      or jsonb_typeof(v_contract->'requiredObjectiveKeys') is distinct from 'array'
+      or jsonb_typeof(v_contract->'minimumCoverageTagCounts') is distinct from 'object'
+      or jsonb_typeof(v_contract->'difficultyRequirements') is distinct from 'object'
       or v_contract->>'reservePolicy' <> 'practice-only-until-versioned-rebalance'
-      or jsonb_typeof(v_release) <> 'object'
       or not exam_delivery.json_has_exact_keys(v_release, array['review','answers'])
       or (v_release->>'review', v_release->>'answers') <> ('after_submission','after_submission')
     then raise exception 'canonical_form_contract_invalid' using errcode = '22023'; end if;
+
+    if (v_contract->>'questionCount')::integer <> v_profile.question_count
+      or (v_contract->>'cycleLength')::integer not between 2 and 20
+      or jsonb_array_length(v_contract->'forms') <> (v_contract->>'cycleLength')::integer
+      or (select count(*) from jsonb_object_keys(v_contract->'skillGroupTargets')) = 0
+      or exists (select 1 from jsonb_each(v_contract->'skillGroupTargets') target(key,value)
+        where nullif(btrim(target.key),'') is null or jsonb_typeof(target.value) is distinct from 'number'
+          or not (target.value#>>'{}' ~ '^\d+$'))
+      or (select coalesce(sum((value#>>'{}')::integer),0) from jsonb_each(v_contract->'skillGroupTargets')) <> v_profile.question_count
+      or jsonb_array_length(v_contract->'requiredObjectiveKeys') = 0
+      or exists (select 1 from jsonb_array_elements(v_contract->'requiredObjectiveKeys') objective(value)
+        where jsonb_typeof(objective.value) is distinct from 'string' or nullif(btrim(objective.value#>>'{}'),'') is null)
+      or (select count(*) <> count(distinct value#>>'{}') from jsonb_array_elements(v_contract->'requiredObjectiveKeys') objective(value))
+      or exists (select 1 from jsonb_each(v_contract->'minimumCoverageTagCounts') coverage(key,value)
+        where nullif(btrim(coverage.key),'') is null or jsonb_typeof(coverage.value) is distinct from 'number'
+          or not (coverage.value#>>'{}' ~ '^\d+$'))
+      or not exam_delivery.json_has_exact_keys(v_contract->'difficultyRequirements',array['minimumMedium','minimumHardOrAdvanced','minimumAdvanced'])
+      or exists (select 1 from jsonb_each(v_contract->'difficultyRequirements') difficulty(key,value)
+        where jsonb_typeof(difficulty.value) is distinct from 'number' or not (difficulty.value#>>'{}' ~ '^\d+$'))
+    then raise exception 'canonical_form_generic_metadata_invalid' using errcode = '22023'; end if;
 
     if v_declared_review is null then
       v_declared_review := v_release->>'review';
@@ -201,7 +228,9 @@ begin
       or v_reference_reserve is distinct from v_contract->'reserveQuestionIds'
     then raise exception 'canonical_form_cross_profile_contract_mismatch' using errcode = '22023'; end if;
 
-    if (select count(*) <> count(distinct value) from jsonb_array_elements_text(v_contract->'reserveQuestionIds'))
+    if exists (select 1 from jsonb_array_elements(v_contract->'reserveQuestionIds') reserve(value)
+        where jsonb_typeof(reserve.value) is distinct from 'string' or nullif(btrim(reserve.value#>>'{}'),'') is null)
+      or (select count(*) <> count(distinct value) from jsonb_array_elements_text(v_contract->'reserveQuestionIds'))
       or exists (
         select 1 from jsonb_array_elements_text(v_contract->'reserveQuestionIds') r(question_id)
         where not exists (
@@ -215,12 +244,18 @@ begin
     for v_form in select value from jsonb_array_elements(v_contract->'forms')
     loop
       v_form_count := v_form_count + 1;
-      if jsonb_typeof(v_form) <> 'object'
-        or nullif(v_form->>'formKey','') is null
-        or (v_form->>'ordinal')::integer <> v_form_count
-        or jsonb_typeof(v_form->'questionIds') <> 'array'
+      if jsonb_typeof(v_form) is distinct from 'object'
+        or not exam_delivery.json_has_exact_keys(v_form,array['formKey','ordinal','questionIds','membershipHash'])
+        or nullif(btrim(v_form->>'formKey'),'') is null
+        or jsonb_typeof(v_form->'ordinal') is distinct from 'number'
+        or not (v_form->>'ordinal' ~ '^\d+$')
+        or jsonb_typeof(v_form->'questionIds') is distinct from 'array'
+      then raise exception 'canonical_form_definition_invalid' using errcode = '22023'; end if;
+      if (v_form->>'ordinal')::integer <> v_form_count
         or jsonb_array_length(v_form->'questionIds') <> v_profile.question_count
         or v_form->>'membershipHash' <> exam_delivery.canonical_sha256(v_form->'questionIds')
+        or exists (select 1 from jsonb_array_elements(v_form->'questionIds') member(value)
+          where jsonb_typeof(member.value) is distinct from 'string' or nullif(btrim(member.value#>>'{}'),'') is null)
         or (select count(*) <> count(distinct value) from jsonb_array_elements_text(v_form->'questionIds'))
       then raise exception 'canonical_form_definition_invalid' using errcode = '22023'; end if;
 
@@ -236,29 +271,43 @@ begin
           on reserve.question_id = member.question_id
       ) then raise exception 'canonical_form_membership_invalid' using errcode = '22023'; end if;
 
-      select count(*) filter (where q.presentation_payload->>'officialSkillGroup' = 'identify-ai-concepts-and-capabilities'),
-        count(*) filter (where q.presentation_payload->>'officialSkillGroup' = 'implement-ai-solutions-with-foundry'),
-        count(*) filter (where q.presentation_payload->>'ai901Subskill' = 'python-sdk-rest-cli-implementation'),
-        count(*) filter (where q.presentation_payload->>'difficulty' = 'medium'),
+      select count(*) filter (where q.presentation_payload->>'difficulty' = 'medium'),
         count(*) filter (where q.presentation_payload->>'difficulty' in ('hard','advanced')),
         count(*) filter (where q.presentation_payload->>'difficulty' = 'advanced')
-      into v_concepts, v_foundry, v_implementation, v_medium, v_hard_advanced, v_advanced
+      into v_medium, v_hard_advanced, v_advanced
       from jsonb_array_elements_text(v_form->'questionIds') member(question_id)
       join exam_delivery.package_questions q on q.package_version_id = new.id and q.question_id = member.question_id;
 
-      if v_concepts <> (v_contract#>>'{blueprintTargets,concepts}')::integer
-        or v_foundry <> (v_contract#>>'{blueprintTargets,foundry}')::integer
-        or v_implementation < (v_contract->>'minimumImplementationQuestions')::integer
+      if exists (
+          select 1 from jsonb_array_elements_text(v_form->'questionIds') member(question_id)
+          join exam_delivery.package_questions q on q.package_version_id = new.id and q.question_id = member.question_id
+          where nullif(btrim(q.presentation_payload->>'officialSkillGroup'),'') is null
+            or nullif(btrim(q.presentation_payload->>'officialObjectiveKey'),'') is null
+            or not (v_contract->'skillGroupTargets' ? (q.presentation_payload->>'officialSkillGroup'))
+            or q.presentation_payload->>'difficulty' not in ('easy','medium','hard','advanced')
+            or jsonb_typeof(q.presentation_payload->'coverageTags') is distinct from 'array'
+            or exists (select 1 from jsonb_array_elements(q.presentation_payload->'coverageTags') tag(value)
+              where jsonb_typeof(tag.value) is distinct from 'string' or nullif(btrim(tag.value#>>'{}'),'') is null)
+            or (select count(*) <> count(distinct value#>>'{}') from jsonb_array_elements(q.presentation_payload->'coverageTags') tag(value))
+        )
         or v_medium < (v_contract#>>'{difficultyRequirements,minimumMedium}')::integer
         or v_hard_advanced < (v_contract#>>'{difficultyRequirements,minimumHardOrAdvanced}')::integer
         or v_advanced < (v_contract#>>'{difficultyRequirements,minimumAdvanced}')::integer
         or exists (
-          select 1 from jsonb_array_elements_text(v_contract->'requiredSubskills') required(subskill)
-          where not exists (
-            select 1 from jsonb_array_elements_text(v_form->'questionIds') member(question_id)
+          select 1 from jsonb_each_text(v_contract->'skillGroupTargets') required(skill_group, target)
+          where (select count(*) from jsonb_array_elements_text(v_form->'questionIds') member(question_id)
             join exam_delivery.package_questions q on q.package_version_id = new.id and q.question_id = member.question_id
-            where q.presentation_payload->>'ai901Subskill' = required.subskill
-          )
+            where q.presentation_payload->>'officialSkillGroup' = required.skill_group) <> required.target::integer
+        ) or exists (
+          select 1 from jsonb_array_elements_text(v_contract->'requiredObjectiveKeys') required(objective_key)
+          where not exists (select 1 from jsonb_array_elements_text(v_form->'questionIds') member(question_id)
+            join exam_delivery.package_questions q on q.package_version_id = new.id and q.question_id = member.question_id
+            where q.presentation_payload->>'officialObjectiveKey' = required.objective_key)
+        ) or exists (
+          select 1 from jsonb_each_text(v_contract->'minimumCoverageTagCounts') required(coverage_tag, minimum_count)
+          where (select count(*) from jsonb_array_elements_text(v_form->'questionIds') member(question_id)
+            join exam_delivery.package_questions q on q.package_version_id = new.id and q.question_id = member.question_id
+            where coalesce(q.presentation_payload->'coverageTags','[]'::jsonb) ? required.coverage_tag) < required.minimum_count::integer
         )
       then raise exception 'canonical_form_blueprint_invalid' using errcode = '22023'; end if;
 
@@ -271,9 +320,9 @@ begin
       ) returning id into v_form_id;
 
       insert into exam_delivery.package_form_questions(
-        form_id, package_version_id, package_question_id, presentation_ordinal
+        form_id, package_profile_id, package_version_id, package_question_id, presentation_ordinal
       )
-      select v_form_id, new.id, q.id, member.ordinality::integer
+      select v_form_id, v_profile.id, new.id, q.id, member.ordinality::integer
       from jsonb_array_elements_text(v_form->'questionIds') with ordinality member(question_id, ordinality)
       join exam_delivery.package_questions q on q.package_version_id = new.id and q.question_id = member.question_id;
       get diagnostics v_member_count = row_count;
@@ -281,6 +330,9 @@ begin
         raise exception 'canonical_form_materialization_incomplete' using errcode = 'P0001';
       end if;
     end loop;
+    if (select count(*) from exam_delivery.package_form_questions fq where fq.package_profile_id = v_profile.id)
+      <> (v_contract->>'cycleLength')::integer * v_profile.question_count
+    then raise exception 'canonical_form_union_incomplete' using errcode = 'P0001'; end if;
   end loop;
 
   insert into exam_delivery.package_reserve_questions(package_version_id, package_question_id)
@@ -417,9 +469,6 @@ declare
   v_attempt record;
   v_form exam_delivery.package_forms%rowtype;
   v_inserted integer;
-  v_concepts integer;
-  v_foundry integer;
-  v_implementation integer;
 begin
   select a.*, pp.question_count into strict v_attempt
   from exam_delivery.attempts a
@@ -441,19 +490,24 @@ begin
   where a.id = p_attempt_id and f.package_version_id = v_attempt.package_version_id
     and f.package_profile_id = v_attempt.package_profile_id;
 
-  select count(*)::integer,
-    count(*) filter (where q.presentation_payload->>'officialSkillGroup' = 'identify-ai-concepts-and-capabilities')::integer,
-    count(*) filter (where q.presentation_payload->>'officialSkillGroup' = 'implement-ai-solutions-with-foundry')::integer,
-    count(*) filter (where q.presentation_payload->>'ai901Subskill' = 'python-sdk-rest-cli-implementation')::integer
-  into v_inserted, v_concepts, v_foundry, v_implementation
+  select count(*)::integer into v_inserted
   from exam_delivery.package_form_questions fq
   join exam_delivery.package_questions q on q.id = fq.package_question_id
   where fq.form_id = v_form.id and fq.package_version_id = v_attempt.package_version_id;
   if v_inserted <> v_attempt.question_count
     or v_inserted <> v_form.question_count
-    or v_concepts <> (v_form.blueprint_contract#>>'{blueprintTargets,concepts}')::integer
-    or v_foundry <> (v_form.blueprint_contract#>>'{blueprintTargets,foundry}')::integer
-    or v_implementation < (v_form.blueprint_contract->>'minimumImplementationQuestions')::integer
+    or exists (select 1 from jsonb_each_text(v_form.blueprint_contract->'skillGroupTargets') required(skill_group, target)
+      where (select count(*) from exam_delivery.package_form_questions fq2
+        join exam_delivery.package_questions q2 on q2.id=fq2.package_question_id
+        where fq2.form_id=v_form.id and q2.presentation_payload->>'officialSkillGroup'=required.skill_group) <> required.target::integer)
+    or exists (select 1 from jsonb_array_elements_text(v_form.blueprint_contract->'requiredObjectiveKeys') required(objective_key)
+      where not exists (select 1 from exam_delivery.package_form_questions fq2
+        join exam_delivery.package_questions q2 on q2.id=fq2.package_question_id
+        where fq2.form_id=v_form.id and q2.presentation_payload->>'officialObjectiveKey'=required.objective_key))
+    or exists (select 1 from jsonb_each_text(v_form.blueprint_contract->'minimumCoverageTagCounts') required(coverage_tag, minimum_count)
+      where (select count(*) from exam_delivery.package_form_questions fq2
+        join exam_delivery.package_questions q2 on q2.id=fq2.package_question_id
+        where fq2.form_id=v_form.id and coalesce(q2.presentation_payload->'coverageTags','[]'::jsonb) ? required.coverage_tag) < required.minimum_count::integer)
   then raise exception 'canonical_form_runtime_validation_failed' using errcode = 'P0001'; end if;
 
   with inserted as (
