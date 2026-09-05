@@ -243,7 +243,7 @@ begin
     where a.learner_id=p_actor_id and a.status='active' and a.available_from<=v_now
       and (a.expires_at is null or a.expires_at>v_now)
       and exam_delivery.normalize_exam_key(pv.exam_key)=v_key and pp.profile_key=p_profile_key and pv.status='published';
-  if v_count<>1 then return jsonb_build_object('ok',false,'code',case when v_count=0 then 'not_assigned' else 'assignment_conflict' end); end if;
+  if v_count<>1 then return jsonb_build_object('ok',false,'code',case when v_count=0 then 'assignment_required' else 'assignment_conflict' end); end if;
   select a.id assignment_id,pv.id package_version_id,pv.generator_version,pv.scorer_version,
     pp.id package_profile_id,pp.time_limit_minutes into strict v_binding
   from exam_delivery.protected_assignments a join exam_delivery.package_versions pv on pv.id=a.package_version_id
