@@ -158,6 +158,7 @@ begin
     and a.expires_at>statement_timestamp() and a.language_preference=p_language
     and ((p_assignment_id is null and p_purpose='self_directed_exam' and a.source_assignment_id is null and a.protected_assignment_id is null
           and a.attribution_source is distinct from 'assignment')
+      or (p_assignment_id is null and p_purpose='assigned_assessment' and a.source_assignment_id is null)
       or (p_assignment_id is not null and p_purpose='assigned_assessment' and a.source_assignment_id=p_assignment_id
           and a.attribution_source='assignment'));
   if v_count<>1 then return jsonb_build_object('ok',false,'code',case when v_count=0 then 'attempt_not_found' else 'attempt_conflict' end); end if;
