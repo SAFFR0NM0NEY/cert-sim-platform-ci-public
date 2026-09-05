@@ -85,8 +85,8 @@ insert into exam_delivery.exam_entitlements(package_version_id,package_profile_i
 ('${packageId}','${compactProfile}','learner','${learner.id}',true,now()-interval '1 minute','issue21_fixture','${owner.id}'),
 ('${packageId}','${fullProfile}','learner','${concurrentLearner.id}',true,now()-interval '1 minute','issue21_fixture','${owner.id}');
 insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_completed_attempts,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy) values
-('rotationfixture','1.0.0','rotation-full','self_directed_exam','production_authorized',true,null,2,false,'after_submission','after_submission'),
-('rotationfixture','1.0.0','rotation-full','study_sandbox','production_authorized',true,null,2,true,'immediate_study_feedback','immediate_study_feedback');`);
+('rotationfixture','1.0.0','rotation-full','self_directed_exam','production_authorized',true,null,10,false,'after_submission','after_submission'),
+('rotationfixture','1.0.0','rotation-full','study_sandbox','production_authorized',true,null,10,true,'immediate_study_feedback','immediate_study_feedback');`);
 
 const baseRequest={examKey:'rotation-fixture',profileId:'rotation-full',purpose:'self_directed_exam',language:'not_applicable',includePbqs:true,mixStrategy:'balanced'};
 const concurrentRequests=[1,2].map(()=>({...baseRequest,clientRequestId:crypto.randomUUID()}));
