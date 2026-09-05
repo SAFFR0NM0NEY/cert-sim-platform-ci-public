@@ -141,8 +141,9 @@ sql(`select 1/((canonical_form_id is null and canonical_form_cycle is null)::int
 await complete(practiceStarted,learner.id);
 
 const assignmentId=crypto.randomUUID();
-sql(`insert into public.exam_assignments(id,organisation_id,student_user_id,exam_key,profile_id,title,status,available_from,due_at,assigned_by) values ('${assignmentId}','${org}','${learner.id}','rotationfixture','rotation-full','Synthetic controlled assignment','active',now()-interval '1 minute',now()+interval '1 day','${owner.id}');`);
-const assigned=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'rotation-fixture',p_profile_key:'rotation-full',p_request_id:crypto.randomUUID(),p_assignment_id:assignmentId});
+sql(`update exam_delivery.exam_access_policies set access_mode='assignment_required',require_assignment=true where canonical_exam_key='rotationfixture';
+insert into exam_delivery.protected_assignments(id,learner_id,organisation_id,package_version_id,package_profile_id,status,available_from,expires_at,maximum_attempts,review_release_policy,answer_release_policy,assigned_by) values ('${assignmentId}','${learner.id}','${org}','${packageId}','${fullProfile}','active',now()-interval '1 minute',now()+interval '1 day',1,'never','never','${owner.id}');`);
+const assigned=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'rotation-fixture',p_profile_key:'rotation-full',p_request_id:crypto.randomUUID()});
 assertStarted(assigned,2,'ASSIGNED_START');
 await complete(assigned,learner.id);
 const assignedReview=await admin.rpc('certsim_protected_get_review',{p_actor_id:learner.id,p_attempt_id:assigned.data.attempt.attemptId});
