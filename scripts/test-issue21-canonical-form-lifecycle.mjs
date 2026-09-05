@@ -163,7 +163,7 @@ const compactAttempt=createAttempt(compactProfile,'self_directed_exam');
 sql(`select 1/((exam_delivery.materialize_attempt_items('${compactAttempt.id}','${compactAttempt.request}',null)=1)::integer); update exam_delivery.attempts set status='voided' where id='${compactAttempt.id}';`);
 const beforePractice=sqlValue(`select count(*) from exam_delivery.attempts where owner_id='${lowlevel.id}' and canonical_form_id is not null`);
 const practice=createAttempt(fullProfile,'study_sandbox');
-sql(`select exam_delivery.materialize_attempt_items('${practice.id}','${practice.request}',2); update exam_delivery.attempts set status='voided' where id='${practice.id}';`);
+sql(`select exam_delivery.materialize_attempt_items('${practice.id}','${practice.request}',null); update exam_delivery.attempts set status='voided' where id='${practice.id}';`);
 if(sqlValue(`select count(*) from exam_delivery.attempts where owner_id='${lowlevel.id}' and canonical_form_id is not null`)!==beforePractice) fail('PRACTICE_CONSUMED_FORM');
 
 const failed=createAttempt(fullProfile,'self_directed_exam');
