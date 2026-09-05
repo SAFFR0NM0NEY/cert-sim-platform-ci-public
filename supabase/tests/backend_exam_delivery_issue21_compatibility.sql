@@ -1,5 +1,5 @@
 begin;
-select plan(27);
+select plan(32);
 
 select has_table('exam_delivery','package_profile_defaults','private defaults exist');
 select has_table('exam_delivery','package_domain_compatibility','private domain mappings exist');
@@ -28,6 +28,11 @@ select ok((select pg_get_functiondef(p.oid) ~ 'package_domain_compatibility' and
 select ok((select pg_get_functiondef(p.oid) ~ 'create_protected_assignment_v2' and pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='create_protected_assignment_current'),'new assignments use explicit assignment default');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='package_domain_compatibility' and t.tgname='guard_package_domain_compatibility'),'cross-exam mappings are guarded');
 select ok((select pg_get_functiondef(p.oid) ~ 'packageVersion.*package_version.*canonicalFormId.*questionIds' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='replace_current_practice_attempt'),'replacement rejects authoritative selectors');
+select ok((select pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start resolves the explicit current assignment default');
+select ok((select pg_get_functiondef(p.oid) ~ '''assigned_assessment''::exam_delivery.attempt_purpose' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start requests the assignment-purpose default');
+select ok((select pg_get_functiondef(p.oid) !~ 'order by pv.published_at desc' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start no longer infers the newest publication');
+select ok((select p.prosecdef and p.proconfig @> array['search_path=""','statement_timeout=15s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start preserves bounded definer security configuration');
+select ok(has_function_privilege('service_role','exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)','EXECUTE') and not has_function_privilege('authenticated','exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)','EXECUTE'),'assignment start retains its service-only execution boundary');
 
 select * from finish();
 rollback;

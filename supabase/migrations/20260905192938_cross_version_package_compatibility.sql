@@ -413,20 +413,71 @@ end $$;
 
 -- Public organisation assignments resolve a new binding through the explicit
 -- assignment default; pre-existing protected assignments remain pinned above.
-do $$ declare v_definition text; v_updated text;
+-- Keep this definition explicit: pg_get_functiondef() reconstructs SQL and is
+-- not a byte-stable source representation across platforms or PostgreSQL.
+create or replace function exam_delivery.start_assignment_attempt(
+  p_actor_id uuid,p_exam_key text,p_profile_key text,p_request_id uuid,p_assignment_id uuid
+) returns jsonb language plpgsql security definer set search_path='' set statement_timeout='15s' as $$
+declare v_key text:=exam_delivery.normalize_exam_key(p_exam_key); v_now timestamptz:=statement_timestamp();
+  v_existing exam_delivery.attempts%rowtype; v_package record; v_assignment public.exam_assignments%rowtype;
+  v_attempt exam_delivery.attempts%rowtype;
 begin
-  v_definition:=pg_get_functiondef('exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)'::regprocedure);
-  v_updated:=replace(v_definition,
-    'from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
-    where exam_delivery.normalize_exam_key(pv.exam_key)=v_key and pp.profile_key=p_profile_key
-      and pv.package_schema_version=''certsim-protected-package-v2'' and pv.status=''published''
-    order by pv.published_at desc limit 1 for share of pv,pp;',
-    'from exam_delivery.resolve_package_profile_default(v_key,p_profile_key,''assigned_assessment''::exam_delivery.attempt_purpose) default_binding
+  if p_actor_id is null or p_request_id is null or p_assignment_id is null then
+    return jsonb_build_object('ok',false,'code','invalid_request'); end if;
+  select * into v_existing from exam_delivery.attempts where owner_id=p_actor_id and client_request_id=p_request_id;
+  if found then
+    if v_existing.source_assignment_id=p_assignment_id then return exam_delivery.resume_attempt(p_actor_id,v_existing.id); end if;
+    return jsonb_build_object('ok',false,'code','attempt_conflict');
+  end if;
+  select * into v_assignment from public.exam_assignments a where a.id=p_assignment_id and a.status='active'
+    and (a.available_from is null or a.available_from<=v_now) and (a.due_at is null or a.due_at>v_now) for share;
+  if not found or exam_delivery.normalize_exam_key(v_assignment.exam_key)<>v_key
+    or (nullif(v_assignment.profile_id,'') is not null and v_assignment.profile_id<>p_profile_key) then
+    return jsonb_build_object('ok',false,'code','assignment_conflict'); end if;
+  if not ((v_assignment.student_user_id=p_actor_id) or (v_assignment.student_user_id is null
+    and v_assignment.group_id is not null and exists(select 1 from public.memberships m
+      where m.user_id=p_actor_id and m.status='active' and m.role='student'
+        and m.organisation_id=v_assignment.organisation_id and m.group_id=v_assignment.group_id
+        and (v_assignment.campus_id is null or m.campus_id=v_assignment.campus_id)))) then
+    return jsonb_build_object('ok',false,'code','not_assigned'); end if;
+  if not coalesce((exam_delivery.check_eligibility_v2(p_actor_id,p_exam_key,p_profile_key)->>'eligible')::boolean,false) then
+    return jsonb_build_object('ok',false,'code',exam_delivery.check_eligibility_v2(p_actor_id,p_exam_key,p_profile_key)->>'reasonCode'); end if;
+  select pv.id package_version_id,pv.generator_version,pv.scorer_version,pp.id package_profile_id,pp.time_limit_minutes
+    into strict v_package
+    from exam_delivery.resolve_package_profile_default(
+      v_key,p_profile_key,'assigned_assessment'::exam_delivery.attempt_purpose
+    ) default_binding
     join exam_delivery.package_versions pv on pv.id=default_binding.package_version_id
     join exam_delivery.package_profiles pp on pp.id=default_binding.package_profile_id and pp.package_version_id=pv.id
-    for share of pv,pp;');
-  if v_updated=v_definition then raise exception 'assignment_default_resolution_contract_drift'; end if;
-  execute v_updated;
+    for share of pv,pp;
+  insert into exam_delivery.attempts(owner_id,package_version_id,package_profile_id,protected_assignment_id,
+    client_request_id,status,generator_version,scorer_version,created_at,started_at,expires_at,purpose,
+    source_assignment_id,source_organisation_id,source_campus_id,source_group_id,attribution_source)
+  values(p_actor_id,v_package.package_version_id,v_package.package_profile_id,null,p_request_id,'in_progress',
+    v_package.generator_version,v_package.scorer_version,v_now,v_now,v_now+make_interval(mins=>v_package.time_limit_minutes),
+    'self_directed_exam',v_assignment.id,v_assignment.organisation_id,v_assignment.campus_id,v_assignment.group_id,'assignment')
+  returning * into v_attempt;
+  perform exam_delivery.materialize_attempt_items(v_attempt.id,p_request_id,null);
+  return exam_delivery.resume_attempt(p_actor_id,v_attempt.id);
+exception when no_data_found or too_many_rows then return jsonb_build_object('ok',false,'code','package_unavailable');
+when unique_violation then return jsonb_build_object('ok',false,'code','attempt_conflict');
+end $$;
+
+alter function exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid) owner to postgres;
+revoke execute on function exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)
+  from public,anon,authenticated,service_role;
+grant execute on function exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid) to service_role;
+
+do $$ declare v_definition text;
+begin
+  v_definition:=replace(replace(
+    pg_get_functiondef('exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)'::regprocedure),
+    E'\r\n',E'\n'),E'\r',E'\n');
+  if regexp_count(v_definition,'resolve_package_profile_default')<>1
+    or regexp_count(v_definition,'''assigned_assessment''::exam_delivery.attempt_purpose')<>1
+    or regexp_count(v_definition,'''self_directed_exam'',v_assignment.id')<>1
+    or regexp_count(v_definition,'order by pv\.published_at desc')<>0
+  then raise exception 'assignment_default_resolution_contract_drift'; end if;
 end $$;
 
 alter function exam_delivery.replace_current_practice_attempt(uuid,jsonb) owner to postgres;
