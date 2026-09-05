@@ -130,7 +130,7 @@ sql(`select 1/((count(*)=1 and bool_and(source_assignment_id='${assignmentId}'::
   from exam_delivery.attempts where owner_id='${assignedLearner.id}'::uuid and status='in_progress'`);
 const assignedReplacementRequest={...assignedRequest,clientRequestId:crypto.randomUUID()};
 const assignedReplacement=await admin.rpc('certsim_protected_replace_current_practice_attempt',{p_actor_id:assignedLearner.id,p_request:assignedReplacementRequest});
-if(assignedReplacement.error||assignedReplacement.data?.ok!==true||assignedReplacement.data?.attempt?.attemptId===assignedStarted.data.attempt.attemptId) fail('ASSIGNMENT_REPLACEMENT_FAILED');
+if(assignedReplacement.error||assignedReplacement.data?.ok!==true||assignedReplacement.data?.attempt?.attemptId===assignedStarted.data.attempt.attemptId) fail(`ASSIGNMENT_REPLACEMENT_FAILED_${safeCode(assignedReplacement.error?.code)}_${safeCode(assignedReplacement.data?.code)}`);
 sql(`select 1/((status='voided' and source_assignment_id='${assignmentId}'::uuid and attribution_source='assignment')::integer)
   from exam_delivery.attempts where id='${assignedStarted.data.attempt.attemptId}'::uuid;
 select 1/((status='in_progress' and source_assignment_id='${assignmentId}'::uuid and attribution_source='assignment')::integer)
