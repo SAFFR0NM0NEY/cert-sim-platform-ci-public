@@ -16,6 +16,7 @@ import {
   getSavedResultDomainRows,
   getSavedResultWeakAreaRows,
 } from '../../lib/savedResultFormatters.js';
+import { getExamDisplayLabel } from '../../exams/examDisplayMetadata.js';
 
 const emptyDetail = {
   assignedStudents: [],
@@ -705,26 +706,8 @@ function formatExamCode(assignment = {}) {
     .trim()
     .toLowerCase();
 
-  if (examKey === 'az204') {
-    return 'AZ-204';
-  }
-
-  if (examKey === 'az400') {
-    return 'AZ-400';
-  }
-
-  if (examKey === 'ai901') {
-    return 'AI-901';
-  }
-
-  if (examKey === 'security-plus') {
-    return 'Security+';
-  }
-
   const title = String(assignment.examTitle ?? '').trim();
-  const codeMatch = title.match(/\b(AZ-\d{3}|AI-\d{3}|Security\+|SY0-\d{3})\b/i);
-
-  return codeMatch ? codeMatch[1].toUpperCase().replace('SECURITY+', 'Security+') : title || 'Exam';
+  return getExamDisplayLabel(examKey || title, { fallback: title, field: 'code' });
 }
 
 function formatScore(value) {

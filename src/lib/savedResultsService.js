@@ -4,6 +4,7 @@ import {
   normalizeWeakAreasSnapshot,
 } from './resultStorageMappers.js';
 import { classifyAttempt, getAttemptKindLabel, getAttemptPurpose } from './attemptPurpose.js';
+import { getExamDisplayLabel, getExamDisplayMetadata } from '../exams/examDisplayMetadata.js';
 
 const SAVED_RESULTS_TABLES = {
   examAttempts: 'exam_attempts',
@@ -302,16 +303,17 @@ function normalizeSavedResult(attempt, { includeDetail = false } = {}) {
     : [];
   const purposeRecord = { ...attempt, resultSnapshot, modeLabel: attempt.mode_label };
   const classification = classifyAttempt(purposeRecord);
+  const display = getExamDisplayMetadata(attempt.exam_key);
 
   return {
     attemptId: attempt.id,
     examKey: attempt.exam_key,
-    examTitle:
+    examTitle: display?.fullTitle ??
       attempt.catalogRow?.title ??
       examSnapshot.displayTitle ??
       examSnapshot.name ??
-      attempt.exam_key,
-    vendor: attempt.catalogRow?.vendor ?? examSnapshot.vendor ?? '',
+      getExamDisplayLabel('', { fallback: 'Exam' }),
+    vendor: display?.vendor ?? attempt.catalogRow?.vendor ?? examSnapshot.vendor ?? '',
     profileId: attempt.profile_id,
     profileLabel: profileSnapshot.name ?? attempt.profile_id,
     modeLabel: attempt.mode_label ?? examSnapshot.mode?.name ?? '',

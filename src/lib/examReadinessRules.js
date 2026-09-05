@@ -1,5 +1,6 @@
 import { getNormalizedDomainItems } from './resultStorageMappers.js';
 import { isAssessmentResult } from './attemptPurpose.js';
+import { getExamDisplayLabel, getExamDisplayMetadata } from '../exams/examDisplayMetadata.js';
 
 export const REAL_PASS_SCORE = 700;
 export const READY_SCORE_THRESHOLD = 800;
@@ -11,12 +12,6 @@ export const READY_BEST_SCORE_THRESHOLD = 850;
 export const READY_PASS_RATE_THRESHOLD = 80;
 export const WEAK_DOMAIN_THRESHOLD = 70;
 export const REVIEW_DOMAIN_THRESHOLD = 80;
-const EXAM_TITLES = Object.freeze({
-  ai901: 'Microsoft Azure AI Fundamentals',
-  az204: 'AZ-204: Developing Solutions for Microsoft Azure',
-  az400: 'AZ-400: Designing and Implementing Microsoft DevOps Solutions',
-  'security-plus-sy0-701': 'Security+ SY0-701 Practice Exam',
-});
 
 export const EXAM_READINESS_DISCLAIMER =
   'Readiness is a CertSim practice indicator based on saved attempts for this exam. It is not an official exam prediction.';
@@ -245,7 +240,7 @@ export function evaluateExamReadiness({
 export function normalizeProgressResult(result = {}) {
   const examScopeKey = normalizeExamScopeKey(result.examKey || result.examTitle);
   const examKey = examScopeKey || cleanText(result.examKey);
-  const examTitle = cleanText(EXAM_TITLES[examScopeKey] || result.examTitle || result.examKey || 'Unknown exam');
+  const examTitle = getExamDisplayLabel(examScopeKey, { fallback: result.examTitle || 'Unknown exam' });
 
   return {
     ...result,
@@ -263,7 +258,7 @@ export function normalizeProgressResult(result = {}) {
 export function normalizeProgressAssignment(assignment = {}) {
   const examScopeKey = normalizeExamScopeKey(assignment.examKey || assignment.examSlug || assignment.examTitle);
   const examKey = examScopeKey || cleanText(assignment.examKey || assignment.examSlug);
-  const examTitle = cleanText(EXAM_TITLES[examScopeKey] || assignment.examTitle || assignment.examKey || 'Unknown exam');
+  const examTitle = getExamDisplayLabel(examScopeKey, { fallback: assignment.examTitle || 'Unknown exam' });
 
   return {
     ...assignment,
@@ -282,6 +277,8 @@ export function normalizeProgressAssignment(assignment = {}) {
 }
 
 export function normalizeExamScopeKey(value) {
+  const resolved = getExamDisplayMetadata(value);
+  if (resolved) return resolved.canonicalId;
   const normalized = cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, '-');
   return ['security-plus', 'security-plus-sy0-701', 'securityplussy0701'].includes(normalized)
     ? 'security-plus-sy0-701'

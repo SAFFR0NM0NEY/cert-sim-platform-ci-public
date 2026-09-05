@@ -5,6 +5,7 @@ import {
   getLifecycleStatusDescription,
   isProductionReadyLifecycle,
 } from '../exams/examLifecycle.js';
+import { getExamDisplayMetadata } from '../exams/examDisplayMetadata.js';
 
 const allowedLifecycles = new Set(Object.values(EXAM_LIFECYCLES));
 const blockedProductionMetadataPatterns = [
@@ -17,10 +18,34 @@ const blockedProductionMetadataPatterns = [
 export function validateExamRegistry(examRegistry) {
   const issues = [];
   const seenSlugs = new Map();
+  const seenCodes = new Map();
 
   (examRegistry ?? []).forEach((examConfig) => {
     const examId = examConfig?.id ?? 'unknown-exam';
     const lifecycle = getExamLifecycle(examConfig);
+    const display = getExamDisplayMetadata(examId);
+
+    if (!display) {
+      issues.push(createIssue(examId, 'error', 'Registered exam is missing canonical display metadata.'));
+    } else {
+      for (const [field, actual] of Object.entries({
+        slug: examConfig.slug,
+        code: examConfig.code,
+        shortTitle: examConfig.shortName,
+        fullTitle: examConfig.title,
+        vendor: examConfig.vendor,
+      })) {
+        const expectedField = field === 'slug' ? 'routeSlug' : field;
+        if (actual !== display[expectedField]) {
+          issues.push(createIssue(examId, 'error', `Registered exam ${field} does not match canonical display metadata.`));
+        }
+      }
+      if (seenCodes.has(display.code)) {
+        issues.push(createIssue(examId, 'error', `Registered exam code duplicates ${seenCodes.get(display.code)}.`));
+      } else {
+        seenCodes.set(display.code, examId);
+      }
+    }
 
     if (!examConfig?.id) {
       issues.push(createIssue(examId, 'error', 'Registered exam is missing id.'));

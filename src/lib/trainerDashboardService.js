@@ -8,6 +8,7 @@ import {
 import { classifyAttempt, getAttemptKindLabel, getAttemptPurpose } from './attemptPurpose.js';
 import { createProtectedExamClient } from './protectedExamClient.js';
 import { composeTrainerDashboardSnapshot } from './trainerDashboardSnapshot.js';
+import { getExamDisplayLabel, getExamDisplayMetadata } from '../exams/examDisplayMetadata.js';
 
 const IS_PROTECTED_DELIVERY = typeof __CERTSIM_BUILD_DELIVERY_MODE__ !== 'undefined'
   && __CERTSIM_BUILD_DELIVERY_MODE__ === 'protected';
@@ -479,8 +480,8 @@ function normalizeProtectedTrainerResult(item = {}, students = []) {
     campusName: primaryStudent.campusName ?? '',
     organisationName: primaryStudent.organisationName ?? '',
     examKey: item.examKey,
-    examTitle: item.examKey,
-    vendor: '',
+    examTitle: getExamDisplayLabel(item.examKey),
+    vendor: getExamDisplayMetadata(item.examKey)?.vendor ?? '',
     profileId: item.profileKey,
     profileLabel: item.profileKey,
     modeLabel: '',
@@ -656,6 +657,7 @@ function normalizeTrainerResult(
   const primaryStudent = studentMatches[0] ?? {};
   const purposeRecord = { ...attempt, resultSnapshot, modeLabel: attempt.mode_label };
   const classification = classifyAttempt(purposeRecord);
+  const display = getExamDisplayMetadata(attempt.exam_key);
 
   return {
     attemptId: attempt.id,
@@ -667,12 +669,12 @@ function normalizeTrainerResult(
     campusName: primaryStudent.campusName ?? '',
     organisationName: primaryStudent.organisationName ?? '',
     examKey: attempt.exam_key,
-    examTitle:
+    examTitle: display?.fullTitle ??
       catalog?.title ??
       examSnapshot.displayTitle ??
       examSnapshot.name ??
-      attempt.exam_key,
-    vendor: catalog?.vendor ?? examSnapshot.vendor ?? '',
+      'Exam',
+    vendor: display?.vendor ?? catalog?.vendor ?? examSnapshot.vendor ?? '',
     profileId: attempt.profile_id,
     profileLabel: profileSnapshot.name ?? attempt.profile_id,
     modeLabel: attempt.mode_label ?? examSnapshot.mode?.name ?? '',

@@ -53,7 +53,7 @@ test('filtered selection and browser history preserve explicit navigation', asyn
 
   await page.getByLabel('Search exams').fill('Security+');
   await expect(cards(page)).toHaveCount(1);
-  await expect(cards(page).first()).toContainText('Security+ SY0-701 Practice Exam');
+  await expect(cards(page).first()).toContainText('CompTIA Security+ (SY0-701)');
   await cards(page).first().click();
   await expect(page).toHaveURL('/exams/security-plus');
   await page.goBack();

@@ -2,6 +2,7 @@ import {
   getExamLifecycle,
   getLifecycleStatusLabel,
 } from '../../exams/examLifecycle.js';
+import { getExamDisplaySearchTerms } from '../../exams/examDisplayMetadata.js';
 
 export const EXAM_LIBRARY_DEFAULTS = Object.freeze({
   query: '',
@@ -32,6 +33,7 @@ export function buildExamSearchText(exam) {
     exam?.longDescription,
     exam?.statusLabel,
     exam?.statusDescription,
+    ...getExamDisplaySearchTerms(exam?.id ?? exam?.slug),
     ...(exam?.domains ?? []),
   ]
     .filter(Boolean)

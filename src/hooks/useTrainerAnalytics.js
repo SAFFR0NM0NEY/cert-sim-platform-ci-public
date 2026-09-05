@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { getTrainerAnalyticsSnapshot } from '../lib/trainerAnalyticsService.js';
 import { evaluateExamReadiness, normalizeExamScopeKey } from '../lib/examReadinessRules.js';
+import { getExamDisplayLabel } from '../exams/examDisplayMetadata.js';
 
 export default function useTrainerAnalytics({
   assignments = [],
@@ -101,7 +102,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
       groupId: student.groupId || '',
       examKey: normalizeExamScopeKey(row.examKey),
       examScopeKey: normalizeExamScopeKey(row.examKey),
-      examTitle: row.examKey || 'Protected exam',
+      examTitle: getExamDisplayLabel(row.examKey, { fallback: 'Protected exam' }),
       latestScore: row.latestPercentage == null ? null : row.latestPercentage * 10,
       bestScore: row.bestPercentage == null ? null : row.bestPercentage * 10,
       averageScore: average,
@@ -121,7 +122,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
       readinessLabel: readiness.label,
       readinessReason: readiness.reason,
       attemptsByExam: learnerRows.filter((item) => item.activityCount > 0).map((item) => ({
-        examKey: item.examKey, examTitle: item.examKey, count: item.activityCount,
+        examKey: item.examKey, examTitle: getExamDisplayLabel(item.examKey), count: item.activityCount,
         latestAttemptDate: item.latestActivity,
       })),
       assignmentSummaries: learnerAssignments
@@ -134,7 +135,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
   });
   const examAnalytics = (authoritative.exams ?? []).map((row) => ({
     examKey: row.examKey,
-    examTitle: row.examKey,
+    examTitle: getExamDisplayLabel(row.examKey),
     totalAttempts: row.assessmentCount,
     studentsAttempted: row.assessedLearnerCount,
     averageScore: row.averagePercentage == null ? null : row.averagePercentage * 10,
@@ -205,7 +206,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
   }).filter((group) => group.studentCount > 0 || group.totalAttempts > 0);
   const domainPerformance = (authoritative.domains ?? []).map((row) => ({
     examKey: normalizeExamScopeKey(row.examKey),
-    examTitle: row.examKey,
+    examTitle: getExamDisplayLabel(row.examKey),
     domainId: row.domainKey,
     domain: row.domainKey,
     domainLabel: row.domainKey,

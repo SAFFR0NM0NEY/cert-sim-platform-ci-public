@@ -1,4 +1,5 @@
 import { appendUniqueHistory } from './historyPagination.js';
+import { getExamDisplayLabel } from '../exams/examDisplayMetadata.js';
 
 const HISTORY_PAGE_SIZE = 50;
 const HISTORY_SOURCES = new Set(['protected', 'legacy_authoritative']);
@@ -64,7 +65,7 @@ export function normalizeProtectedHistoryResult(item, userId = '') {
     attemptId: item.attemptId,
     userId,
     examKey: item.examKey,
-    examTitle: item.examKey,
+    examTitle: getExamDisplayLabel(item.examKey),
     packageVersion: item.packageVersion,
     profileId: item.profileKey,
     profileLabel: item.profileKey,

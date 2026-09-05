@@ -1,6 +1,7 @@
 import { isSupabaseConfigured, supabase } from './supabaseClient.js';
 import { getCurrentIdentitySummary } from './profileService.js';
 import { hasActiveMembershipRole } from './roleUtils.js';
+import { getExamDisplayLabel } from '../exams/examDisplayMetadata.js';
 
 export const ORGANISATION_TYPES = [
   'training_provider',
@@ -1080,7 +1081,7 @@ function normalizeAssignmentRow(row = {}) {
     createdAt: row.created_at,
     dueAt: row.due_at,
     examKey: row.exam_key,
-    examTitle: examCatalog.title ?? row.exam_key,
+    examTitle: getExamDisplayLabel(row.exam_key || examCatalog.slug || examCatalog.title, { fallback: examCatalog.title }),
     groupId: row.group_id,
     groupName,
     instructions: row.instructions ?? '',
@@ -1136,7 +1137,7 @@ function normalizeSavedResultRow(
     attemptId: attempt.id,
     durationSeconds: attempt.duration_seconds,
     examKey: attempt.exam_key,
-    examTitle: catalog?.title ?? examSnapshot.displayTitle ?? attempt.exam_key,
+    examTitle: getExamDisplayLabel(attempt.exam_key, { fallback: catalog?.title ?? examSnapshot.displayTitle }),
     modeLabel: attempt.mode_label ?? examSnapshot.mode?.name ?? '',
     passed: result?.passed ?? resultSnapshot.passed ?? null,
     profileId: attempt.profile_id,

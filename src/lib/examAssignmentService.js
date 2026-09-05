@@ -5,6 +5,7 @@ import { getTrainerDashboardSnapshot } from './trainerDashboardService.js';
 import { getTrainerScopePage } from './trainerScopeService.js';
 import { getTrainerAnalyticsSnapshot } from './trainerAnalyticsService.js';
 import { evaluateExamReadiness, normalizeExamScopeKey } from './examReadinessRules.js';
+import { getExamDisplayMetadata } from '../exams/examDisplayMetadata.js';
 
 const IS_PROTECTED_DELIVERY = typeof __CERTSIM_BUILD_DELIVERY_MODE__ !== 'undefined'
   && __CERTSIM_BUILD_DELIVERY_MODE__ === 'protected';
@@ -866,12 +867,13 @@ function createEmptyReadinessSummary(assignment = {}, students = []) {
 }
 
 function normalizeExamCatalogRow(row = {}) {
+  const display = getExamDisplayMetadata(row.exam_key || row.slug || row.title);
   return {
     id: row.id,
     examKey: row.exam_key,
     slug: row.slug,
-    title: row.title,
-    vendor: row.vendor ?? '',
+    title: display?.fullTitle ?? row.title ?? 'Exam',
+    vendor: display?.vendor ?? row.vendor ?? '',
     lifecycle: row.lifecycle,
     examType: row.exam_type,
     currentVersion: row.current_version,
@@ -912,7 +914,7 @@ function normalizeAssignmentRow(row = {}) {
     studentEmail: student.email ?? '',
     examCatalogId: row.exam_catalog_id,
     examKey: row.exam_key,
-    examTitle: exam.title || row.exam_key,
+    examTitle: exam.title,
     examSlug: exam.slug,
     examRoute: exam.route && row.id
       ? `${exam.route}?assignment=${encodeURIComponent(row.id)}`

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "validate:issue59": "node scripts/validate-issue59-functional-recovery.mjs && node scripts/validate-protected-profile-metadata.mjs && node scripts/validate-weak-area-legacy-bridge.mjs",
-    "validate:exam-library": "node scripts/validate-exam-library.mjs",
+    "validate:exam-library": "node scripts/validate-exam-display-metadata.mjs && node scripts/validate-exam-library.mjs",
     "validate:history-pagination": "node scripts/validate-history-pagination.mjs && node scripts/validate-staff-history-runner.mjs && node scripts/validate-p0-production-recovery.mjs",
     "validate:purpose-aware-readiness": "node scripts/validate-purpose-aware-readiness.mjs",
     "validate:r3e": "node scripts/validate-r3e-performance-scope.mjs && node scripts/validate-r3f-production-correctness.mjs && node scripts/validate-issue23-performance-dashboard.mjs",

@@ -15,6 +15,7 @@ import { hasScopedPerformanceDashboardAccess } from '../../lib/roleUtils.js';
 import SearchableProfilePicker from '../shared/SearchableProfilePicker.jsx';
 import { dashboardSummaryValue } from '../../lib/trainerDashboardSnapshot.js';
 import { EMPTY_TRAINER_FILTERS, trainerFiltersEqual, updateDraftScopeFilter } from '../../lib/trainerFilterDraft.js';
+import { getExamDisplayLabel } from '../../exams/examDisplayMetadata.js';
 
 const initialGroupAssignmentForm = {
   examCatalogId: '',
@@ -2019,27 +2020,8 @@ function formatOptional(value) {
 
 function formatExamCode(assignment = {}) {
   const examKey = normalizeFilterText(assignment.examKey || assignment.examSlug);
-
-  if (examKey === 'az204') {
-    return 'AZ-204';
-  }
-
-  if (examKey === 'az400') {
-    return 'AZ-400';
-  }
-
-  if (examKey === 'ai901') {
-    return 'AI-901';
-  }
-
-  if (['security-plus', 'security-plus-sy0-701', 'securityplussy0701'].includes(examKey)) {
-    return 'Security+';
-  }
-
   const title = String(assignment.examTitle ?? '').trim();
-  const codeMatch = title.match(/\b(AZ-\d{3}|AI-\d{3}|Security\+|SY0-\d{3})\b/i);
-
-  return codeMatch ? codeMatch[1].toUpperCase().replace('SECURITY+', 'Security+') : title || 'Exam';
+  return getExamDisplayLabel(examKey || title, { fallback: title, field: 'code' });
 }
 
 function formatStatus(status) {

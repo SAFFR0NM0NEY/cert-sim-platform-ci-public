@@ -19,14 +19,20 @@ const select = (state = {}) => filterAndSortExamLibrary(exams, {
 assert.equal(exams.length, 4, 'The visible protected registry should contain four exams.');
 assert.equal(normalizeExamLibrarySearch('  AI–901  '), 'ai 901');
 
-for (const query of ['AI-901', 'ai-901', '  AI-901  ', 'AI 901', 'Azure AI']) {
+for (const query of ['AI-901', 'ai-901', 'ai901', '  AI-901  ', 'AI 901', 'Azure AI', 'AI Fundamentals']) {
   assert.deepEqual(ids(select({ query })), ['ai901'], `${query} should find AI-901.`);
 }
-for (const query of ['Security+', 'SY0-701', 'CompTIA']) {
+for (const query of ['Security+', 'Security Plus', 'SY0-701', 'SY0701', 'CompTIA', 'CompTIA Security+']) {
   assert.deepEqual(ids(select({ query })), ['security-plus-sy0-701'], `${query} should find Security+.`);
 }
 assert.deepEqual(ids(select({ query: 'AZ-204' })), ['az204']);
+assert.deepEqual(ids(select({ query: 'az204' })), ['az204']);
+assert.deepEqual(ids(select({ query: 'AZ 204' })), ['az204']);
+assert.deepEqual(ids(select({ query: 'Developing Solutions' })), ['az204']);
 assert.deepEqual(ids(select({ query: 'AZ-400' })), ['az400']);
+assert.deepEqual(ids(select({ query: 'az400' })), ['az400']);
+assert.deepEqual(ids(select({ query: 'AZ 400' })), ['az400']);
+assert.deepEqual(ids(select({ query: 'DevOps' })), ['az400']);
 assert.deepEqual(ids(select({ query: 'Microsoft', vendor: 'Microsoft', lifecycle: 'controlledBeta' })), ['az400', 'ai901']);
 assert.deepEqual(ids(select({ vendor: 'CompTIA', lifecycle: 'productionReady' })), ['security-plus-sy0-701']);
 assert.deepEqual(ids(select({ query: 'Security+', vendor: 'Microsoft' })), []);
@@ -34,7 +40,7 @@ assert.deepEqual(ids(select({ query: 'Security+', vendor: 'Microsoft' })), []);
 const canonicalIds = ids(exams);
 const sourceBeforeSort = ids(exams);
 assert.deepEqual(ids(select()), canonicalIds, 'Recommended must preserve registry order.');
-assert.deepEqual(ids(select({ sort: 'name' })), ['az204', 'az400', 'ai901', 'security-plus-sy0-701']);
+assert.deepEqual(ids(select({ sort: 'name' })), ['az204', 'az400', 'security-plus-sy0-701', 'ai901']);
 assert.deepEqual(ids(select({ sort: 'vendor' })), ['security-plus-sy0-701', 'az204', 'az400', 'ai901']);
 assert.deepEqual(ids(exams), sourceBeforeSort, 'Sorting must not mutate the registry.');
 
@@ -53,6 +59,6 @@ console.log(JSON.stringify({
   ok: true,
   visibleCertificationExams: exams.length,
   vendors: options.vendors.length,
-  searchCases: 11,
+  searchCases: 24,
   itDirectionCounted: false,
 }));

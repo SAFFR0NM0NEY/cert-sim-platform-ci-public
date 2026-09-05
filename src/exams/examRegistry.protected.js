@@ -7,6 +7,7 @@ import {
   isLiveVisibleLifecycle,
 } from './examLifecycle.js';
 import { getProtectedProfileMetadata } from './protectedProfileMetadata.js';
+import { getExamDisplayMetadata } from './examDisplayMetadata.js';
 
 const mode = (id, name) => Object.freeze({ id, name, label: name });
 const profile = (id, name, totalScoredQuestions, timeLimitMinutes, details = {}) => Object.freeze({
@@ -17,8 +18,7 @@ const profile = (id, name, totalScoredQuestions, timeLimitMinutes, details = {})
 
 const definitions = [
   {
-    id: 'az204', slug: 'az204', code: 'AZ-204', shortName: 'AZ-204', vendor: 'Microsoft',
-    title: 'AZ-204: Developing Solutions for Microsoft Azure', lifecycle: EXAM_LIFECYCLES.nearRetirement,
+    id: 'az204', lifecycle: EXAM_LIFECYCLES.nearRetirement,
     statusLabel: 'Near-retirement support', statusNote: 'AZ-204 retires July 31, 2026.',
     questionCount: 287, domainCount: 5, pbqCount: 0, caseStudyCount: 8, passingScore: 700,
     domainNames: ['Develop Azure compute solutions', 'Develop for Azure storage', 'Implement Azure security', 'Monitor, troubleshoot, and optimize Azure solutions', 'Connect to and consume Azure services and third-party services'],
@@ -26,8 +26,7 @@ const definitions = [
     profiles: withRouteActions('az204', ['standard', 'compact', 'full', 'case-heavy']),
   },
   {
-    id: 'security-plus-sy0-701', slug: 'security-plus', code: 'SY0-701', shortName: 'Security+', vendor: 'CompTIA',
-    title: 'Security+ SY0-701 Practice Exam', lifecycle: EXAM_LIFECYCLES.productionReady,
+    id: 'security-plus-sy0-701', lifecycle: EXAM_LIFECYCLES.productionReady,
     statusLabel: 'Protected practice', statusNote: 'Protected practice.',
     questionCount: 370, domainCount: 5, pbqCount: 20, caseStudyCount: 0, passingScore: 750,
     domainNames: ['General Security Concepts', 'Threats, Vulnerabilities, and Mitigations', 'Security Architecture', 'Security Operations', 'Security Program Management and Oversight'],
@@ -35,8 +34,7 @@ const definitions = [
     profiles: withRouteActions('security-plus-sy0-701', ['compact', 'full']),
   },
   {
-    id: 'az400', slug: 'az400', code: 'AZ-400', shortName: 'AZ-400', vendor: 'Microsoft',
-    title: 'AZ-400: Designing and Implementing Microsoft DevOps Solutions', lifecycle: EXAM_LIFECYCLES.controlledBeta,
+    id: 'az400', lifecycle: EXAM_LIFECYCLES.controlledBeta,
     statusLabel: 'Protected practice', statusNote: 'Protected practice.',
     questionCount: 433, domainCount: 5, pbqCount: 12, caseStudyCount: 52, passingScore: 700,
     domainNames: ['Configure processes and communications', 'Design and implement source control', 'Design and implement build and release pipelines', 'Develop a security and compliance plan', 'Implement an instrumentation strategy'],
@@ -44,8 +42,7 @@ const definitions = [
     profiles: withRouteActions('az400', ['compact', 'full', 'sectioned']),
   },
   {
-    id: 'ai901', slug: 'ai901', code: 'AI-901', shortName: 'AI-901', vendor: 'Microsoft',
-    title: 'Microsoft Azure AI Fundamentals', lifecycle: EXAM_LIFECYCLES.controlledBeta,
+    id: 'ai901', lifecycle: EXAM_LIFECYCLES.controlledBeta,
     statusLabel: 'Protected practice', statusNote: 'Protected practice.',
     questionCount: 234, domainCount: 5, pbqCount: 0, caseStudyCount: 0, passingScore: 700,
     domainNames: ['AI workloads and considerations', 'Machine learning on Azure', 'Computer vision workloads', 'Natural Language Processing workloads', 'Generative AI workloads'],
@@ -63,6 +60,9 @@ function withRouteActions(examId, actions) {
 }
 
 function createContentFreeDefinition(item) {
+  const display = getExamDisplayMetadata(item.id);
+  if (!display) throw new Error(`Missing exam display metadata for ${item.id}.`);
+  item = { ...item, slug: display.routeSlug, code: display.code, shortName: display.shortTitle, title: display.fullTitle, vendor: display.vendor, displayMetadata: display };
   const [primaryMode] = item.modes;
   const [primaryProfile, ...alternateProfiles] = item.profiles;
   const strictOnly = true;
