@@ -2774,6 +2774,11 @@ button.summary-tile:focus-visible {
   margin: 0;
 }
 
+.home-action-card h3 {
+  line-height: 1.25;
+  min-block-size: 2.5em;
+}
+
 .home-action-card p,
 .dashboard-summary-card p {
   color: #cbd5e1;
