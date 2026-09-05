@@ -493,9 +493,12 @@ function ExamSelector({
             <span className="exam-selector-status">
               {getExamStatusLabel(examOption)}
             </span>
-            <strong>{examOption.name}</strong>
-            <small>{examOption.vendor}</small>
-            <span>{getExamStatusDescription(examOption)}</span>
+            <span className="exam-selector-code">{examOption.code}</span>
+            <strong className="exam-selector-title">{examOption.shortTitle}</strong>
+            <small className="exam-selector-vendor">{examOption.vendor}</small>
+            <span className="exam-selector-description">
+              {getExamStatusDescription(examOption)}
+            </span>
           </button>
         ))}
       </div>

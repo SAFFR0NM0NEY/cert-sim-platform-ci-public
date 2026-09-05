@@ -2666,6 +2666,8 @@ function createSelectedExamSummary(examConfig) {
     slug: examConfig.slug,
     code: examConfig.code,
     shortName: examConfig.shortName,
+    shortTitle: examConfig.displayMetadata.shortTitle,
+    displayMetadata: examConfig.displayMetadata,
     name: examConfig.ui.availableExamName,
     title: examConfig.title,
     vendor: examConfig.vendor,

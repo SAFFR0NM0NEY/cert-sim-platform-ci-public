@@ -2966,9 +2966,21 @@ button.summary-tile:focus-visible {
   box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.28);
 }
 
-.exam-selector-card strong {
+.exam-selector-title {
   color: #f8fafc;
   font-size: 1rem;
+}
+
+.exam-selector-code {
+  color: #f8fafc !important;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.exam-selector-vendor,
+.exam-selector-description {
+  display: block;
 }
 
 .exam-selector-card small,
