@@ -69,10 +69,9 @@ Deno.test("disposable authenticated HTTP lifecycle", async () => {
   assertEquals(started.response.status, 201);
   noProtected(started.data);
   const attemptId = started.data.attempt.attemptId,
-    itemId = started.data.items[0].itemId,
-    assignmentId = started.data.attempt.assignmentId;
-  assert(typeof assignmentId === "string" && assignmentId.length > 0);
-  const current = await call(`/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable&assignmentId=${encodeURIComponent(assignmentId)}`);
+    itemId = started.data.items[0].itemId;
+  assertEquals(started.data.attempt.assignmentId ?? null, null);
+  const current = await call("/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=self_directed_exam&language=not_applicable");
   assertEquals(current.response.status, 200, JSON.stringify({ code: current.data?.code ?? current.data?.error ?? "unknown" }));
   assertEquals(current.data.attempt.attemptId, attemptId);
   noProtected(current.data);
