@@ -146,7 +146,7 @@ const assigned=await admin.rpc('certsim_protected_start_practice',{p_actor_id:le
 assertStarted(assigned,2,'ASSIGNED_START');
 await complete(assigned,learner.id);
 const assignedReview=await admin.rpc('certsim_protected_get_review',{p_actor_id:learner.id,p_attempt_id:assigned.data.attempt.attemptId});
-if(assignedReview.error||assignedReview.data?.code!=='review_unavailable') fail('ASSIGNED_REVIEW_RELEASE_NOT_WITHHELD');
+if(assignedReview.error||(assignedReview.data?.reasonCode??assignedReview.data?.code)!=='review_unavailable') fail('ASSIGNED_REVIEW_RELEASE_NOT_WITHHELD');
 sql(`select 1/((count(distinct canonical_form_id)=3)::integer) from exam_delivery.attempts where owner_id='${learner.id}' and package_profile_id='${fullProfile}' and canonical_form_id is not null;`);
 
 const allocated=[];
