@@ -119,7 +119,7 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260903084553_p0_production_recovery_52_57.sql': '78840df042ed88249df54da6429d255bfffa8e6e3789e624b5db3a733f7782aa',
   '20260903120000_issue59_function_definition_line_ending_preflight.sql': '04372a4f9a2ada64a00298053ef43c454b690ffa34f0a70b8d55fff4584ddf48',
   '20260903161929_issue_59_functional_recovery.sql': '0e1e80fcf7d3c37d15ce558fd7a2ebcf5e6b2bfed6dcfb685e99bafef47d9877',
-  '20260905090355_issue65_live_acceptance_lifecycle_fix.sql': '640f2d63a3121a87d98eb79528ad117ee76314af5f8a77d6e909f2692295081e',
+  '20260905090355_issue65_live_acceptance_lifecycle_fix.sql': 'cee71058dcd02c6ad8da3cdf1ddd5040905543c27e60dd85349b997841590a2b',
   '20260904161938_issue65_full_untimed_practice_sessions.sql': '334d4f3418fcccc63792a7d5fbe5dfbf0ef0031a07125d00f7fafdb9b531e2b1',
 });
 

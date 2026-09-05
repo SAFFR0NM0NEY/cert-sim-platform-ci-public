@@ -49,7 +49,7 @@ assert.match(correction, /attempt_results/);
 assert.match(correction, /review_snapshots/);
 assert.match(correction, /drop index if exists exam_delivery\.attempts_one_active_profile_idx/);
 assert.match(correction, /where status = 'in_progress'\s+and purpose in \('assigned_assessment','self_directed_exam'\)/);
-assert.match(correction, /reconcile_expired_formal_attempts\(p_actor_id,v_package\.package_profile_id\)/);
+assert.match(correction, /reconcile_expired_formal_attempts\(p_actor_id,v_package\.package_profile_id,p_request->>''purpose'',p_request->>''language''\)/);
 assert.doesNotMatch(correction, /delete from exam_delivery\.(attempts|attempt_responses|attempt_results|review_snapshots)/);
 assert.match(routes, /itemPage: "certsim_protected_list_attempt_item_page"/);
 assert.match(handler, /pageSize > 50/);

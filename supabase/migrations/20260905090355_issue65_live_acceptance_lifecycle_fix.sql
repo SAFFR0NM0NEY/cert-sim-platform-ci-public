@@ -36,7 +36,9 @@ create unique index attempts_one_active_profile_idx
 
 create or replace function exam_delivery.reconcile_expired_formal_attempts(
   p_actor_id uuid,
-  p_package_profile_id uuid
+  p_package_profile_id uuid,
+  p_requested_purpose text,
+  p_requested_language text
 ) returns integer
 language plpgsql
 security definer
@@ -74,14 +76,18 @@ begin
     and a.package_profile_id = p_package_profile_id
     and a.status = 'in_progress'
     and a.purpose in ('assigned_assessment','self_directed_exam')
-    and a.expires_at <= statement_timestamp();
+    and a.expires_at <= statement_timestamp()
+    and not (
+      a.purpose::text = p_requested_purpose
+      and a.language_preference = p_requested_language
+    );
   get diagnostics v_updated = row_count;
   return v_updated;
 end
 $$;
 
-alter function exam_delivery.reconcile_expired_formal_attempts(uuid,uuid) owner to postgres;
-revoke execute on function exam_delivery.reconcile_expired_formal_attempts(uuid,uuid)
+alter function exam_delivery.reconcile_expired_formal_attempts(uuid,uuid,text,text) owner to postgres;
+revoke execute on function exam_delivery.reconcile_expired_formal_attempts(uuid,uuid,text,text)
   from public, anon, authenticated, service_role;
 
 -- Patch the current shared formal/practice start implementation at its stable
@@ -93,7 +99,7 @@ declare
     'exam_delivery.start_practice_issue59_attribution_base(uuid,jsonb)'::regprocedure
   );
   v_marker text := 'select * into v_existing from exam_delivery.attempts where owner_id=p_actor_id and client_request_id=v_request_id for update;';
-  v_replacement text := 'perform exam_delivery.reconcile_expired_formal_attempts(p_actor_id,v_package.package_profile_id);' || chr(10) ||
+  v_replacement text := 'perform exam_delivery.reconcile_expired_formal_attempts(p_actor_id,v_package.package_profile_id,p_request->>''purpose'',p_request->>''language'');' || chr(10) ||
     '  select * into v_existing from exam_delivery.attempts where owner_id=p_actor_id and client_request_id=v_request_id for update;';
 begin
   if position(v_marker in v_definition) = 0 then
