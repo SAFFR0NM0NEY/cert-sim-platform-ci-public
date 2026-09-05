@@ -42,7 +42,7 @@ assert.match(runner, /async function abandonAndExit\(\)[\s\S]*await saveItem\(cu
 assert.match(runner, /It cannot be resumed[\s\S]*no completed result will be created/);
 assert.match(runner, /if \(starting\.current\) return;[\s\S]*starting\.current = true/);
 assert.doesNotMatch(runner.match(/async function initialize\(\)[\s\S]*?\n  }\n    initialize/)?.[0] ?? '', /startPractice|startAttempt\(/);
-assert.match(details, /accountStudent \? 'Exam details' : 'Student details'/);
+assert.match(details, /accountStudent \? \(isProtectedPractice \? 'Practice details' : 'Exam details'\) : 'Student details'/);
 assert.match(details, /Learner:[\s\S]*accountStudent\.name/);
 assert.match(details, /actionDisabled/);
 assert.match(details, /supplementalContent/);

@@ -3,9 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { protectedProfileMetadata } from '../src/exams/protectedProfileMetadata.js';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [migration, app, runner, presentation, routes, handler, responses, client] = await Promise.all([
-  read('supabase/migrations/20260904161938_issue65_full_untimed_practice_sessions.sql'), read('src/App.jsx'),
-  read('src/components/exam/ProtectedExamRunner.jsx'), read('src/components/exam/ExamWorkspacePresentation.jsx'),
+const [migration, correction, app, runner, details, chooser, presentation, routes, handler, responses, client] = await Promise.all([
+  read('supabase/migrations/20260904161938_issue65_full_untimed_practice_sessions.sql'),
+  read('supabase/migrations/20260905090355_issue65_live_acceptance_lifecycle_fix.sql'), read('src/App.jsx'),
+  read('src/components/exam/ProtectedExamRunner.jsx'), read('src/components/exam/StudentDetails.jsx'),
+  read('src/components/exam/ProtectedTargetedDomainSetup.jsx'), read('src/components/exam/ExamWorkspacePresentation.jsx'),
   read('supabase/functions/certsim-protected-exam/routes.ts'), read('supabase/functions/certsim-protected-exam/handler.ts'),
   read('supabase/functions/certsim-protected-exam/responses.ts'), read('src/lib/protectedExamClient.js'),
 ]);
@@ -28,6 +30,27 @@ assert.match(migration, /presented_question_number>p_after_position/);
 assert.match(migration, /grant execute on function[\s\S]*certsim_protected_list_attempt_item_page[\s\S]*to service_role/);
 assert.doesNotMatch(migration, /grant execute[\s\S]*certsim_protected_list_attempt_item_page[\s\S]*to authenticated/);
 assert.match(app, /purpose === 'weak_area' \? \(overrides\.count \?\? 20\) : overrides\.count/);
+assert.doesNotMatch(app, /targeted_domain', \{ domain: examConfig\.domainNames\?\.\[0\] \}/);
+assert.match(app, /ProtectedTargetedDomainSetup/);
+assert.match(chooser, /Choose a domain/);
+assert.match(chooser, /disabled=\{!domain\}/);
+assert.match(chooser, /No session is created until/);
+assert.match(runner, /isPracticeSession \? 'Start practice' : 'Start exam'/);
+assert.match(runner, /timed: availability\?\.timed === true/);
+assert.match(runner, /getPracticeModeName\(practiceRequest\)/);
+assert.match(runner, /onPracticeRequestChange\(\{ \.\.\.practiceRequest, domain: normalizeDomainKey\(domain\) \}\)/);
+assert.match(details, /<dd>\{practiceSession\.timed \? `\$\{practiceSession\.timeLimitMinutes\} min` : 'Untimed'\}<\/dd>/);
+assert.match(details, /no certification countdown applies/);
+assert.match(details, /original server timer continues/);
+assert.match(details, /practiceSession\?\.onDomainChange/);
+assert.match(correction, /status = 'expired'/);
+assert.match(correction, /purpose in \('assigned_assessment','self_directed_exam'\)/);
+assert.match(correction, /attempt_results/);
+assert.match(correction, /review_snapshots/);
+assert.match(correction, /drop index if exists exam_delivery\.attempts_one_active_profile_idx/);
+assert.match(correction, /where status = 'in_progress'\s+and purpose in \('assigned_assessment','self_directed_exam'\)/);
+assert.match(correction, /reconcile_expired_formal_attempts\(p_actor_id,v_package\.package_profile_id\)/);
+assert.doesNotMatch(correction, /delete from exam_delivery\.(attempts|attempt_responses|attempt_results|review_snapshots)/);
 assert.match(routes, /itemPage: "certsim_protected_list_attempt_item_page"/);
 assert.match(handler, /pageSize > 50/);
 assert.match(responses, /returnedThrough > totalCount/);

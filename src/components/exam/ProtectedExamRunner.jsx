@@ -27,6 +27,7 @@ export default function ProtectedExamRunner({
   examConfig,
   onCodingLanguagePreferenceChange,
   onExit,
+  onPracticeRequestChange,
   onRegisterNavigationGuard,
   practiceRequest = null,
   profile,
@@ -671,12 +672,13 @@ export default function ProtectedExamRunner({
         ? { ...baseDisplayProfile, ...normalizeProfileComposition(availability?.profileComposition), totalScoredQuestions: authoritativeQuestionCount }
         : baseDisplayProfile;
       const canStart = state === 'ready' || state === 'ready-active';
+      const isPracticeSession = Boolean(practiceRequest && practiceRequest.purpose !== 'self_directed_exam');
       const actionLabel = state === 'ready-active'
-          ? 'Start new attempt'
+          ? isPracticeSession ? 'Start new practice' : 'Start new attempt'
         : state === 'ready'
-          ? 'Start exam'
+          ? isPracticeSession ? 'Start practice' : 'Start exam'
           : state === 'starting'
-            ? 'Starting exam...'
+            ? isPracticeSession ? 'Starting practice...' : 'Starting exam...'
             : 'Checking availability...';
       const visibleCandidates = activeAttemptConfiguration ? [activeAttemptConfiguration] : resumeCandidates;
       const resumeChoices = visibleCandidates.length > 0 ? (
@@ -710,8 +712,23 @@ export default function ProtectedExamRunner({
           onCodingLanguagePreferenceChange={changeConfiguredLanguage}
           onStartExam={state === 'ready-active' ? startNewAttempt : startAttempt}
           protectedDelivery
+          practiceSession={isPracticeSession ? {
+            purpose: practiceRequest.purpose,
+            timed: availability?.timed === true,
+            timeLimitMinutes: availability?.timeLimitMinutes ?? null,
+            selectedCount: availability?.selectedCount ?? authoritativeQuestionCount,
+            domain: practiceRequest.domain,
+            domainLabel: (examConfig.domainNames ?? []).find((domain) => normalizeDomainKey(domain) === practiceRequest.domain) ?? practiceRequest.domain,
+            contentKind: practiceRequest.contentKind,
+            domains: examConfig.domainNames ?? [],
+            onDomainChange: practiceRequest.purpose === 'targeted_domain' && onPracticeRequestChange
+              ? (domain) => onPracticeRequestChange({ ...practiceRequest, domain: normalizeDomainKey(domain) })
+              : null,
+          } : null}
           showPrimaryAction={state !== 'ready-active' || Boolean(activeAttemptConfiguration?.replacementPermitted)}
-          selectedMode={selectedMode ?? { id: 'protected', name: practiceRequest ? 'Protected practice' : 'Protected exam' }}
+          selectedMode={isPracticeSession
+            ? { id: practiceRequest.purpose, name: getPracticeModeName(practiceRequest) }
+            : selectedMode ?? { id: 'protected', name: 'Protected exam' }}
           selectedProfile={displayProfile}
           statusMessage={message}
           supplementalContent={resumeChoices}
@@ -872,6 +889,19 @@ function buildPracticeRequest(practiceRequest, language, examKey) {
   delete request.language;
   if (examKey === 'az204') request.language = language;
   return request;
+}
+
+function normalizeDomainKey(value) {
+  return String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function getPracticeModeName(request) {
+  if (request.purpose === 'study_sandbox') return 'Study Sandbox';
+  if (request.purpose === 'targeted_domain') return 'Targeted Domain Practice';
+  if (request.purpose === 'weak_area') return 'Weak Area Practice';
+  if (request.contentKind === 'case-study') return 'Case Study Practice';
+  if (request.contentKind === 'pbq') return 'PBQ Practice';
+  return 'Protected Practice';
 }
 
 function normalizeAttemptLanguage(language) {

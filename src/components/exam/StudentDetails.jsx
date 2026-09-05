@@ -24,6 +24,7 @@ export default function StudentDetails({
   onBack,
   onStartExam,
   protectedDelivery = false,
+  practiceSession = null,
   showPrimaryAction = true,
 }) {
   const [form, setForm] = useState(initialForm);
@@ -45,6 +46,7 @@ export default function StudentDetails({
     exam.id === 'security-plus-sy0-701' && !isSecurityPlusProductionReady
       ? SECURITY_PLUS_BETA_FEEDBACK_NOTE
       : '';
+  const isProtectedPractice = Boolean(practiceSession);
 
   function updateField(field, value) {
     setForm((currentForm) => ({
@@ -88,7 +90,7 @@ export default function StudentDetails({
 
       <form className="form-panel" onSubmit={handleSubmit} noValidate>
         <p className="eyebrow">{exam.name}</p>
-        <h2 id="student-details-heading">{accountStudent ? 'Exam details' : 'Student details'}</h2>
+        <h2 id="student-details-heading">{accountStudent ? (isProtectedPractice ? 'Practice details' : 'Exam details') : 'Student details'}</h2>
         {accountStudent?.name && (
           <p className="account-student-name">Learner: <strong>{accountStudent.name}</strong></p>
         )}
@@ -99,7 +101,14 @@ export default function StudentDetails({
           {exam.lifecycleNotice && (
             <p className="lifecycle-notice">{exam.lifecycleNotice}</p>
           )}
-          <dl className="profile-facts">
+          {isProtectedPractice ? (
+            <dl className="profile-facts">
+              <div><dt>Practice items</dt><dd>{practiceSession.selectedCount ?? 'Checking...'}</dd></div>
+              <div><dt>Timing</dt><dd>{practiceSession.timed ? `${practiceSession.timeLimitMinutes} min` : 'Untimed'}</dd></div>
+              {practiceSession.domain ? <div><dt>Selected domain</dt><dd>{practiceSession.domainLabel}</dd></div> : null}
+              {practiceSession.contentKind ? <div><dt>Content</dt><dd>{formatPracticeContent(practiceSession.contentKind)}</dd></div> : null}
+            </dl>
+          ) : <dl className="profile-facts">
             <div>
               <dt>Scored questions</dt>
               <dd>{selectedProfile.totalScoredQuestions}</dd>
@@ -134,9 +143,20 @@ export default function StudentDetails({
               <dt>Timer</dt>
               <dd>{selectedProfile.timeLimitMinutes} min</dd>
             </div>
-          </dl>
+          </dl>}
+          {practiceSession?.onDomainChange ? (
+            <div className="targeted-control-field">
+              <label htmlFor="protected-practice-domain">Practice domain</label>
+              <select id="protected-practice-domain" value={practiceSession.domainLabel ?? ''} onChange={(event) => practiceSession.onDomainChange(event.target.value)}>
+                {practiceSession.domains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
+              </select>
+              <small>Changing the domain refreshes the authoritative eligible-item count before a session is created.</small>
+            </div>
+          ) : null}
           <p className="profile-note">
-            {protectedDelivery
+            {isProtectedPractice
+              ? 'This protected practice session uses the server-confirmed eligible inventory. It does not use the certification-exam timer or composition.'
+              : protectedDelivery
               ? 'Question selection, ordering, timing, answer saving, and scoring are managed securely for this attempt.'
               : selectedProfile.profileNote
               ? selectedProfile.profileNote
@@ -154,7 +174,9 @@ export default function StudentDetails({
             <section
               className="strict-start-instructions"
               aria-label={
-                protectedDelivery
+                isProtectedPractice
+                  ? 'Protected practice session instructions'
+                  : protectedDelivery
                   ? 'Protected exam attempt instructions'
                   : isSecurityPlusProductionReady
                   ? 'PBQ-first practice attempt instructions'
@@ -165,19 +187,23 @@ export default function StudentDetails({
             >
               <h4>Before you start</h4>
               <p>
-                {selectedProfile.sectionOrder === 'case-standard-pbq'
+                {isProtectedPractice
+                  ? 'Use Flag for Review to mark items you want to revisit. Answers and progress are saved securely as you move between questions.'
+                  : selectedProfile.sectionOrder === 'case-standard-pbq'
                   ? 'This attempt contains case studies first, standard questions after, and workspace labs at the end.'
                   : selectedProfile.pbqCount
                     ? 'This attempt contains front-loaded PBQs followed by standard questions.'
                     : protectedDelivery
                       ? 'This attempt uses standard questions.'
                       : 'This controlled-beta compact attempt uses standard questions only.'}{' '}
-                Use Flag for Review to mark items you want
+                {!isProtectedPractice && <> Use Flag for Review to mark items you want
                 to revisit. Answers are saved as you move between
-                questions. Submit only when you are ready to end the attempt.
+                questions. Submit only when you are ready to end the attempt.</>}
               </p>
               <p>
-                {protectedDelivery
+                {isProtectedPractice
+                  ? 'This practice is untimed. Refreshes and network interruptions can recover the same server-side session. Choosing Exit closes the practice session; no certification countdown applies.'
+                  : protectedDelivery
                   ? 'Your answers are saved securely as you move through the attempt. Refreshes and technical interruptions recover the same attempt while its original server timer continues. Choosing End attempt forfeits it after confirmation.'
                   : isSecurityPlusProductionReady
                   ? `${exam.shortName} is Production-ready. Trainer validation is pending, and this is not an official ${exam.vendor} score prediction.`
@@ -326,4 +352,10 @@ function formatStandardQuestionSummary(profile) {
     profile.normalScoredQuestionCount ??
     'Remaining scored items'
   );
+}
+
+function formatPracticeContent(contentKind) {
+  if (contentKind === 'pbq') return 'PBQ-only practice';
+  if (contentKind === 'case-study') return 'Case-study practice';
+  return 'Practice questions';
 }

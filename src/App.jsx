@@ -27,10 +27,10 @@ import TrainerStudentDetailPage from './components/trainer/TrainerStudentDetailP
 import StudentDetails from './components/exam/StudentDetails.jsx';
 import ExamRunner from './components/exam/ExamRunner.jsx';
 import ProtectedExamRunner from './components/exam/ProtectedExamRunner.jsx';
+import ProtectedTargetedDomainSetup from './components/exam/ProtectedTargetedDomainSetup.jsx';
 import ExamResults from './components/exam/ExamResults.jsx';
 import ExamReview from './components/exam/ExamReview.jsx';
 import StudySandbox from './components/exam/StudySandbox.jsx';
-import TargetedPractice from './components/exam/TargetedPractice.jsx';
 import SavedResultsPage from './components/results/SavedResultsPage.jsx';
 import {
   getActiveHeaderDestination,
@@ -1835,10 +1835,16 @@ export default function App() {
       setScreen('browse-exams');
       return;
     }
-    {
-      openProtectedPractice(examConfig, 'targeted_domain', { domain: examConfig.domainNames?.[0] });
-      return;
-    }
+    setSelectedExamConfig(examConfig);
+    setLastSelectedExamConfig(examConfig);
+    setPracticeExamConfig(examConfig);
+    setProtectedPracticeRequest(null);
+    setScreen('targeted-practice');
+    setActiveExam(null);
+    setStudent(null);
+    setResult(null);
+    saveSelectedExamId(examConfig.id);
+    return;
 
     setSelectedExamConfig(examConfig);
     setLastSelectedExamConfig(examConfig);
@@ -2057,6 +2063,15 @@ export default function App() {
     setStudent(createStudentDetailsFromIdentity(currentIdentity));
     setActiveExam({ ...createSelectedExamSummary(examConfig), deliveryMode: DELIVERY_MODES.protected });
     setScreen('exam'); setResult(null); saveSelectedExamId(examConfig.id);
+  }
+
+  function updateProtectedPracticeRequest(nextRequest) {
+    setProtectedPracticeRequest({
+      ...nextRequest,
+      domain: nextRequest?.domain
+        ? String(nextRequest.domain).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        : undefined,
+    });
   }
 
   function handleAz204CodingLanguageChange(nextPreference) {
@@ -2393,6 +2408,7 @@ export default function App() {
           session={currentIdentity.session}
           student={student}
           practiceRequest={protectedPracticeRequest}
+          onPracticeRequestChange={updateProtectedPracticeRequest}
           onExit={handleBackToExamDashboard}
           onRegisterNavigationGuard={registerProtectedNavigationGuard}
         />
@@ -2445,20 +2461,11 @@ export default function App() {
       )}
 
       {screen === 'targeted-practice' && practiceExamConfig && (
-        <TargetedPractice
-          attemptHistoryRecords={
-            practiceExamConfig.supportedFeatures?.attemptHistory
-              ? attemptHistoryState.records
-              : []
-          }
-          codingLanguagePreference={getCodingLanguagePreferenceForExam(
-            practiceExamConfig,
-          )}
+        <ProtectedTargetedDomainSetup
           domains={practiceExamConfig.domainNames}
           exam={createSelectedExamSummary(practiceExamConfig)}
-          questionBank={practiceExamConfig.questionBank}
-          onCodingLanguagePreferenceChange={handleAz204CodingLanguageChange}
-          onExit={handleBackToExamDashboard}
+          onBack={handleBackToExamDashboard}
+          onContinue={(domain) => openProtectedPractice(practiceExamConfig, 'targeted_domain', { domain })}
         />
       )}
 

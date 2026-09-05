@@ -60,6 +60,29 @@ const az204Items = [
 ];
 const az204Attempt = (id, language, assignmentId = null) => ({ attemptId:id, assignmentId, examKey:'az204', packageVersion:'1.1.0', profileKey:'standard-profile', profileName:'Standard', status:'in_progress', startedAt:'2026-09-02T12:00:00.000Z', expiresAt:deadline, timeLimitMinutes:120, purpose:'self_directed_exam', languagePreference:language });
 
+test('untimed targeted practice uses authoritative setup semantics and refreshes domain availability', async ({ page }) => {
+  const requests = [];
+  await page.route('**/functions/v1/certsim-protected-exam/**', async (route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname.split('/certsim-protected-exam')[1];
+    const json = (value) => route.fulfill({ status:200, contentType:'application/json', body:JSON.stringify(value) });
+    if (path.startsWith('/attempts/current-bindings')) return json({ candidates:[] });
+    if (path.startsWith('/practice/availability')) {
+      requests.push(Object.fromEntries(url.searchParams));
+      return json({ examKey:'az204', packageVersion:'1.1.0', profileKey:'standard-profile', purpose:'targeted_domain', selectedCount:59, timed:false, timeLimitMinutes:null, adjustedCount:false });
+    }
+    return route.fulfill({ status:500, contentType:'application/json', body:JSON.stringify({ error:{ code:'unexpected_fixture_route' } }) });
+  });
+  await page.goto('/tests/r3g/protected-runner-harness.html?exam=az204&purpose=targeted_domain&domain=develop-azure-compute-solutions');
+  await expect(page.getByRole('heading',{name:'Practice details'})).toBeVisible();
+  await expect(page.getByText('Untimed',{exact:true})).toBeVisible();
+  await expect(page.getByText('59',{exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Start practice'})).toBeEnabled();
+  await expect(page.getByText(/original server timer continues/)).toHaveCount(0);
+  await page.getByLabel('Practice domain').selectOption('Develop for Azure storage');
+  await expect.poll(() => requests.at(-1)?.domain).toBe('develop-for-azure-storage');
+});
+
 test('explicit App assignment context reaches the protected start mutation unchanged', async ({ page }) => {
   const assignmentId = '15000000-0000-4000-8000-000000000001';
   const starts = [];

@@ -1,5 +1,5 @@
 begin;
-select plan(57);
+select plan(64);
 
 select has_column('exam_delivery','exam_entitlements','source_assignment_id','assignment provenance exists');
 select has_function('exam_delivery','reconcile_assignment_entitlements',array['uuid']);
@@ -22,6 +22,13 @@ select ok(not has_function_privilege('authenticated','public.certsim_protected_a
 select ok(has_function_privilege('authenticated','public.certsim_grant_purchase_entitlement(uuid,uuid,uuid[],text,text,timestamptz)','EXECUTE'),'role-checked owner purchase fulfilment contract is callable');
 select ok(not has_function_privilege('service_role','public.certsim_grant_purchase_entitlement(uuid,uuid,uuid[],text,text,timestamptz)','EXECUTE'),'service role cannot bypass purchase actor attribution');
 select ok(not has_function_privilege('anon','public.certsim_grant_purchase_entitlement(uuid,uuid,uuid[],text,text,timestamptz)','EXECUTE'),'anonymous purchase fulfilment remains denied');
+select has_function('exam_delivery','reconcile_expired_formal_attempts',array['uuid','uuid']);
+select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=5s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='reconcile_expired_formal_attempts'),'stale formal reconciliation is bounded and search-path safe');
+select ok(not has_function_privilege('authenticated','exam_delivery.reconcile_expired_formal_attempts(uuid,uuid)','EXECUTE'),'browser cannot invoke stale formal reconciliation');
+select ok((select pg_get_functiondef(p.oid) ~ 'expires_at <= statement_timestamp\(\)' and pg_get_functiondef(p.oid) ~ 'attempt_results' and pg_get_functiondef(p.oid) ~ 'review_snapshots' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='reconcile_expired_formal_attempts'),'reconciliation expires only elapsed formal rows and fails closed on terminal state');
+select ok((select pg_get_functiondef(p.oid) ~ 'reconcile_expired_formal_attempts' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_practice_issue59_attribution_base'),'shared start boundary reconciles stale formal rows');
+select ok((select pg_get_indexdef(indexrelid) ~ 'purpose.*assigned_assessment.*self_directed_exam' from pg_index where indexrelid='exam_delivery.attempts_one_active_profile_idx'::regclass),'profile-wide uniqueness is restricted to formal attempts');
+select ok((select count(*)=2 from pg_indexes where schemaname='exam_delivery' and indexname in ('attempts_one_active_profile_idx','attempts_one_active_purpose_idx')),'formal and purpose-aware active-attempt indexes coexist');
 select ok((select pg_get_functiondef(p.oid) ~ 'source_assignment_id is null' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='staff_dashboard_aggregates'),'assignment analytics includes guarded historical fallback');
 select ok((select pg_get_functiondef(p.oid) ~ 'assigned_assessment.*self_directed_exam' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='materialize_attempt_items'),'both timed purposes use fixed composition');
 select ok((select pg_get_functiondef(p.oid) ~ 'groupSize.*long' and pg_get_functiondef(p.oid) ~ 'groupSize.*short' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='fixed_profile_case_keys'),'materializer selects long and short case groups independently');
