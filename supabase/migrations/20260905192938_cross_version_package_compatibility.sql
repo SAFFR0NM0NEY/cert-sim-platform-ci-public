@@ -332,7 +332,7 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(p_actor_id::text||':'||v_exam||':formal',0));
   v_availability:=exam_delivery.practice_availability(p_actor_id,p_request);
   if not coalesce((v_availability->>'ok')::boolean,false) then return v_availability; end if;
-  select count(*),min(a.id) into v_count,v_existing_id from exam_delivery.attempts a
+  select count(*),min(a.id::text)::uuid into v_count,v_existing_id from exam_delivery.attempts a
   join exam_delivery.package_versions pv on pv.id=a.package_version_id
   join exam_delivery.package_profiles pp on pp.id=a.package_profile_id
   where a.owner_id=p_actor_id and exam_delivery.normalize_exam_key(pv.exam_key)=v_exam
