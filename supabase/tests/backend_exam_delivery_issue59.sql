@@ -38,10 +38,15 @@ select ok(
    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
    where n.nspname='exam_delivery' and p.proname='practice_availability_issue59_enriched')
   and
-  (select pg_get_functiondef(p.oid) ~ 'attempt.package_version_id = p_package_version_id'
-     and pg_get_functiondef(p.oid) !~ 'attempt.package_profile_id'
-   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-   where n.nspname='exam_delivery' and p.proname='learner_weak_domain_evidence'),
+  (select pg_get_functiondef(wrapper.oid) ~ 'learner_weak_domain_evidence_same_package_base'
+     and pg_get_functiondef(base.oid) ~ 'attempt.package_version_id = p_package_version_id'
+     and pg_get_functiondef(base.oid) !~ 'attempt.package_profile_id'
+   from pg_proc wrapper
+   join pg_namespace wrapper_namespace on wrapper_namespace.oid=wrapper.pronamespace
+   cross join pg_proc base
+   join pg_namespace base_namespace on base_namespace.oid=base.pronamespace
+   where wrapper_namespace.nspname='exam_delivery' and wrapper.proname='learner_weak_domain_evidence'
+     and base_namespace.nspname='exam_delivery' and base.proname='learner_weak_domain_evidence_same_package_base'),
   'weak-area availability delegates same-package cross-profile evidence to private helper'
 );
 select ok((select pg_get_functiondef(p.oid) ~ 'source_assignment_id assignment_id' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='list_history'),'learner history exposes safe assignment provenance');
@@ -62,7 +67,7 @@ select has_function('exam_delivery','sync_profile_activation_assignments',array[
 select has_function('exam_delivery','learner_weak_domain_evidence',array['uuid','uuid']);
 select ok(not has_function_privilege('authenticated','exam_delivery.learner_weak_domain_evidence(uuid,uuid)','EXECUTE'),'browser cannot invoke private weak-domain evidence');
 select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=8s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='learner_weak_domain_evidence'),'weak-domain evidence is bounded and search-path safe');
-select ok((select pg_get_functiondef(p.oid) ~ 'classify_legacy_result' and pg_get_functiondef(p.oid) ~ 'normalize_exam_key' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='learner_weak_domain_evidence'),'legacy evidence is classified and same-exam scoped');
+select ok((select pg_get_functiondef(p.oid) ~ 'classify_legacy_result' and pg_get_functiondef(p.oid) ~ 'normalize_exam_key' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='learner_weak_domain_evidence_same_package_base'),'legacy evidence is classified and same-exam scoped');
 select ok((select pg_get_functiondef(p.oid) ~ 'target_domain and \(missed or weak_domain\)' and pg_get_functiondef(p.oid) ~ 'learner_weak_domain_evidence' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='materialize_attempt_items_issue21_unrotated_base'),'delegated weak-area materialization uses selected current-package domain evidence');
 select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=8s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='sync_profile_activation_assignments'),'activation reconciliation trigger is bounded and definer safe');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='exam_profile_activations' and t.tgname='sync_profile_activation_assignments' and not t.tgisinternal),'production activation changes trigger assignment reconciliation');
