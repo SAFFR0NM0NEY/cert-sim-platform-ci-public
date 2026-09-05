@@ -19,7 +19,7 @@ const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'certsim-supabase-mig
 
 try {
   assert.deepEqual(await discoverSourceMigrations(), SOURCE_MIGRATIONS);
-  assert.equal(Object.keys(SOURCE_MIGRATION_HASHES).length, 57);
+  assert.equal(Object.keys(SOURCE_MIGRATION_HASHES).length, 58);
   assert.throws(
     () => validateMigrationNames(['0001_certsim_identity_foundation.sql']),
     /Legacy four-digit migration filenames/,
@@ -59,7 +59,7 @@ try {
   assert.equal(operations.files.length, 14);
   assert.equal(publication.files.length, 15);
   assert.equal(issue59Preflight.files.length, 53);
-  assert.equal(assignment.files.length, 57);
+  assert.equal(assignment.files.length, 58);
   assert.deepEqual(baseline.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS.slice(0, 12));
   assert.deepEqual(foundation.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS.slice(0, 13));
   assert.deepEqual(operations.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS.slice(0, 14));
@@ -68,11 +68,12 @@ try {
   assert.deepEqual(assignment.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS);
   assert.ok(!baseline.files.some(({ fileName }) => fileName.startsWith('20260101000013_')));
   assert.ok(foundation.files.some(({ fileName }) => fileName.startsWith('20260101000013_')));
-  assert.equal(SOURCE_MIGRATIONS.at(-5), '20260903084553_p0_production_recovery_52_57.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-4), '20260903120000_issue59_function_definition_line_ending_preflight.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-3), '20260903161929_issue_59_functional_recovery.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-2), '20260904161938_issue65_full_untimed_practice_sessions.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-1), '20260905090355_issue65_live_acceptance_lifecycle_fix.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-6), '20260903084553_p0_production_recovery_52_57.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-5), '20260903120000_issue59_function_definition_line_ending_preflight.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-4), '20260903161929_issue_59_functional_recovery.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-3), '20260904161938_issue65_full_untimed_practice_sessions.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-2), '20260905090355_issue65_live_acceptance_lifecycle_fix.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-1), '20260905153716_ai901_canonical_form_rotation.sql');
   assert.ok(Number(SOURCE_MIGRATIONS.at(-1).slice(0, 14)) > 20260101000013);
   assert.ok(SOURCE_MIGRATIONS.every((name) => !/^\d{4}_/.test(name)));
 
