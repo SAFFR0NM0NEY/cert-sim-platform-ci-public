@@ -1,5 +1,5 @@
 begin;
-select plan(25);
+select plan(26);
 
 select has_table('exam_delivery','package_profile_defaults','private defaults exist');
 select has_table('exam_delivery','package_domain_compatibility','private domain mappings exist');
@@ -20,6 +20,7 @@ select ok((select prosecdef and proconfig @> array['search_path=""','statement_t
 select ok((select pg_get_functiondef(p.oid) !~ 'published_at' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='practice_availability'),'availability does not infer newest publication');
 select ok((select pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='practice_availability'),'availability resolves explicit default');
 select ok((select pg_get_function_arguments(p.oid) !~ 'package_version' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'resume discovery has no version selector');
+select ok((select pg_get_functiondef(p.oid) ~ 'min\(a\.id::text\)::uuid' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'resume discovery selects its unique UUID through a PostgreSQL-supported aggregate');
 select ok((select pg_get_functiondef(p.oid) ~ 'attempt_conflict' and pg_get_functiondef(p.oid) ~ 'v_count' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'multiple current attempts fail closed');
 select ok((select pg_get_functiondef(p.oid) ~ 'pg_advisory_xact_lock' and pg_get_functiondef(p.oid) ~ 'learner_started_new_attempt' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='replace_current_practice_attempt'),'replacement is locked and audited');
 select ok((select pg_get_functiondef(p.oid) ~ 'package_domain_compatibility' and pg_get_functiondef(p.oid) ~ 'assigned_assessment.*self_directed_exam' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='learner_weak_domain_evidence'),'weak evidence uses explicit mappings and assessment purposes');

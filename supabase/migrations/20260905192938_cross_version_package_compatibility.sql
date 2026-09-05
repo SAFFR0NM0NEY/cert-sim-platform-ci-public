@@ -150,7 +150,7 @@ declare v_id uuid; v_count integer;
 begin
   if p_actor_id is null or p_purpose not in ('assigned_assessment','self_directed_exam') then
     return jsonb_build_object('ok',false,'code','attempt_not_found'); end if;
-  select count(*),min(a.id) into v_count,v_id from exam_delivery.attempts a
+  select count(*),min(a.id::text)::uuid into v_count,v_id from exam_delivery.attempts a
   join exam_delivery.package_versions pv on pv.id=a.package_version_id
   join exam_delivery.package_profiles pp on pp.id=a.package_profile_id
   where a.owner_id=p_actor_id and exam_delivery.normalize_exam_key(pv.exam_key)=exam_delivery.normalize_exam_key(p_exam_key)

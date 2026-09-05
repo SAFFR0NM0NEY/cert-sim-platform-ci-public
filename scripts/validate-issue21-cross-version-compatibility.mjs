@@ -24,7 +24,8 @@ assert.doesNotMatch(sql,/grant execute[\s\S]{0,180}configure_package_successor[\
 assert.match(sql,/v_assignment_id is null[\s\S]*source_assignment_id is null[\s\S]*v_assignment_id is not null[\s\S]*source_assignment_id=v_assignment_id/);
 assert.match(fixture,/2\.0\.0[\s\S]*3\.0\.0[\s\S]*REPLACEMENT_DID_NOT_USE_SUCCESSOR/);
 assert.match(fixture,/SUCCESSOR_PUBLICATION_REPLAY_FAILED/);
-assert.match(pgtap,/select plan\(25\)/);
+assert.match(pgtap,/select plan\(26\)/);
+assert.match(pgtap,/min\\\(a\\\.id::text\\\)::uuid/);
 const canonical=await read('supabase/migrations/20260905153716_ai901_canonical_form_rotation.sql');
 assert.equal(createHash('sha256').update(canonical).digest('hex'),'3a0272a06c879bfdb590a2a55b752e651c7f133438eb7af2a4dc8f64bc2deeeb');
-console.log(JSON.stringify({ok:true,compatibilityContracts:25,domainMappings:8,canonicalMigrationUnchanged:true}));
+console.log(JSON.stringify({ok:true,compatibilityContracts:26,domainMappings:8,canonicalMigrationUnchanged:true}));
