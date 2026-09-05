@@ -7,7 +7,8 @@ const admin=client(service),owner=await createUser('owner'),learner=await create
 const org=crypto.randomUUID();
 sql(`insert into public.organisations(id,name,organisation_type,status) values ('${org}','Issue 21 synthetic fixture','internal','active');
 insert into public.memberships(user_id,organisation_id,role,status) values ('${owner.id}','${org}','platform_owner','active'),('${learner.id}','${org}','student','active'),('${concurrentLearner.id}','${org}','student','active');
-insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values ('rotationfixture','rotation-fixture','Synthetic rotation','test','certification');`);
+insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values ('rotationfixture','rotation-fixture','Synthetic rotation','test','certification');
+insert into exam_delivery.exam_access_policies(canonical_exam_key,access_mode,enabled,enabled_at,require_assignment) values ('rotationfixture','open_authenticated',true,now(),false);`);
 
 const ids=Array.from({length:12},(_,index)=>`synthetic-${index+1}`);
 const forms=ids.reduce((out,id,index)=>{out[index%6].push(id);return out},Array.from({length:6},()=>[]));
