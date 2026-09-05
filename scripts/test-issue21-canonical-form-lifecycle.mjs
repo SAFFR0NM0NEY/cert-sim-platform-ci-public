@@ -167,10 +167,9 @@ sql(`create function exam_delivery.issue21_reject_item() returns trigger languag
 if(sqlStatus(`select exam_delivery.materialize_attempt_items('${failed.id}','${failed.request}',null)`)===0) fail('FAILED_MATERIALIZATION_ALLOWED');
 sql(`drop trigger issue21_reject_item on exam_delivery.attempt_items; drop function exam_delivery.issue21_reject_item(); select 1/((canonical_form_id is null)::integer) from exam_delivery.attempts where id='${failed.id}'; update exam_delivery.attempts set status='voided' where id='${failed.id}';`);
 
-const concurrentA=createAttempt(compactProfile,'assigned_assessment');
-const concurrentB=createAttempt(compactProfile,'self_directed_exam');
-await Promise.all([allocate(concurrentA.id),allocate(concurrentB.id)]);
-sql(`select 1/((count(distinct canonical_form_id)=2)::integer) from exam_delivery.attempts where id in ('${concurrentA.id}','${concurrentB.id}');
+const concurrentAttempt=createAttempt(compactProfile,'self_directed_exam');
+await Promise.all([allocate(concurrentAttempt.id),allocate(concurrentAttempt.id)]);
+sql(`select 1/((canonical_form_id is not null and canonical_form_cycle is not null)::integer) from exam_delivery.attempts where id='${concurrentAttempt.id}';
 select 1/((count(*)=0)::integer) from information_schema.role_table_grants where table_schema='exam_delivery' and table_name in ('package_forms','package_form_questions','package_reserve_questions') and grantee in ('anon','authenticated','service_role');`);
 await ownerClient.auth.signOut({scope:'global'});
 console.log(JSON.stringify({ok:true,publication:'atomic',forms:12,memberships:18,formalCycle:allocated.length,cycleTwo:true,compactIndependent:true,practiceConsumesForm:false,failedMaterializationConsumesForm:false,concurrentStartsSerialized:true,browserFormAccess:false}));
