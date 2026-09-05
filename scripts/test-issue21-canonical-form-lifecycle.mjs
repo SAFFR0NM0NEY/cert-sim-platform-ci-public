@@ -141,7 +141,7 @@ await complete(practiceStarted,learner.id);
 
 const assignmentId=crypto.randomUUID();
 sql(`insert into public.exam_assignments(id,organisation_id,student_user_id,exam_key,profile_id,title,status,available_from,due_at,assigned_by) values ('${assignmentId}','${org}','${learner.id}','rotationfixture','rotation-full','Synthetic controlled assignment','active',now()-interval '1 minute',now()+interval '1 day','${owner.id}');`);
-const assigned=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'rotation-fixture',p_profile_key:'rotation-full',p_request_id:crypto.randomUUID()});
+const assigned=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'rotation-fixture',p_profile_key:'rotation-full',p_request_id:crypto.randomUUID(),p_assignment_id:assignmentId});
 assertStarted(assigned,2,'ASSIGNED_START');
 await complete(assigned,learner.id);
 const assignedReview=await admin.rpc('certsim_protected_get_review',{p_actor_id:learner.id,p_attempt_id:assigned.data.attempt.attemptId});
