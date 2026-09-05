@@ -220,6 +220,42 @@ grant execute on function exam_delivery.configure_package_successor(uuid,text,te
 grant execute on function exam_delivery.create_protected_assignment_current(uuid,uuid,text,text,timestamptz,timestamptz,integer,text,text),
   public.certsim_protected_create_assignment_current(uuid,uuid,text,text,timestamptz,timestamptz,integer,text,text) to authenticated;
 
+-- Continuation of an immutable protected assignment is authorized against its
+-- stored binding, not whichever package is the current default.
+create or replace function exam_delivery.authorize_attempt_continuation(p_attempt_id uuid,p_operation text)
+returns jsonb language plpgsql stable security definer set search_path='' set statement_timeout='5s' as $$
+declare v record; v_assessment jsonb; v_assignment_continuation boolean;
+begin
+  if p_attempt_id is null or p_operation not in ('resume','save_response','check_item','submit') then return jsonb_build_object('ok',false,'code','invalid_request'); end if;
+  select a.owner_id,a.status,a.expires_at,a.purpose,a.practice_configuration,a.language_preference,
+    a.package_version_id,a.package_profile_id,a.protected_assignment_id,a.source_assignment_id,a.attribution_source,
+    pv.exam_key,pv.package_version,pv.package_schema_version,pp.profile_key,policy.access_mode,policy.enabled into v
+  from exam_delivery.attempts a join exam_delivery.package_versions pv on pv.id=a.package_version_id
+  join exam_delivery.package_profiles pp on pp.id=a.package_profile_id left join exam_delivery.practice_policies policy
+    on policy.canonical_exam_key=exam_delivery.normalize_exam_key(pv.exam_key) and policy.package_version=pv.package_version
+    and policy.profile_key=pp.profile_key and policy.purpose=a.purpose where a.id=p_attempt_id;
+  if not found then return jsonb_build_object('ok',false,'code','attempt_not_found'); end if;
+  if v.status<>'in_progress' or statement_timestamp()>=v.expires_at then return jsonb_build_object('ok',false,'code','invalid_lifecycle_transition'); end if;
+  if not exists(select 1 from public.profiles profile where profile.id=v.owner_id and profile.status='active') then return jsonb_build_object('ok',false,'code','inactive_account'); end if;
+  v_assignment_continuation:=v.purpose='self_directed_exam' and v.source_assignment_id is not null and v.attribution_source='assignment';
+  if v.purpose='assigned_assessment' then
+    if v.protected_assignment_id is null or not exists(select 1 from exam_delivery.protected_assignments assignment
+      where assignment.id=v.protected_assignment_id and assignment.learner_id=v.owner_id
+        and assignment.package_version_id=v.package_version_id and assignment.package_profile_id=v.package_profile_id
+        and assignment.status='active' and assignment.available_from<=statement_timestamp()
+        and (assignment.expires_at is null or assignment.expires_at>statement_timestamp())) then
+      v_assessment:=exam_delivery.check_assessment_eligibility_v2(v.owner_id,v.exam_key,v.profile_key);
+      if not coalesce((v_assessment->>'eligible')::boolean,false) then return jsonb_build_object('ok',false,'code','exam_unavailable'); end if;
+    end if;
+  else
+    if not coalesce(v.enabled,false) or v.access_mode='disabled' or not exists(select 1 from exam_delivery.exam_profile_activations activation
+      where activation.package_version_id=v.package_version_id and activation.package_profile_id=v.package_profile_id
+        and activation.activation_kind='production' and activation.enabled) then return jsonb_build_object('ok',false,'code','practice_unavailable'); end if;
+    if not v_assignment_continuation and not exam_delivery.can_use_profile(v.owner_id,v.package_version_id,v.package_profile_id,v.purpose) then return jsonb_build_object('ok',false,'code','access_not_granted'); end if;
+  end if;
+  return jsonb_build_object('ok',true,'ownerId',v.owner_id,'examKey',exam_delivery.normalize_exam_key(v.exam_key),'profileKey',v.profile_key,'purpose',v.purpose,'operation',p_operation);
+end $$;
+
 -- Stored protected assignments remain pinned to their immutable package/profile.
 create or replace function exam_delivery.start_attempt_v2(
   p_actor_id uuid,p_exam_key text,p_profile_key text,p_request_id uuid
