@@ -28,6 +28,7 @@ assert.match(sql, /practice-only-until-versioned-rebalance/);
 assert.match(sql, /canonical_form_runtime_validation_failed/);
 for (const token of ['certsim-canonical-forms-v2', 'skillGroupTargets', 'requiredObjectiveKeys', 'minimumCoverageTagCounts', 'officialObjectiveKey', 'coverageTags']) assert.match(sql, new RegExp(token));
 for (const token of ['canonical_form_generic_metadata_invalid', 'json_has_exact_keys', 'jsonb_typeof']) assert.match(sql, new RegExp(token));
+assert.match(sql, /canonicalFormId.*canonical_form_id.*canonicalFormKey.*canonical_form_key/s);
 assert.match(sql, /count\(distinct/);
 assert.match(sql, /not in \('easy','medium','hard','advanced'\)/);
 for (const forbidden of ['ai901Subskill', 'identify-ai-concepts-and-capabilities', 'implement-ai-solutions-with-foundry', 'blueprintTargets', 'requiredSubskills', 'minimumImplementationQuestions']) assert.doesNotMatch(sql, new RegExp(forbidden));

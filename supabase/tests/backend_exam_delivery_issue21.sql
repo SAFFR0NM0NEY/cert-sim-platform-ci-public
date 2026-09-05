@@ -1,5 +1,5 @@
 begin;
-select plan(41);
+select plan(43);
 
 select has_table('exam_delivery','package_forms','private canonical form table exists');
 select has_table('exam_delivery','package_form_questions','private canonical membership table exists');
@@ -35,6 +35,8 @@ select ok((select pg_get_functiondef(p.oid) ~ 'materialize_attempt_items_issue21
 select ok((select pg_get_functiondef(p.oid) ~ 'canonical_form_runtime_validation_failed' and pg_get_functiondef(p.oid) ~ 'skillGroupTargets' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='materialize_attempt_items'),'formal materialization fails closed on generic count and blueprint drift');
 select ok((select pg_get_functiondef(p.oid) !~* 'ai901|foundry|concepts|ai901Subskill' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='prepare_canonical_forms_on_publish'),'publication runtime contains no exam-specific identifiers');
 select ok((select pg_get_functiondef(p.oid) ~ 'requiredObjectiveKeys' and pg_get_functiondef(p.oid) ~ 'minimumCoverageTagCounts' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='prepare_canonical_forms_on_publish'),'publication validates generic objectives and coverage tags');
+select ok((select pg_get_functiondef(p.oid) ~ 'canonicalFormId' and pg_get_functiondef(p.oid) ~ 'invalid_request' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_start_practice'),'public practice start rejects client canonical form selectors');
+select ok((select pg_get_functiondef(p.oid) ~ 'canonical_form_id' and pg_get_functiondef(p.oid) ~ 'invalid_request' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_replace_current_practice_attempt'),'public replacement rejects client canonical form selectors');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='attempts' and t.tgname='guard_attempt_form_assignment' and not t.tgisinternal),'attempt form assignment is immutable');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='package_versions' and t.tgname='prepare_canonical_forms_before_publish' and not t.tgisinternal),'publication persists validated forms atomically');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='practice_policies' and t.tgname='guard_declared_self_directed_release_policy' and not t.tgisinternal),'self-directed release policy follows immutable package declaration');

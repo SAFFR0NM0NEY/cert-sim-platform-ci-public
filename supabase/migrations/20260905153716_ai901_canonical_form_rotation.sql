@@ -558,6 +558,35 @@ revoke execute on function exam_delivery.guard_canonical_package_mutation(),
   exam_delivery.materialize_attempt_items(uuid,uuid,integer)
 from public, anon, authenticated, service_role;
 
+-- Canonical form allocation is exclusively server-owned. Fail closed instead
+-- of silently ignoring a client-supplied selector at either public start path.
+create or replace function public.certsim_protected_start_practice(p_actor_id uuid,p_request jsonb)
+returns jsonb language sql security invoker set search_path='' as $$
+  select case
+    when p_request ?| array['canonicalFormId','canonical_form_id','canonicalFormKey','canonical_form_key']
+      then jsonb_build_object('ok',false,'code','invalid_request')
+    else exam_delivery.start_practice(p_actor_id,p_request)
+  end
+$$;
+
+create or replace function public.certsim_protected_replace_current_practice_attempt(p_actor_id uuid,p_request jsonb)
+returns jsonb language sql security invoker set search_path='' as $$
+  select case
+    when p_request ?| array['canonicalFormId','canonical_form_id','canonicalFormKey','canonical_form_key']
+      then jsonb_build_object('ok',false,'code','invalid_request')
+    else exam_delivery.replace_current_practice_attempt(p_actor_id,p_request)
+  end
+$$;
+
+alter function public.certsim_protected_start_practice(uuid,jsonb) owner to postgres;
+alter function public.certsim_protected_replace_current_practice_attempt(uuid,jsonb) owner to postgres;
+revoke execute on function public.certsim_protected_start_practice(uuid,jsonb),
+  public.certsim_protected_replace_current_practice_attempt(uuid,jsonb)
+from public, anon, authenticated, service_role;
+grant execute on function public.certsim_protected_start_practice(uuid,jsonb),
+  public.certsim_protected_replace_current_practice_attempt(uuid,jsonb)
+to service_role;
+
 comment on table exam_delivery.package_forms is
   'Private immutable canonical form definitions for explicitly declaring package profiles.';
 comment on table exam_delivery.package_form_questions is

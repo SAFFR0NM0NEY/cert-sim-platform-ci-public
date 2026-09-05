@@ -108,6 +108,8 @@ const deniedResume=await admin.rpc('certsim_protected_resume_attempt',{p_actor_i
 expectDenied(deniedResume,'CROSS_LEARNER_RESUME');
 const injected=await admin.rpc('certsim_protected_start_practice',{p_actor_id:learner.id,p_request:{...baseRequest,canonicalFormId:crypto.randomUUID(),clientRequestId:crypto.randomUUID()}});
 if(injected.error||injected.data?.ok!==false||injected.data?.code!=='invalid_request') fail('CLIENT_FORM_ID_ACCEPTED');
+const injectedReplacement=await admin.rpc('certsim_protected_replace_current_practice_attempt',{p_actor_id:learner.id,p_request:{...baseRequest,canonical_form_id:crypto.randomUUID(),clientRequestId:crypto.randomUUID()}});
+if(injectedReplacement.error||injectedReplacement.data?.ok!==false||injectedReplacement.data?.code!=='invalid_request') fail('CLIENT_REPLACEMENT_FORM_ID_ACCEPTED');
 
 const rollbackRequest={...baseRequest,clientRequestId:crypto.randomUUID()};
 sql(`create function exam_delivery.issue21_reject_attempt() returns trigger language plpgsql set search_path='' as $$begin if new.client_request_id='${rollbackRequest.clientRequestId}'::uuid then raise exception 'synthetic_replacement_failure';end if;return new;end$$; create trigger issue21_reject_attempt before insert on exam_delivery.attempts for each row execute function exam_delivery.issue21_reject_attempt();`);
