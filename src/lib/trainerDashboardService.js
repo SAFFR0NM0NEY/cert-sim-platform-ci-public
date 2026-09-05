@@ -105,13 +105,13 @@ const CATALOG_FIELDS = [
 const unavailableResult = {
   ok: false,
   reason: 'supabase_not_configured',
-  message: 'Performance Dashboard is not configured for this environment yet.',
+  message: 'Training Dashboard is not configured for this environment yet.',
 };
 
 const signedOutResult = {
   ok: false,
   reason: 'not_signed_in',
-  message: 'Sign in with a trainer, scoped admin, or Platform Owner account to view the Performance Dashboard.',
+  message: 'Sign in with a trainer, scoped admin, or Platform Owner account to view the Training Dashboard.',
 };
 
 const unauthorizedResult = {

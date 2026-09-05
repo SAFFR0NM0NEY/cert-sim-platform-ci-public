@@ -294,7 +294,7 @@ function TrainerStudentShell({
         </div>
         <div className="button-row wrap">
           <button className="secondary-button" type="button" onClick={onBackToDashboard}>
-            Back to Performance Dashboard
+            Back to Training Dashboard
           </button>
         </div>
       </div>

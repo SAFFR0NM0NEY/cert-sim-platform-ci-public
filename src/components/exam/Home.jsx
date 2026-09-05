@@ -96,6 +96,7 @@ export default function Home({
       onOpenDashboard={onOpenDashboard}
       onOpenDraftStudySandbox={onOpenDraftStudySandbox}
       onOpenItDirectionAssessment={onOpenItDirectionAssessment}
+      onOpenSavedResults={onOpenSavedResults}
       onOpenStudySandbox={onOpenStudySandbox}
       selectedExamCanOpenSandbox={selectedExamCanOpenSandbox}
     />
@@ -110,12 +111,10 @@ function CompactHome({
   onOpenDashboard,
   onOpenDraftStudySandbox,
   onOpenItDirectionAssessment,
+  onOpenSavedResults,
   onOpenStudySandbox,
   selectedExamCanOpenSandbox,
 }) {
-  const guideActionLabel = exam ? 'Open Dashboard' : 'Browse Exams';
-  const handleGuideAction = exam ? onOpenDashboard : onBrowseExams;
-
   return (
     <section className="home-overview" aria-labelledby="home-heading">
       <div className="hero-panel compact-hero">
@@ -202,15 +201,23 @@ function CompactHome({
 
         <article className="home-action-card">
           <div className="home-action-card-content">
-            <h3>Guide and History</h3>
+            <h3>Guide and Saved Results</h3>
             <div className="home-action-card-status" aria-hidden="true" />
             <p>
-              Student guidance and local history live on each selected exam dashboard.
+              Saved Results contains your account-backed exam history. Select an exam to open its student guide.
             </p>
           </div>
-          <div className="home-action-card-action">
-            <button className="secondary-button" type="button" onClick={handleGuideAction}>
-              {guideActionLabel}
+          <div className="home-action-card-action button-row wrap">
+            <button className="secondary-button" type="button" onClick={onOpenSavedResults}>
+              View Saved Results
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={!exam}
+              onClick={onOpenDashboard}
+            >
+              {exam ? 'Open Student Guide' : 'Guide coming soon'}
             </button>
           </div>
         </article>

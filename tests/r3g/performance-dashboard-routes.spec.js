@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('Performance Dashboard subordinate routes are direct, bookmarkable pages', async ({ page }) => {
+test('Training Dashboard subordinate routes are direct, bookmarkable pages', async ({ page }) => {
   for (const route of [
     '/trainer/dashboard',
     '/trainer/dashboard/analytics',
@@ -10,6 +10,7 @@ test('Performance Dashboard subordinate routes are direct, bookmarkable pages', 
   ]) {
     await page.goto(route);
     await expect(page).toHaveURL(new RegExp(`${route.replaceAll('/', '\\/')}$`));
-    await expect(page.getByRole('heading', { name: 'Performance Dashboard', exact: true })).toBeVisible();
+    await expect(page).toHaveTitle('Training Dashboard | CertSim Platform');
+    await expect(page.getByRole('heading', { name: 'Training Dashboard', exact: true })).toBeVisible();
   }
 });

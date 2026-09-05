@@ -80,6 +80,14 @@ export default function TrainerDashboardPage({
     updateStudentDisplayName,
   } = dashboard;
   useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const previousTitle = document.title;
+    document.title = 'Training Dashboard | CertSim Platform';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+  useEffect(() => {
     if (isAuthenticated && activeSection === 'detail' && resultAttemptId) loadResultDetail(resultAttemptId);
   }, [activeSection, isAuthenticated, loadResultDetail, resultAttemptId]);
   const {
@@ -282,7 +290,7 @@ export default function TrainerDashboardPage({
     return (
       <TrainerDashboardShell onBackHome={onBackHome} onBrowseExams={onBrowseExams}>
         <StatePanel
-          title="Performance Dashboard is not configured here"
+          title="Training Dashboard is not configured here"
           note="This environment is running in frontend-only mode, so protected certification exams and staff result visibility are unavailable."
         />
       </TrainerDashboardShell>
@@ -304,7 +312,7 @@ export default function TrainerDashboardPage({
     return (
       <TrainerDashboardShell onBackHome={onBackHome} onBrowseExams={onBrowseExams}>
         <StatePanel
-          title="Checking Performance Dashboard access..."
+          title="Checking Training Dashboard access..."
           note="CertSim is reading your profile and active memberships."
         />
       </TrainerDashboardShell>
@@ -315,7 +323,7 @@ export default function TrainerDashboardPage({
     return (
       <TrainerDashboardShell onBackHome={onBackHome} onBrowseExams={onBrowseExams}>
         <StatePanel
-          title="Performance Dashboard is not available for this account"
+          title="Training Dashboard is not available for this account"
           note="This page is limited to active Trainer, scoped admin, and Platform Owner memberships. Normal exam access remains unchanged."
         />
       </TrainerDashboardShell>
@@ -1065,7 +1073,7 @@ function TrainerDashboardShell({ children, onBackHome, onBrowseExams }) {
   return (
     <section className="management-page" aria-labelledby="trainer-dashboard-heading">
       <p className="eyebrow">Staff tools</p>
-      <h2 id="trainer-dashboard-heading">Performance Dashboard</h2>
+      <h2 id="trainer-dashboard-heading">Training Dashboard</h2>
       <p className="management-intro">
         Review authorized classes, learners, Saved Results, readiness, and
         assignments. Protected access is enforced for every staff scope.

@@ -1175,8 +1175,8 @@ button.summary-tile:focus-visible {
 
 .management-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  overflow-x: auto;
   border: 1px solid #334155;
   border-radius: 8px;
   background: rgba(15, 23, 42, 0.72);
@@ -1184,8 +1184,8 @@ button.summary-tile:focus-visible {
   scrollbar-color: #475569 #111827;
 }
 
-.management-tabs a {
-  flex: 0 0 auto;
+.management-tabs :is(a, button) {
+  flex: 0 1 auto;
   min-height: 36px;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -1196,15 +1196,17 @@ button.summary-tile:focus-visible {
   font-weight: 900;
   white-space: nowrap;
   text-decoration: none;
+  font-family: inherit;
+  cursor: pointer;
 }
 
-.management-tabs a:hover,
-.management-tabs a:focus-visible {
+.management-tabs :is(a, button):hover,
+.management-tabs :is(a, button):focus-visible {
   border-color: #475569;
   color: #f8fafc;
 }
 
-.management-tabs a.active {
+.management-tabs :is(a, button).active {
   border-color: rgba(56, 189, 248, 0.5);
   background: rgba(14, 165, 233, 0.16);
   color: #bae6fd;

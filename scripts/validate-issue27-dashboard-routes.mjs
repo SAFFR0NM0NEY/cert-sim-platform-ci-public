@@ -32,7 +32,7 @@ for (const hook of [dashboardHook, assignmentHook, progressHook, scopeHook]) {
   assert.match(hook, /enabled = true/);
   assert.match(hook, /reason: 'disabled'/);
 }
-assert.match(styles, /\.management-tabs a:focus-visible/);
+assert.match(styles, /\.management-tabs :is\(a, button\):focus-visible/);
 assert.match(app, /heading\.focus\(\{ preventScroll: true \}\)/);
 assert.doesNotMatch(page, /Trainer Dashboard|Trainer\/Admin Tools|Staff\/Admin tools/);
 

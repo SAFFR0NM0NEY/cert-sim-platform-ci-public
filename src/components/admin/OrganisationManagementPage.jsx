@@ -983,6 +983,7 @@ function SectionTabs({ activeSection, onSelect, sections }) {
       {sections.map((section) => (
         <button
           key={section.id}
+          aria-current={activeSection === section.id ? 'page' : undefined}
           className={activeSection === section.id ? 'active' : ''}
           type="button"
           onClick={() => onSelect(section.id)}

@@ -1,14 +1,17 @@
 import { useMemo, useState } from 'react';
 
 import useDeveloperDashboard from '../../hooks/useDeveloperDashboard.js';
+import {
+  ACTIVE_DEVELOPER_REPORT_STATUSES,
+  DEVELOPER_REPORT_VIEWS,
+  filterDeveloperReports,
+} from '../../lib/developerReportViews.js';
 import { hasDeveloperDashboardAccess } from '../../lib/roleUtils.js';
 
 const statusOptions = [
   { value: 'open', label: 'Open' },
   { value: 'in_review', label: 'In review' },
   { value: 'need_info', label: 'Need info' },
-  { value: 'resolved', label: 'Resolved' },
-  { value: 'dismissed', label: 'Dismissed' },
 ];
 
 const priorityOptions = [
@@ -69,6 +72,7 @@ export default function DeveloperDashboardPage({
     status: '',
     reportType: '',
   });
+  const [reportView, setReportView] = useState(DEVELOPER_REPORT_VIEWS.active);
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
   const [busyAction, setBusyAction] = useState(false);
@@ -78,8 +82,15 @@ export default function DeveloperDashboardPage({
     adminNotes: '',
   });
   const filteredReports = useMemo(
-    () => reports.filter((report) => matchesReportFilters(report, filters)),
-    [filters, reports],
+    () => filterDeveloperReports(reports, reportView, filters),
+    [filters, reportView, reports],
+  );
+  const reportsInView = useMemo(
+    () => reports.filter((report) =>
+      reportView === DEVELOPER_REPORT_VIEWS.resolved
+        ? report.status === 'resolved'
+        : ACTIVE_DEVELOPER_REPORT_STATUSES.includes(report.status)),
+    [reportView, reports],
   );
   const selectedDeletionRequest = useMemo(
     () =>
@@ -139,14 +150,33 @@ export default function DeveloperDashboardPage({
       {actionError ? <p className="auth-panel-error">{actionError}</p> : null}
 
       <section className="management-summary-grid" aria-label="Developer queue summary">
-        <SummaryTile label="Open" value={totals.open} onClick={() => updateFilter('status', 'open')} />
-        <SummaryTile label="In review" value={totals.inReview} onClick={() => updateFilter('status', 'in_review')} />
-        <SummaryTile label="Need info" value={totals.needInfo} onClick={() => updateFilter('status', 'need_info')} />
-        <SummaryTile label="Resolved" value={totals.resolved} onClick={() => updateFilter('status', 'resolved')} />
+        <SummaryTile label="Open" value={totals.open} onClick={() => showActiveStatus('open')} />
+        <SummaryTile label="In review" value={totals.inReview} onClick={() => showActiveStatus('in_review')} />
+        <SummaryTile label="Need info" value={totals.needInfo} onClick={() => showActiveStatus('need_info')} />
+        <SummaryTile label="Resolved" value={totals.resolved} onClick={() => selectReportView(DEVELOPER_REPORT_VIEWS.resolved)} />
         <SummaryTile label="Question reports" value={totals.questionReports} onClick={() => updateFilter('source', 'question_reports')} />
         <SummaryTile label="Platform issues" value={totals.platformIssues} onClick={() => updateFilter('source', 'platform_issue_reports')} />
         <SummaryTile label="Deletion requests" value={deletionTotals.total} />
       </section>
+
+      <nav className="management-tabs developer-report-tabs no-print" aria-label="Report queue views">
+        <button
+          aria-current={reportView === DEVELOPER_REPORT_VIEWS.active ? 'page' : undefined}
+          className={reportView === DEVELOPER_REPORT_VIEWS.active ? 'active' : ''}
+          type="button"
+          onClick={() => selectReportView(DEVELOPER_REPORT_VIEWS.active)}
+        >
+          Active reports
+        </button>
+        <button
+          aria-current={reportView === DEVELOPER_REPORT_VIEWS.resolved ? 'page' : undefined}
+          className={reportView === DEVELOPER_REPORT_VIEWS.resolved ? 'active' : ''}
+          type="button"
+          onClick={() => selectReportView(DEVELOPER_REPORT_VIEWS.resolved)}
+        >
+          Resolved reports ({totals.resolved})
+        </button>
+      </nav>
 
       <section className="management-card" aria-labelledby="developer-filters-heading">
         <div className="management-section-heading">
@@ -191,7 +221,7 @@ export default function DeveloperDashboardPage({
               placeholder="Search title, message, exam, question ID, or reporter"
             />
           </label>
-          <label>
+          {reportView === DEVELOPER_REPORT_VIEWS.active ? <label>
             <span>Status</span>
             <select
               value={filters.status}
@@ -204,7 +234,7 @@ export default function DeveloperDashboardPage({
                 </option>
               ))}
             </select>
-          </label>
+          </label> : null}
           <label>
             <span>Priority</span>
             <select
@@ -251,15 +281,23 @@ export default function DeveloperDashboardPage({
       <section className="management-card" aria-labelledby="developer-queue-heading">
         <div className="management-section-heading">
           <div>
-            <h3 id="developer-queue-heading">Bug/question report queue</h3>
+            <h3 id="developer-queue-heading">
+              {reportView === DEVELOPER_REPORT_VIEWS.active ? 'Active reports' : 'Resolved reports'}
+            </h3>
             <p>
-              {filteredReports.length} of {reports.length} saved reports shown.
+              {filteredReports.length} of {reportsInView.length} reports in this view shown.
             </p>
           </div>
         </div>
 
         {filteredReports.length === 0 ? (
-          <p className="auth-panel-muted">No saved reports match these filters.</p>
+          <p className="auth-panel-muted">
+            {hasReportFilters(filters)
+              ? `No ${reportView === DEVELOPER_REPORT_VIEWS.active ? 'active' : 'resolved'} reports match these filters.`
+              : reportView === DEVELOPER_REPORT_VIEWS.active
+                ? 'There is no current report work.'
+                : 'No resolved reports are recorded.'}
+          </p>
         ) : (
           <div className="developer-report-list">
             {filteredReports.map((report) => (
@@ -455,6 +493,16 @@ export default function DeveloperDashboardPage({
     }));
   }
 
+  function selectReportView(view) {
+    setReportView(view);
+    setFilters((current) => ({ ...current, status: '' }));
+  }
+
+  function showActiveStatus(status) {
+    setReportView(DEVELOPER_REPORT_VIEWS.active);
+    updateFilter('status', status);
+  }
+
   function handleSelectDeletionRequest(request) {
     setSelectedDeletionRequestId(request.id);
     setDeletionStatusForm({
@@ -548,40 +596,8 @@ function Fact({ label, value }) {
   );
 }
 
-function matchesReportFilters(report, filters) {
-  if (filters.status && report.status !== filters.status) {
-    return false;
-  }
-
-  if (filters.priority && report.priority !== filters.priority) {
-    return false;
-  }
-
-  if (filters.source && report.source !== filters.source) {
-    return false;
-  }
-
-  if (filters.reportType && report.reportType !== filters.reportType) {
-    return false;
-  }
-
-  const search = filters.search.trim().toLowerCase();
-
-  if (!search) {
-    return true;
-  }
-
-  return [
-    report.title,
-    report.message,
-    report.examKey,
-    report.questionId,
-    report.routePath,
-    report.reporter?.displayName,
-    report.reporter?.email,
-  ]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(search));
+function hasReportFilters(filters) {
+  return Object.values(filters).some((value) => String(value).trim());
 }
 
 function formatContextLine(report) {

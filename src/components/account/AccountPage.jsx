@@ -509,9 +509,9 @@ function AccountPageContent({
               <div className="account-action-grid">
                 {canOpenTrainerDashboard ? (
                   <AccountActionCard
-                    title="Performance Dashboard"
+                    title="Training Dashboard"
                     description="Review scoped groups, students, saved results, readiness, and assignments."
-                    actionLabel="Open Performance Dashboard"
+                    actionLabel="Open Training Dashboard"
                     onClick={onOpenTrainerDashboard}
                   />
                 ) : null}
