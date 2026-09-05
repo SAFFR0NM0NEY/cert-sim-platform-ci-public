@@ -35,6 +35,8 @@ jobs:
           npm run validate:r3e
           npm run validate:exam-library
           npm run validate:issue59
+      - name: Protected production environment guard validation
+        run: npm run validate:protected-production-build
       - run: npm run build
       - run: npm run validate:delivery-builds
       - run: git diff --check
