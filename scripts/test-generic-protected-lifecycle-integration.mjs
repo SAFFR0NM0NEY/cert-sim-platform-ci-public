@@ -72,6 +72,12 @@ select pv.id,pp.id,true,'production',now(),'${owner.id}' from exam_delivery.pack
 insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,learner_id,enabled,valid_from,reason_code,created_by)
 select pv.id,pp.id,'learner','${learner.id}',true,now()-interval '1 minute','integration_fixture','${owner.id}' from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id where pv.exam_key='sample400' and pv.package_version='1.0.0' and pp.profile_key='sectioned';`);
 
+sql(`insert into exam_delivery.package_profile_defaults(canonical_exam_key,profile_key,purpose,package_version_id,package_profile_id,configured_by)
+select 'sample400','sectioned',purpose.purpose,pv.id,pp.id,'${owner.id}'
+from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
+cross join (values ('assigned_assessment'::exam_delivery.attempt_purpose),('self_directed_exam'),('weak_area'),('study_sandbox'),('targeted_domain'),('pbq_practice')) purpose(purpose)
+where pv.exam_key='sample400' and pv.package_version='1.0.0' and pp.profile_key='sectioned';`);
+
 const activationAssignmentId=crypto.randomUUID();
 sql(`insert into public.exam_assignments(id,organisation_id,student_user_id,exam_key,profile_id,title,status,available_from,due_at,assigned_by)
   values ('${activationAssignmentId}','${org}','${activationLearner.id}','sample400',null,'Activation transition fixture','active',now()-interval '1 minute',now()+interval '1 day','${owner.id}');

@@ -71,7 +71,7 @@ function createContentFreeDefinition(item) {
     examTitle: item.title,
     status: item.lifecycle,
     legacyStatus: item.lifecycle,
-    versionLabel: `Protected package ${{ ai901: '2.0.0', az204: '1.1.0', az400: '1.0.0', 'security-plus-sy0-701': '1.0.0' }[item.id]}`,
+    versionLabel: 'Protected package selected by server',
     shortDescription: `${item.shortName} protected practice module.`,
     longDescription: `${item.shortName} uses authenticated, server-authoritative protected delivery.`,
     trainerValidationNote: 'Protected practice.',

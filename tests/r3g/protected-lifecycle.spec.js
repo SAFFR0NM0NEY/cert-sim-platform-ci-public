@@ -220,7 +220,8 @@ for (const assigned of [true, false]) {
   await expect(page.getByText('Standard Questions: Question 1 of 43')).toBeVisible();
     expect(replacements).toBe(1);
     expect(recoveryQueries).toHaveLength(1);
-    expect(recoveryQueries[0]).toMatchObject({packageVersion:'1.1.0',profileId:'standard-profile',purpose:'self_directed_exam',language:'python'});
+    expect(recoveryQueries[0]).toMatchObject({profileId:'standard-profile',purpose:'self_directed_exam',language:'python'});
+    expect(recoveryQueries[0]).not.toHaveProperty('packageVersion');
     if(assigned) expect(recoveryQueries[0].assignmentId).toBe(assignmentId);
     else expect(recoveryQueries[0]).not.toHaveProperty('assignmentId');
   });

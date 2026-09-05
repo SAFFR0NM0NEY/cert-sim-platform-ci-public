@@ -200,7 +200,7 @@ Deno.test("matches normalized exact routes and rejects wrong methods", () => {
     "review",
   );
   assertEquals(
-    matchRoute(request("/attempts/current?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable")).id,
+    matchRoute(request("/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable")).id,
     "current",
   );
   try {
@@ -217,23 +217,22 @@ Deno.test("current attempt derives identity and accepts no actor or attempt id",
     items: [],
   });
   const response = await handleProtectedExam(
-    request("/attempts/current?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable"),
+    request("/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable"),
     d.value,
   );
   assertEquals(response.status, 200);
   assertEquals(d.calls, [{
-    name: "certsim_protected_discover_current_attempt",
+    name: "certsim_protected_discover_current_formal_attempt",
     args: {
       p_actor_id: ACTOR,
       p_exam_key: "ai-901",
-      p_package_version: "1.0.0",
       p_profile_key: "ai901-controlled-beta-compact",
       p_purpose: "assigned_assessment",
       p_language: "not_applicable",
     },
   }]);
   const rejected = await handleProtectedExam(
-    request(`/attempts/current?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable&actorId=${ACTOR}`),
+    request(`/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable&actorId=${ACTOR}`),
     d.value,
   );
   assertEquals(rejected.status, 400);
@@ -287,16 +286,16 @@ Deno.test("non-language replacement omits the public sentinel and normalizes onl
 Deno.test("current attempt forwards an exact assignment context", async () => {
   const assignmentId = "16000000-0000-4000-8000-000000000001";
   const d = deps({ ok: true, attempt: { attemptId: ATTEMPT }, items: [] });
-  const response = await handleProtectedExam(request(`/attempts/current?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable&assignmentId=${assignmentId}`), d.value);
+  const response = await handleProtectedExam(request(`/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable&assignmentId=${assignmentId}`), d.value);
   assertEquals(response.status, 200);
   assertEquals(d.calls[0].args.p_assignment_id, assignmentId);
 });
 Deno.test("current attempt requires the complete fixed binding", async () => {
   for (const query of [
-    "examKey=az204&profileId=compact-profile&purpose=self_directed_exam&language=mixed",
-    "examKey=az204&packageVersion=1.1.0&profileId=compact-profile&language=mixed",
-    "examKey=az204&packageVersion=1.1.0&profileId=compact-profile&purpose=invented&language=mixed",
-    "examKey=az204&packageVersion=1.1.0&profileId=compact-profile&purpose=self_directed_exam&language=invented",
+    "examKey=az204&profileId=compact-profile&language=mixed",
+    "examKey=az204&profileId=compact-profile&purpose=invented&language=mixed",
+    "examKey=az204&profileId=compact-profile&purpose=self_directed_exam&language=invented",
+    "examKey=az204&packageVersion=1.1.0&profileId=compact-profile&purpose=self_directed_exam&language=mixed",
   ]) {
     const d = deps();
     const response = await handleProtectedExam(request(`/attempts/current?${query}`), d.value);

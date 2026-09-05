@@ -4,7 +4,6 @@ const EXAM_IDENTITIES = Object.freeze({
   az400: 'az400',
   'security-plus-sy0-701': 'securityplussy0701',
 });
-const PACKAGE_VERSIONS = Object.freeze({ ai901: '2.0.0', az204: '1.1.0', az400: '1.0.0', securityplussy0701: '1.0.0' });
 export const PROTECTED_ATTEMPT_PURPOSES = Object.freeze(['assigned_assessment', 'self_directed_exam', 'study_sandbox', 'targeted_domain', 'weak_area', 'pbq_practice']);
 export const PROTECTED_LANGUAGE_PREFERENCES = Object.freeze(['csharp', 'python', 'mixed']);
 
@@ -59,9 +58,6 @@ export function getProtectedProfileKey(frontendExamId, profileId) {
   return PROFILE_IDENTITIES[examKey]?.includes(normalized) ? normalized : '';
 }
 
-export function getProtectedPackageVersion(frontendExamId) {
-  return PACKAGE_VERSIONS[getProtectedExamKey(frontendExamId)] ?? '';
-}
 
 export function isProtectedExamSupported(frontendExamId) {
   return Boolean(getProtectedExamKey(frontendExamId));
@@ -173,7 +169,6 @@ export function assertPresentationSafe(value, depth = 0) {
 export const protectedExamContract = Object.freeze({
   examIdentities: EXAM_IDENTITIES,
   profileIdentities: PROFILE_IDENTITIES,
-  packageVersions: PACKAGE_VERSIONS,
   endpoint: 'certsim-protected-exam',
 });
 

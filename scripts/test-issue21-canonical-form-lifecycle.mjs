@@ -11,6 +11,7 @@ insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values 
 insert into exam_delivery.exam_access_policies(canonical_exam_key,access_mode,enabled,enabled_at,require_assignment) values ('rotationfixture','open_authenticated',true,now(),false);`);
 
 const ids=Array.from({length:12},(_,index)=>`synthetic-${index+1}`);
+const domainKeys=['ai-agents','ai-powered-information-extraction','ai-speech','computer-vision','generative-ai','machine-learning-foundations','natural-language-processing','responsible-ai-ai-fundamentals'];
 const forms=ids.reduce((out,id,index)=>{out[index%6].push(id);return out},Array.from({length:6},()=>[]));
 const canonical=(profileKey,questionCount,questionIds)=>({
   contractVersion:'certsim-canonical-forms-v2',profileKey,questionCount,cycleLength:6,
@@ -24,14 +25,14 @@ const full=canonical('rotation-full',2,forms);
 const compact=canonical('rotation-compact',1,forms.map(([first])=>[first]));
 const payload={
   packageSchemaVersion:'certsim-protected-package-v2',validationContractVersion:'certsim-protected-multi-exam-validation-v1',
-  exam:{examKey:'rotation-fixture',packageVersion:'1.0.0',capabilities:['single-choice'],domains:[{key:'d1',name:'Synthetic'}]},
+  exam:{examKey:'rotation-fixture',packageVersion:'2.0.0',capabilities:['single-choice'],domains:domainKeys.map((key)=>({key,name:`Synthetic ${key}`}))},
   source:{sourceHash:'1'.repeat(64),validationHash:'2'.repeat(64)},runtime:{generatorVersion:'certsim-ai901-weighted-generator-v2',scorerVersion:'certsim-ai901-exact-scorer-v2'},
   profiles:[
     {profileKey:'rotation-full',displayName:'Synthetic full',questionCount:2,timeLimitMinutes:10,selection:{standardQuestionCount:2,preserveRequiredGroups:true,canonicalForms:full,formalReleasePolicy:{review:'after_submission',answers:'after_submission'}}},
     {profileKey:'rotation-compact',displayName:'Synthetic compact',questionCount:1,timeLimitMinutes:10,selection:{standardQuestionCount:1,preserveRequiredGroups:true,canonicalForms:compact,formalReleasePolicy:{review:'after_submission',answers:'after_submission'}}},
   ],
   releasePolicy:{review:'after_submission',answers:'after_submission'},supportedReleasePolicies:['after_submission'],
-  questions:ids.map((id,index)=>({id,type:'single-choice',domainKey:'d1',sectionKey:'d1',scored:true,group:null,
+  questions:ids.map((id,index)=>({id,type:'single-choice',domainKey:domainKeys[index%domainKeys.length],sectionKey:'synthetic',scored:true,group:null,
     presentation:{prompt:`Synthetic prompt ${index+1}`,difficulty:'easy',officialSkillGroup:'synthetic-skill',officialObjectiveKey:'synthetic-objective',coverageTags:['synthetic-coverage'],options:[{id:'a',text:'A'},{id:'b',text:'B'}]},
     privateScoring:{correctAnswer:'a'},privateReview:{explanation:'Synthetic explanation',remediation:'Synthetic remediation'}})),
 };
@@ -86,8 +87,13 @@ insert into exam_delivery.exam_entitlements(package_version_id,package_profile_i
 ('${packageId}','${compactProfile}','learner','${learner.id}',true,now()-interval '1 minute','issue21_fixture','${owner.id}'),
 ('${packageId}','${fullProfile}','learner','${concurrentLearner.id}',true,now()-interval '1 minute','issue21_fixture','${owner.id}');
 insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_completed_attempts,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy) values
-('rotationfixture','1.0.0','rotation-full','self_directed_exam','production_authorized',true,null,10,false,'after_submission','after_submission'),
-('rotationfixture','1.0.0','rotation-full','study_sandbox','production_authorized',true,null,10,true,'immediate_study_feedback','immediate_study_feedback');`);
+('rotationfixture','2.0.0','rotation-full','self_directed_exam','production_authorized',true,null,10,false,'after_submission','after_submission'),
+('rotationfixture','2.0.0','rotation-full','study_sandbox','production_authorized',true,null,10,true,'immediate_study_feedback','immediate_study_feedback');
+insert into exam_delivery.package_profile_defaults(canonical_exam_key,profile_key,purpose,package_version_id,package_profile_id,configured_by) values
+('rotationfixture','rotation-full','self_directed_exam','${packageId}','${fullProfile}','${owner.id}'),
+('rotationfixture','rotation-full','study_sandbox','${packageId}','${fullProfile}','${owner.id}'),
+('rotationfixture','rotation-full','assigned_assessment','${packageId}','${fullProfile}','${owner.id}'),
+('rotationfixture','rotation-compact','self_directed_exam','${packageId}','${compactProfile}','${owner.id}');`);
 
 const baseRequest={examKey:'rotation-fixture',profileId:'rotation-full',purpose:'self_directed_exam',language:'not_applicable',includePbqs:true,mixStrategy:'balanced'};
 const concurrentRequests=[1,2].map(()=>({...baseRequest,clientRequestId:crypto.randomUUID()}));
@@ -120,11 +126,40 @@ sql(`drop trigger issue21_reject_attempt on exam_delivery.attempts; drop functio
 const afterRollback=await admin.rpc('certsim_protected_resume_attempt',{p_actor_id:learner.id,p_attempt_id:firstId});
 if(afterRollback.error||afterRollback.data?.attempt?.attemptId!==firstId) fail('REPLACEMENT_ROLLBACK_LOST_OLD_ATTEMPT');
 
+const successorPayload=structuredClone(payload);
+successorPayload.exam.packageVersion='3.0.0';
+successorPayload.source.sourceHash='3'.repeat(64);
+successorPayload.source.validationHash='4'.repeat(64);
+const successorRequest={publicationRequestId:crypto.randomUUID(),sourceCommitSha:'d'.repeat(40),packagePayload:successorPayload,packageHash:sha256Canonical(successorPayload)};
+const successorPublished=await ownerClient.rpc('certsim_protected_publish_package',{p_request:successorRequest});
+if(successorPublished.error||successorPublished.data?.classification!=='new_candidate') fail('SUCCESSOR_PUBLICATION_FAILED');
+const successorReplay=await ownerClient.rpc('certsim_protected_publish_package',{p_request:successorRequest});
+if(successorReplay.error||successorReplay.data?.classification!=='idempotent_replay') fail('SUCCESSOR_PUBLICATION_REPLAY_FAILED');
+const successorPackageId=sqlValue("select id from exam_delivery.package_versions where exam_key='rotationfixture' and package_version='3.0.0'");
+const successorFullProfile=sqlValue(`select id from exam_delivery.package_profiles where package_version_id='${successorPackageId}' and profile_key='rotation-full'`);
+const successorCompactProfile=sqlValue(`select id from exam_delivery.package_profiles where package_version_id='${successorPackageId}' and profile_key='rotation-compact'`);
+sql(`insert into exam_delivery.exam_profile_activations(package_version_id,package_profile_id,enabled,activation_kind,enabled_at,created_by) values
+('${successorPackageId}','${successorFullProfile}',true,'production',now(),'${owner.id}'),('${successorPackageId}','${successorCompactProfile}',true,'production',now(),'${owner.id}');
+insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,learner_id,enabled,valid_from,reason_code,created_by) values
+('${successorPackageId}','${successorFullProfile}','learner','${learner.id}',true,now()-interval '1 minute','issue21_successor','${owner.id}'),
+('${successorPackageId}','${successorCompactProfile}','learner','${learner.id}',true,now()-interval '1 minute','issue21_successor','${owner.id}');
+insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_completed_attempts,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy) values
+('rotationfixture','3.0.0','rotation-full','self_directed_exam','production_authorized',true,null,10,false,'after_submission','after_submission'),
+('rotationfixture','3.0.0','rotation-full','study_sandbox','production_authorized',true,null,10,true,'immediate_study_feedback','immediate_study_feedback');
+select 1/(((exam_delivery.configure_package_successor(
+  '${owner.id}','rotation-fixture','2.0.0','3.0.0',
+  '[{"profileKey":"rotation-full","purpose":"self_directed_exam"},{"profileKey":"rotation-full","purpose":"study_sandbox"},{"profileKey":"rotation-full","purpose":"assigned_assessment"},{"profileKey":"rotation-compact","purpose":"self_directed_exam"}]',
+  '${JSON.stringify(domainKeys.map((key)=>({sourceDomainKey:key,targetDomainKey:key})))}'
+)->>'ok')::boolean::integer);
+select 1/((count(*)=8)::integer) from exam_delivery.package_domain_compatibility where source_package_version_id='${packageId}' and target_package_version_id='${successorPackageId}';`);
+
 const replacementRequest={...baseRequest,clientRequestId:crypto.randomUUID()};
 const replacement=await admin.rpc('certsim_protected_replace_current_practice_attempt',{p_actor_id:learner.id,p_request:replacementRequest});
 assertStarted(replacement,2,'REPLACEMENT');
 const replacementId=replacement.data.attempt.attemptId;
 if(replacementId===firstId) fail('REPLACEMENT_REUSED_ATTEMPT');
+if(replacement.data.attempt.packageVersion!=='3.0.0') fail('REPLACEMENT_DID_NOT_USE_SUCCESSOR');
+if(first.data.attempt.packageVersion!=='2.0.0'||afterRollback.data.attempt.packageVersion!=='2.0.0') fail('HISTORICAL_RESUME_VERSION_DRIFT');
 sql(`select 1/((a.canonical_form_id is distinct from b.canonical_form_id)::integer) from exam_delivery.attempts a,exam_delivery.attempts b where a.id='${firstId}' and b.id='${replacementId}';`);
 const deniedReplace=await admin.rpc('certsim_protected_replace_current_practice_attempt',{p_actor_id:other.id,p_request:{...baseRequest,clientRequestId:crypto.randomUUID()}});
 expectDenied(deniedReplace,'CROSS_LEARNER_REPLACE');

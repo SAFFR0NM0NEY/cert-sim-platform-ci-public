@@ -19,7 +19,7 @@ const [migration, separation, continuation, discovery, expiry, authority, routes
 ]);
 assert.deepEqual(PROTECTED_ATTEMPT_PURPOSES, ['assigned_assessment','self_directed_exam','study_sandbox','targeted_domain','weak_area','pbq_practice']);
 assert.deepEqual(PROTECTED_LANGUAGE_PREFERENCES, ['csharp','python','mixed']);
-assert.equal(protectedExamContract.packageVersions.az204, '1.1.0');
+assert.ok(!Object.hasOwn(protectedExamContract, 'packageVersions'));
 for (const token of ['practice_policies','attempts_one_active_purpose_idx','guard_attempt_purpose_immutability','practice_feedback_releases','practice_availability','prune_practice_selection','start_practice','check_practice_item','list_history','history_summary','print_summary']) assert.match(migration, new RegExp(token));
 for (const purpose of PROTECTED_ATTEMPT_PURPOSES) assert.match(migration, new RegExp(purpose));
 for (const route of ['/practice/availability','/practice/sessions','/history','/print-summary']) assert.ok(routes.includes(route.replaceAll('/', '\\/')) || routes.includes(route));
@@ -76,7 +76,8 @@ assert.match(discovery, /resume_current_attempt_ai901_v1/);
 assert.doesNotMatch(discovery, /check_(?:assessment_)?eligibility/);
 assert.doesNotMatch(discovery, /insert|update|delete/i);
 assert.match(discovery, /revoke execute on function exam_delivery\.discover_current_attempt[\s\S]*?public,anon,authenticated,service_role/);
-assert.match(handler, /p_package_version:[\s\S]*?p_purpose:[\s\S]*?p_language:/);
+assert.match(routes, /certsim_protected_discover_current_formal_attempt/);
+assert.match(handler, /matched\.id === "current"[\s\S]{0,220}?\["examKey", "profileId", "purpose", "language", "assignmentId"\]/);
 assert.match(pilot, /packageVersion:[\s\S]*?purpose:[\s\S]*?language:/);
 assert.match(authority, /'serverAuthoritative', ar\.server_authoritative/);
 assert.match(authority, /ar\.server_authoritative = true/);

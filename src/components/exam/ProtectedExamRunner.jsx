@@ -5,7 +5,6 @@ import StudentDetails from './StudentDetails.jsx';
 import {
   deserializeProtectedResponse,
   getProtectedExamKey,
-  getProtectedPackageVersion,
   getProtectedProfileKey,
   requireProtectedAuthoritativeResult,
   serializeProtectedResponse,
@@ -37,7 +36,6 @@ export default function ProtectedExamRunner({
 }) {
   const examKey = getProtectedExamKey(examConfig?.id);
   const profileKey = getProtectedProfileKey(examConfig?.id, profile?.id);
-  const expectedPackageVersion = getProtectedPackageVersion(examConfig?.id);
   const { request: effectivePracticeRequest, error: practiceBindingError } = resolvePracticeRequest({
     assignmentId,
     practiceRequest: practiceRequest ?? {
@@ -161,9 +159,7 @@ export default function ProtectedExamRunner({
             { signal: controller.signal },
           );
           if (stale()) return;
-          const profileCandidates = (reconciliation.candidates ?? []).filter((candidate) => (
-            candidate.packageVersion === expectedPackageVersion && candidate.profileKey === profileKey
-          ));
+          const profileCandidates = (reconciliation.candidates ?? []).filter((candidate) => candidate.profileKey === profileKey);
           const candidates = profileCandidates.filter((candidate) => (
             configuredRequest.assignmentId
               ? candidate.assignmentId === configuredRequest.assignmentId
@@ -213,9 +209,6 @@ export default function ProtectedExamRunner({
           } else {
             const preview = await client.getPracticeAvailability({ examKey, profileId: profileKey, ...configuredRequest }, { signal: controller.signal });
             if (stale()) return;
-            if (preview.packageVersion !== expectedPackageVersion) {
-              throw Object.assign(new Error('Protected package binding could not be verified.'), { code: 'binding_mismatch' });
-            }
             availabilityRef.current = preview;
             setAvailability(preview);
             setActiveAttemptConfiguration(null);
@@ -232,7 +225,7 @@ export default function ProtectedExamRunner({
     }
     initialize();
     return () => controller.abort();
-  }, [client, examKey, expectedPackageVersion, loadAttempt, practiceBindingError, practiceInitializationKey, profileKey, refreshNonce]);
+  }, [client, examKey, loadAttempt, practiceBindingError, practiceInitializationKey, profileKey, refreshNonce]);
 
   async function readResumeCandidate(candidate, signal = operationController.current.signal) {
     const current = await client.resumeAttempt(candidate.attemptId, { signal });
@@ -289,7 +282,6 @@ export default function ProtectedExamRunner({
         } catch (error) {
           if (!isAmbiguousProtectedMutation(error)) throw error;
           const recovered = await client.getCurrentAttempt(examKey, profileKey, {
-            packageVersion: availability.packageVersion,
             purpose: configuredRequest.purpose,
             language: configuredRequest.language,
             ...(configuredRequest.assignmentId ? { assignmentId: configuredRequest.assignmentId } : {}),
@@ -338,7 +330,6 @@ export default function ProtectedExamRunner({
       } catch (error) {
         if (!isAmbiguousProtectedMutation(error)) throw error;
         const recovered = await client.getCurrentAttempt(examKey, profileKey, {
-          packageVersion: availability.packageVersion,
           purpose: configuredRequest.purpose,
           language: configuredRequest.language,
           ...(configuredRequest.assignmentId ? { assignmentId: configuredRequest.assignmentId } : {}),
@@ -379,9 +370,6 @@ export default function ProtectedExamRunner({
             { examKey, profileId: profileKey, ...configuredRequest },
             { signal: operationController.current.signal },
           );
-          if (refreshedAvailability.packageVersion !== expectedPackageVersion) {
-            throw Object.assign(new Error('Protected package binding could not be verified.'), { code: 'binding_mismatch' });
-          }
           availabilityRef.current = refreshedAvailability;
           setAvailability(refreshedAvailability);
           setActiveAttemptConfiguration(null);

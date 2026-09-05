@@ -91,14 +91,14 @@ export async function handleProtectedExam(
       const language = u.searchParams.get("language");
       const assignmentId = u.searchParams.get("assignmentId");
       const permitted = matched.id === "current"
-        ? ["examKey", "packageVersion", "profileId", "purpose", "language", "assignmentId"]
+        ? ["examKey", "profileId", "purpose", "language", "assignmentId"]
         : ["examKey", "packageVersion", "profileId", "purpose"];
       if (!isExamKey(examKey) || !isProfileId(profileId) ||
         [...u.searchParams.keys()].some((k) => !permitted.includes(k)) ||
         (matched.id === "eligibility" &&
           (!isPackageVersion(packageVersion) || !isPracticePurpose(purpose, true))) ||
         (matched.id === "current" &&
-          (!isPackageVersion(packageVersion) || !isPracticePurpose(purpose, true) ||
+          (!isPracticePurpose(purpose, true) ||
             !isCanonicalLanguage(examKey, language)))) {
         throw new SafeError("invalid_request");
       }
@@ -106,7 +106,6 @@ export async function handleProtectedExam(
         ? {
           p_actor_id: actorId,
           p_exam_key: examKey,
-          p_package_version: packageVersion,
           p_profile_key: profileId,
           p_purpose: purpose,
           p_language: toDatabaseLanguage(examKey, language),

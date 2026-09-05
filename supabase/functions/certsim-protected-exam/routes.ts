@@ -34,7 +34,7 @@ export interface Route {
 }
 const RPC: Record<RouteId, string> = {
   eligibility: "certsim_protected_check_profile_eligibility",
-  current: "certsim_protected_discover_current_attempt",
+  current: "certsim_protected_discover_current_formal_attempt",
   currentBindings: "certsim_protected_list_current_attempt_bindings",
   start: "certsim_protected_start_attempt",
   resume: "certsim_protected_resume_attempt",

@@ -81,7 +81,6 @@ export function createProtectedExamClient({ accessToken, fetchImpl = fetch } = {
     `?${new URLSearchParams({ examKey, packageVersion, profileId, purpose }).toString()}`;
   const currentQuery = (examKey, profileId, binding) => `?${new URLSearchParams(compactParams({
     examKey,
-    packageVersion: binding.packageVersion,
     profileId,
     purpose: binding.purpose,
     language: binding.language,

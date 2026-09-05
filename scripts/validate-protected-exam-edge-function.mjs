@@ -41,7 +41,7 @@ assert.match(combined,/CERTSIM_PROTECTED_RUNTIME_SECRET_KEY/);
 assert.doesNotMatch(combined,/src\/exams\/ai901|src\\exams\\ai901/);
 assert.doesNotMatch(combined,/ctx\.supabaseAdmin|rpc\(\s*(?:body|request|payload)|console\.(?:log|error|warn)\([^)]*(?:request|response|header|token|jwt)/i);
 assert.doesNotMatch(combined,/functions\s+deploy|db\s+push|supabase\s+link|qngnoctsdhzcpagesvxz|\.supabase\.co/i);
-for(const rpc of ['check_profile_eligibility','start_attempt','resume_attempt','discover_current_attempt','save_response','submit_attempt','get_result','get_review']) assert.match(combined,new RegExp(`certsim_protected_${rpc}`));
+for(const rpc of ['check_profile_eligibility','start_attempt','resume_attempt','discover_current_formal_attempt','save_response','submit_attempt','get_result','get_review']) assert.match(combined,new RegExp(`certsim_protected_${rpc}`));
 for(const forbidden of ['publication','allowlist','gate','assignment','release_review']) assert.doesNotMatch(combined,new RegExp(`route[^\n]*${forbidden}`,'i'));
 assert.match(combined,/MAX_BODY_BYTES\s*=\s*64\s*\*\s*1024/);
 assert.match(combined,/p_actor_id:\s*actorId/g);
