@@ -34,7 +34,11 @@ select ok((select pg_get_functiondef(p.oid) ~ 'canonical_form_runtime_validation
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='attempts' and t.tgname='guard_attempt_form_assignment' and not t.tgisinternal),'attempt form assignment is immutable');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='package_versions' and t.tgname='prepare_canonical_forms_before_publish' and not t.tgisinternal),'publication persists validated forms atomically');
 select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='practice_policies' and t.tgname='guard_declared_self_directed_release_policy' and not t.tgisinternal),'self-directed release policy follows immutable package declaration');
-select ok((select pg_get_functiondef(p.oid) ~ 'after_submission' and pg_get_functiondef(p.oid) ~ 'self_directed_release_policy_conflicts_with_package' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='guard_declared_self_directed_release_policy'),'never/never regression is rejected for declared successor');
+select ok(
+  (select pg_get_functiondef(p.oid) ~ 'self_directed_release_policy_conflicts_with_package' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='guard_declared_self_directed_release_policy')
+  and (select pg_get_functiondef(p.oid) ~ 'after_submission' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='prepare_canonical_forms_on_publish'),
+  'publication requires after-submission and policy guard rejects declaration drift'
+);
 
 select * from finish();
 rollback;
