@@ -311,11 +311,13 @@ revoke execute on function exam_delivery.learner_weak_domain_evidence_same_packa
 
 create or replace function exam_delivery.replace_current_practice_attempt(p_actor_id uuid,p_request jsonb)
 returns jsonb language plpgsql security definer set search_path='' set statement_timeout='20s' as $$
-declare v_request_id uuid; v_exam text:=exam_delivery.normalize_exam_key(p_request->>'examKey');
+declare v_request_id uuid; v_assignment_id uuid; v_exam text:=exam_delivery.normalize_exam_key(p_request->>'examKey');
   v_availability jsonb; v_existing exam_delivery.attempts%rowtype; v_existing_id uuid; v_count integer;
   v_replacement exam_delivery.attempts%rowtype; v_started jsonb; v_failure text; v_now timestamptz:=statement_timestamp();
 begin
-  begin v_request_id:=(p_request->>'clientRequestId')::uuid;
+  begin
+    v_request_id:=(p_request->>'clientRequestId')::uuid;
+    v_assignment_id:=nullif(p_request->>'assignmentId','')::uuid;
   exception when invalid_text_representation then return jsonb_build_object('ok',false,'code','invalid_request'); end;
   if p_actor_id is null or v_request_id is null or p_request->>'purpose'<>'self_directed_exam'
     or p_request ?| array['packageVersion','package_version','packageProfileId','package_profile_id','canonicalFormId','canonical_form_id','canonicalFormKey','canonical_form_key','questionIds','reserveQuestionIds'] then
@@ -335,8 +337,11 @@ begin
   join exam_delivery.package_profiles pp on pp.id=a.package_profile_id
   where a.owner_id=p_actor_id and exam_delivery.normalize_exam_key(pv.exam_key)=v_exam
     and pp.profile_key=p_request->>'profileId' and a.purpose='self_directed_exam' and a.status='in_progress'
-    and a.expires_at>v_now and a.source_assignment_id is null and a.protected_assignment_id is null
-    and a.attribution_source is distinct from 'assignment';
+    and a.expires_at>v_now and a.protected_assignment_id is null
+    and ((v_assignment_id is null and a.source_assignment_id is null
+          and a.attribution_source is distinct from 'assignment')
+      or (v_assignment_id is not null and a.source_assignment_id=v_assignment_id
+          and a.attribution_source='assignment'));
   if v_count<>1 then return jsonb_build_object('ok',false,'code',case when v_count=0 then 'attempt_not_found' else 'attempt_conflict' end); end if;
   select * into strict v_existing from exam_delivery.attempts where id=v_existing_id for update;
   if exists(select 1 from exam_delivery.attempt_results where attempt_id=v_existing.id)

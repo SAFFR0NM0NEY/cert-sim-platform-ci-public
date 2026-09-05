@@ -21,6 +21,7 @@ assert.match(edgeTests,/examKey=az204&packageVersion=1\.1\.0&profileId=compact-p
 assert.match(edgeTests,/assertEquals\(response\.status, 400\)/);
 assert.match(sql,/revoke all on table[\s\S]*public,anon,authenticated,service_role/);
 assert.doesNotMatch(sql,/grant execute[\s\S]{0,180}configure_package_successor[\s\S]{0,80}authenticated/);
+assert.match(sql,/v_assignment_id is null[\s\S]*source_assignment_id is null[\s\S]*v_assignment_id is not null[\s\S]*source_assignment_id=v_assignment_id/);
 assert.match(fixture,/2\.0\.0[\s\S]*3\.0\.0[\s\S]*REPLACEMENT_DID_NOT_USE_SUCCESSOR/);
 assert.match(fixture,/SUCCESSOR_PUBLICATION_REPLAY_FAILED/);
 assert.match(pgtap,/select plan\(25\)/);
