@@ -56,6 +56,7 @@ values
 insert into exam_delivery.package_questions(id,package_version_id,question_id,question_type,domain_key,source_ordinal,presentation_payload,content_hash)
 values
   ('21000000-0000-0000-0000-000000000021','21000000-0000-0000-0000-000000000001','q1','single-choice','d1',1,'{}',repeat('1',64)),
+  ('21000000-0000-0000-0000-000000000023','21000000-0000-0000-0000-000000000001','q3','single-choice','d1',2,'{}',repeat('5',64)),
   ('21000000-0000-0000-0000-000000000022','21000000-0000-0000-0000-000000000002','q2','single-choice','d1',1,'{}',repeat('2',64));
 insert into exam_delivery.package_forms(id,package_version_id,package_profile_id,form_key,form_ordinal,question_count,membership_hash,blueprint_contract)
 values
@@ -68,7 +69,7 @@ select throws_ok(
   $$insert into exam_delivery.package_form_questions values ('21000000-0000-0000-0000-000000000031','21000000-0000-0000-0000-000000000011','21000000-0000-0000-0000-000000000002','21000000-0000-0000-0000-000000000022',2)$$,
   '23503', null, 'cross-package question membership is rejected by composite foreign keys');
 select throws_ok(
-  $$insert into exam_delivery.package_form_questions values ('21000000-0000-0000-0000-000000000031','21000000-0000-0000-0000-000000000012','21000000-0000-0000-0000-000000000001','21000000-0000-0000-0000-000000000021',2)$$,
+  $$insert into exam_delivery.package_form_questions values ('21000000-0000-0000-0000-000000000031','21000000-0000-0000-0000-000000000012','21000000-0000-0000-0000-000000000001','21000000-0000-0000-0000-000000000023',2)$$,
   '23503', null, 'cross-profile form membership is rejected by the form/profile/version foreign key');
 select throws_ok(
   $$insert into exam_delivery.package_form_questions values ('21000000-0000-0000-0000-000000000032','21000000-0000-0000-0000-000000000011','21000000-0000-0000-0000-000000000001','21000000-0000-0000-0000-000000000021',1)$$,
