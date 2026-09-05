@@ -1167,8 +1167,8 @@ button.summary-tile:focus-visible {
   color: #fecaca !important;
 }
 
-.danger-lite:hover,
-.danger-lite:focus {
+.danger-lite:hover:not(:disabled),
+.danger-lite:focus-visible {
   border-color: rgba(248, 113, 113, 0.85) !important;
   background: rgba(127, 29, 29, 0.28) !important;
 }
@@ -3647,14 +3647,35 @@ button.summary-tile:focus-visible {
   font-weight: 800;
 }
 
+.primary-button,
+.secondary-button,
+.text-button,
+.flag-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  padding: 10px 18px;
+  text-align: center;
+  white-space: normal;
+}
+
 .primary-button {
   border: 1px solid #38bdf8;
   background: #38bdf8;
   color: #082f49;
 }
 
-.primary-button:hover {
+.primary-button:hover:not(:disabled) {
+  border-color: #7dd3fc;
   background: #7dd3fc;
+}
+
+.primary-button:active:not(:disabled) {
+  border-color: #0ea5e9;
+  background: #0ea5e9;
 }
 
 .secondary-button {
@@ -3663,17 +3684,28 @@ button.summary-tile:focus-visible {
   color: #e5e7eb;
 }
 
-.secondary-button:hover,
+.secondary-button:hover:not(:disabled),
 .drag-handle:hover,
 .draggable-option:hover {
   border-color: #38bdf8;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: #334155;
+}
+
+.secondary-button:active:not(:disabled) {
+  border-color: #0ea5e9;
+  background: #0f172a;
 }
 
 .text-button {
   border: 0;
   background: transparent;
   color: #38bdf8;
-  padding: 0;
+  justify-content: flex-start;
+  padding: 8px 0;
+  text-align: left;
 }
 
 .flag-button {
@@ -4688,8 +4720,8 @@ button:focus-visible {
 .exam-actions .primary-button,
 .exam-actions .secondary-button,
 .exam-actions .flag-button {
-  min-height: 38px;
-  padding: 0 14px;
+  min-height: 44px;
+  padding: 8px 14px;
 }
 
 .exit-button {
@@ -8346,8 +8378,8 @@ button:focus-visible {
   .exam-actions .secondary-button,
   .exam-actions .flag-button {
     flex: 1 1 150px;
-    min-height: 40px;
-    padding: 0 10px;
+    min-height: 44px;
+    padding: 8px 10px;
   }
 
   .pbq-preview-screen {
