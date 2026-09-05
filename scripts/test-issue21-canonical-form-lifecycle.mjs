@@ -146,11 +146,11 @@ insert into exam_delivery.exam_entitlements(package_version_id,package_profile_i
 insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_completed_attempts,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy) values
 ('rotationfixture','3.0.0','rotation-full','self_directed_exam','production_authorized',true,null,10,false,'after_submission','after_submission'),
 ('rotationfixture','3.0.0','rotation-full','study_sandbox','production_authorized',true,null,10,true,'immediate_study_feedback','immediate_study_feedback');
-select 1/(((exam_delivery.configure_package_successor(
+select 1/(case when coalesce((exam_delivery.configure_package_successor(
   '${owner.id}','rotation-fixture','2.0.0','3.0.0',
   '[{"profileKey":"rotation-full","purpose":"self_directed_exam"},{"profileKey":"rotation-full","purpose":"study_sandbox"},{"profileKey":"rotation-full","purpose":"assigned_assessment"},{"profileKey":"rotation-compact","purpose":"self_directed_exam"}]',
   '${JSON.stringify(domainKeys.map((key)=>({sourceDomainKey:key,targetDomainKey:key})))}'
-)->>'ok')::boolean::integer);
+)->>'ok')::boolean,false) then 1 else 0 end);
 select 1/((count(*)=8)::integer) from exam_delivery.package_domain_compatibility where source_package_version_id='${packageId}' and target_package_version_id='${successorPackageId}';`);
 
 const replacementRequest={...baseRequest,clientRequestId:crypto.randomUUID()};
