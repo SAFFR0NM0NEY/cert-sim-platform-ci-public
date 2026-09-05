@@ -135,7 +135,7 @@ expectDenied(deniedResult,'CROSS_LEARNER_RESULT');
 
 const practiceRequest={examKey:'rotation-fixture',profileId:'rotation-full',purpose:'study_sandbox',count:2,language:'not_applicable',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID()};
 const practiceStarted=await admin.rpc('certsim_protected_start_practice',{p_actor_id:learner.id,p_request:practiceRequest});
-assertStarted(practiceStarted,2,'PRACTICE_START');
+assertStarted(practiceStarted,12,'PRACTICE_START');
 sql(`select 1/((canonical_form_id is null and canonical_form_cycle is null)::integer) from exam_delivery.attempts where id='${practiceStarted.data.attempt.attemptId}';`);
 await complete(practiceStarted,learner.id);
 
