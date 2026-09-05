@@ -130,26 +130,42 @@ function CompactHome({
 
       <section className="home-action-grid" aria-label="Main actions">
         <article className="home-action-card selected">
-          <span className="status-badge">Start here</span>
-          <h3>Browse Exams</h3>
-          <p>
-            Choose an exam module before opening exam actions. Nothing is
-            auto-selected on load.
-          </p>
-          <button className="primary-button" type="button" onClick={onBrowseExams}>
-            Browse Exams
-          </button>
+          <div className="home-action-card-content">
+            <h3>Browse Exams</h3>
+            <div className="home-action-card-status">
+              <span className="status-badge">Start here</span>
+            </div>
+            <p>
+              Choose an exam module before opening exam actions. Nothing is
+              auto-selected on load.
+            </p>
+          </div>
+          <div className="home-action-card-action">
+            <button className="primary-button" type="button" onClick={onBrowseExams}>
+              Browse Exams
+            </button>
+          </div>
         </article>
 
         <article className="home-action-card">
-          <h3>Continue last selected exam</h3>
-          {lastSelectedExam ? (
-            <>
-              <span className="status-badge">{getExamStatusLabel(lastSelectedExam)}</span>
+          <div className="home-action-card-content">
+            <h3>Continue last selected exam</h3>
+            <div className="home-action-card-status" aria-hidden={!lastSelectedExam}>
+              {lastSelectedExam && (
+                <span className="status-badge">{getExamStatusLabel(lastSelectedExam)}</span>
+              )}
+            </div>
+            {lastSelectedExam ? (
               <p>
                 Continue with {lastSelectedExam.name}. This does not open
                 automatically.
               </p>
+            ) : (
+              <p>No previous exam is stored for this browser yet.</p>
+            )}
+          </div>
+          <div className="home-action-card-action">
+            {lastSelectedExam ? (
               <button
                 className="secondary-button"
                 type="button"
@@ -157,39 +173,46 @@ function CompactHome({
               >
                 Continue {lastSelectedExam.shortName}
               </button>
-            </>
-          ) : (
-            <>
-              <p>No previous exam is stored for this browser yet.</p>
+            ) : (
               <button className="secondary-button" type="button" onClick={onBrowseExams}>
                 Choose an Exam
               </button>
-            </>
-          )}
+            )}
+          </div>
         </article>
 
         <article className="home-action-card">
-          <h3>Study Sandbox</h3>
-          <p>Use protected untimed practice without changing formal readiness.</p>
-          {selectedExamCanOpenSandbox ? (
-            <button className="secondary-button" type="button" onClick={onOpenStudySandbox}>
-              Open Sandbox
-            </button>
-          ) : (
-            <button className="secondary-button" type="button" onClick={onBrowseExams}>
-              Choose Exam First
-            </button>
-          )}
+          <div className="home-action-card-content">
+            <h3>Study Sandbox</h3>
+            <div className="home-action-card-status" aria-hidden="true" />
+            <p>Use protected untimed practice without changing formal readiness.</p>
+          </div>
+          <div className="home-action-card-action">
+            {selectedExamCanOpenSandbox ? (
+              <button className="secondary-button" type="button" onClick={onOpenStudySandbox}>
+                Open Sandbox
+              </button>
+            ) : (
+              <button className="secondary-button" type="button" onClick={onBrowseExams}>
+                Choose Exam First
+              </button>
+            )}
+          </div>
         </article>
 
         <article className="home-action-card">
-          <h3>Guide and History</h3>
-          <p>
-            Student guidance and local history live on each selected exam dashboard.
-          </p>
-          <button className="secondary-button" type="button" onClick={handleGuideAction}>
-            {guideActionLabel}
-          </button>
+          <div className="home-action-card-content">
+            <h3>Guide and History</h3>
+            <div className="home-action-card-status" aria-hidden="true" />
+            <p>
+              Student guidance and local history live on each selected exam dashboard.
+            </p>
+          </div>
+          <div className="home-action-card-action">
+            <button className="secondary-button" type="button" onClick={handleGuideAction}>
+              {guideActionLabel}
+            </button>
+          </div>
         </article>
       </section>
 

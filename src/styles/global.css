@@ -2744,9 +2744,28 @@ button.summary-tile:focus-visible {
 }
 
 .home-action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+}
+
+.home-action-card-content {
   display: grid;
   gap: 10px;
   align-content: start;
+}
+
+.home-action-card-status {
+  display: flex;
+  align-items: center;
+  min-height: 31px;
+}
+
+.home-action-card-action {
+  display: flex;
+  align-items: flex-end;
+  margin-top: auto;
 }
 
 .home-action-card h3,
