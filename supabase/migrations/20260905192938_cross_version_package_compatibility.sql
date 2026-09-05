@@ -225,7 +225,8 @@ create or replace function exam_delivery.start_attempt_v2(
   p_actor_id uuid,p_exam_key text,p_profile_key text,p_request_id uuid
 ) returns jsonb language plpgsql security definer set search_path='' set statement_timeout='15s' as $$
 declare v_key text:=exam_delivery.normalize_exam_key(p_exam_key); v_now timestamptz:=statement_timestamp();
-  v_existing exam_delivery.attempts%rowtype; v_binding record; v_attempt exam_delivery.attempts%rowtype; v_count integer;
+  v_existing exam_delivery.attempts%rowtype; v_binding record; v_attempt exam_delivery.attempts%rowtype;
+  v_count integer; v_eligibility jsonb;
 begin
   if p_actor_id is null or p_request_id is null then return jsonb_build_object('ok',false,'code','invalid_request'); end if;
   select * into v_existing from exam_delivery.attempts where owner_id=p_actor_id and client_request_id=p_request_id;
@@ -243,15 +244,27 @@ begin
     where a.learner_id=p_actor_id and a.status='active' and a.available_from<=v_now
       and (a.expires_at is null or a.expires_at>v_now)
       and exam_delivery.normalize_exam_key(pv.exam_key)=v_key and pp.profile_key=p_profile_key and pv.status='published';
-  if v_count<>1 then return jsonb_build_object('ok',false,'code',case when v_count=0 then 'assignment_required' else 'assignment_conflict' end); end if;
-  select a.id assignment_id,pv.id package_version_id,pv.generator_version,pv.scorer_version,
-    pp.id package_profile_id,pp.time_limit_minutes into strict v_binding
-  from exam_delivery.protected_assignments a join exam_delivery.package_versions pv on pv.id=a.package_version_id
-  join exam_delivery.package_profiles pp on pp.id=a.package_profile_id and pp.package_version_id=pv.id
-  where a.learner_id=p_actor_id and a.status='active' and a.available_from<=v_now
-    and (a.expires_at is null or a.expires_at>v_now)
-    and exam_delivery.normalize_exam_key(pv.exam_key)=v_key and pp.profile_key=p_profile_key and pv.status='published'
-  for update of a;
+  if v_count>1 then return jsonb_build_object('ok',false,'code','assignment_conflict'); end if;
+  if v_count=1 then
+    select a.id assignment_id,pv.id package_version_id,pv.generator_version,pv.scorer_version,
+      pp.id package_profile_id,pp.time_limit_minutes into strict v_binding
+    from exam_delivery.protected_assignments a join exam_delivery.package_versions pv on pv.id=a.package_version_id
+    join exam_delivery.package_profiles pp on pp.id=a.package_profile_id and pp.package_version_id=pv.id
+    where a.learner_id=p_actor_id and a.status='active' and a.available_from<=v_now
+      and (a.expires_at is null or a.expires_at>v_now)
+      and exam_delivery.normalize_exam_key(pv.exam_key)=v_key and pp.profile_key=p_profile_key and pv.status='published'
+    for update of a;
+  else
+    v_eligibility:=exam_delivery.check_eligibility_v2(p_actor_id,p_exam_key,p_profile_key);
+    if not coalesce((v_eligibility->>'eligible')::boolean,false) then
+      return jsonb_build_object('ok',false,'code',v_eligibility->>'reasonCode');
+    end if;
+    select null::uuid assignment_id,pv.id package_version_id,pv.generator_version,pv.scorer_version,
+      pp.id package_profile_id,pp.time_limit_minutes into strict v_binding
+    from exam_delivery.resolve_package_profile_default(v_key,p_profile_key,'assigned_assessment'::exam_delivery.attempt_purpose) default_binding
+    join exam_delivery.package_versions pv on pv.id=default_binding.package_version_id
+    join exam_delivery.package_profiles pp on pp.id=default_binding.package_profile_id and pp.package_version_id=pv.id;
+  end if;
   insert into exam_delivery.attempts(owner_id,package_version_id,package_profile_id,protected_assignment_id,
     client_request_id,status,generator_version,scorer_version,created_at,started_at,expires_at,purpose)
   values(p_actor_id,v_binding.package_version_id,v_binding.package_profile_id,v_binding.assignment_id,p_request_id,
