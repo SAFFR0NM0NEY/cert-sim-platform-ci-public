@@ -185,9 +185,10 @@ function allocate(id){return new Promise((resolve,reject)=>{const child=spawn('p
 function client(key){return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}})}
 function required(name){const value=process.env[name]?.trim();if(!value)fail(`MISSING_${name}`);return value}
 function fail(code){throw new Error(code)}
-function sql(statement){if(sqlStatus(statement)!==0)fail('SQL_FIXTURE_FAILED')}
+function sql(statement){const result=spawnSync('psql',[database,'-v','ON_ERROR_STOP=1','-c',statement],{encoding:'utf8'});if(result.status!==0)fail(`SQL_FIXTURE_FAILED_${safeDatabaseIdentifier(result.stderr)}`)}
 function sqlStatus(statement){return spawnSync('psql',[database,'-v','ON_ERROR_STOP=1','-c',statement],{stdio:'ignore'}).status}
 function sqlValue(statement){const result=spawnSync('psql',[database,'-v','ON_ERROR_STOP=1','-Atc',statement],{encoding:'utf8'});if(result.status!==0)fail('SQL_FIXTURE_FAILED');return result.stdout.trim()}
+function safeDatabaseIdentifier(value){return String(value??'unknown').toLowerCase().replaceAll(/[^a-z0-9]+/g,'_').replaceAll(/^_+|_+$/g,'').slice(0,160)||'unknown'}
 async function createUser(label){const email=`issue21-${label}-${crypto.randomUUID()}@example.invalid`,password=`T!${crypto.randomUUID()}g8`;const result=await admin.auth.admin.createUser({email,password,email_confirm:true});if(result.error)fail('AUTH_FIXTURE_FAILED');return{id:result.data.user.id,email,password}}
 async function signedIn(user){const result=client(anon);const auth=await result.auth.signInWithPassword({email:user.email,password:user.password});if(auth.error)fail('SIGN_IN_FAILED');return result}
 function assertStarted(result,count,label){if(result.error||result.data?.ok!==true||result.data?.items?.length!==count)fail(`${label}_FAILED`)}
