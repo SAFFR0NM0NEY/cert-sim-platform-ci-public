@@ -77,7 +77,7 @@ for (const definition of frozenDefinitions) {
     if (set.has(normalized)) throw new Error(`Duplicate exam display ${label}: ${value}`);
     set.add(normalized);
   }
-  for (const alias of [definition.canonicalId, definition.routeSlug, definition.code, definition.shortTitle, ...definition.aliases, ...definition.internalAliases]) {
+  for (const alias of [definition.canonicalId, definition.routeSlug, definition.code, definition.shortTitle, definition.fullTitle, ...definition.aliases, ...definition.internalAliases]) {
     const normalized = normalizeExamDisplayIdentity(alias);
     const existing = aliasIndex.get(normalized);
     if (existing && existing.canonicalId !== definition.canonicalId) {

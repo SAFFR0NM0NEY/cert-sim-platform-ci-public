@@ -27,7 +27,7 @@ for (const prohibited of [
 const savedResults = read('src/protected/ProtectedSavedResultsPage.jsx');
 if (!savedResults.includes('if (!client) return')) throw new Error('signed-out Saved Results must resolve before history/practice presentation');
 if (!savedResults.includes('Sign in to view Saved Results')) throw new Error('signed-out Saved Results needs a clear sign-in state');
-if (!savedResults.includes('getExamDisplayName(item.examKey)')) throw new Error('learner history must use a display name instead of a raw exam key');
+if (!savedResults.includes('getSavedResultExamLabel(item.examKey)')) throw new Error('learner history must use the canonical display label instead of a raw exam key');
 if (savedResults.includes('{item.examKey} {item.packageVersion}')) throw new Error('raw package identity remains learner-visible');
 if (savedResults.includes("value.profile?.name || value.profile?.key")) throw new Error('raw profile identity remains learner-visible');
 

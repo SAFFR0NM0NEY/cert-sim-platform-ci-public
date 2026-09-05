@@ -7,6 +7,10 @@ import { getAttemptKindLabel, isAssessmentResult } from '../lib/attemptPurpose.j
 import { loadAllProtectedHistory, loadProtectedHistoryPage } from '../lib/protectedHistory.js';
 import { aggregateWeakDomains } from '../lib/learnerAnalytics.js';
 import { selectCurrentWeakAreaProfile } from '../lib/weakAreaProfileSelection.js';
+import {
+  getSavedResultExamFilterOptions,
+  getSavedResultExamLabel,
+} from '../lib/savedResultExamIdentity.js';
 
 export default function ProtectedSavedResultsPage({ attemptId, onBackHome, onOpenAccount, onOpenDetail, onReturnHome, onReturnToList, session, openWeakAreaPractice = false, weakAreaPracticeExamId = '', onStartWeakAreaPractice }) {
   const client = useMemo(() => session?.access_token ? createProtectedExamClient({ accessToken: session.access_token }) : null, [session?.access_token]);
@@ -15,7 +19,8 @@ export default function ProtectedSavedResultsPage({ attemptId, onBackHome, onOpe
 }
 
 function ProtectedResultList({ client, onBack, onOpenAccount, onOpenDetail, openWeakAreaPractice, weakAreaPracticeExamId, onStartWeakAreaPractice }) {
-  const historical = useMemo(() => examRegistry.flatMap((exam) => getAttemptHistory(exam.id).records.map((record) => ({ ...record, registryTitle: exam.title }))), []);
+  const historical = useMemo(() => examRegistry.flatMap((exam) => getAttemptHistory(exam.id).records.map((record) => ({ ...record, registryExamId: exam.id }))), []);
+  const examFilterOptions = useMemo(() => getSavedResultExamFilterOptions(examRegistry), []);
   const [remote, setRemote] = useState({ state: 'loading', items: [], message: '', nextCursor: null, totalCount: null });
   const [range, setRange] = useState('recent');
   const [examFilter, setExamFilter] = useState('');
@@ -66,13 +71,13 @@ function ProtectedResultList({ client, onBack, onOpenAccount, onOpenDetail, open
       {focusOpen ? <ProtectedWeakAreaPractice client={client} initialExamId={weakAreaPracticeExamId} results={practiceResults} loading={practiceLoading} onStart={onStartWeakAreaPractice} /> : null}
     </section>
     <h3>Account results</h3>
-    <div className="saved-attempt-toolbar no-print"><label><span>Range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option value="recent">Recent results</option><option value="all">All Time</option></select></label><label><span>Exam</span><select value={examFilter} onChange={(event) => setExamFilter(event.target.value)}><option value="">All exams</option>{examRegistry.map((exam) => <option key={exam.id} value={exam.id}>{exam.shortName}</option>)}</select></label><strong>{range === 'all' ? 'All Time' : 'Recent results · latest 10'}{Number.isInteger(remote.totalCount) ? ` · ${remote.items.length} of ${remote.totalCount} loaded` : ''}</strong></div>
+    <div className="saved-attempt-toolbar no-print"><label><span>Range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option value="recent">Recent results</option><option value="all">All Time</option></select></label><label><span>Exam</span><select value={examFilter} onChange={(event) => setExamFilter(event.target.value)}><option value="">All exams</option>{examFilterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><strong>{range === 'all' ? 'All Time' : 'Recent results · latest 10'}{Number.isInteger(remote.totalCount) ? ` · ${remote.items.length} of ${remote.totalCount} loaded` : ''}</strong></div>
     {remote.state === 'loading' ? <p role="status">Loading account history…</p> : null}
     {remote.message ? <p role={remote.state === 'error' ? 'alert' : 'status'}>{remote.message}</p> : null}
-    {visibleItems.length ? <ul className="history-list">{visibleItems.map((item) => <li key={item.attemptId}><button type="button" className="saved-result-item" onClick={() => onOpenDetail?.(item.attemptId)}><strong>{getExamDisplayName(item.examKey)}</strong>{' '}<span>{item.percentage}% · {getAttemptKindLabel(item)} · {item.source === 'legacy_authoritative' ? 'Historical account result' : 'Saved result'} · {new Date(item.completedAt).toLocaleString()}</span></button></li>)}</ul> : null}
+    {visibleItems.length ? <ul className="history-list">{visibleItems.map((item) => <li key={item.attemptId}><button type="button" className="saved-result-item" onClick={() => onOpenDetail?.(item.attemptId)}><strong>{getSavedResultExamLabel(item.examKey)}</strong>{' '}<span>{item.percentage}% · {getAttemptKindLabel(item)} · {item.source === 'legacy_authoritative' ? 'Historical account result' : 'Saved result'} · {new Date(item.completedAt).toLocaleString()}</span></button></li>)}</ul> : null}
     {range === 'all' && remote.nextCursor ? <div className="saved-pagination"><button type="button" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading more…' : 'Load more results'}</button><span>{remote.items.length} of {remote.totalCount} loaded</span></div> : null}
     <h3>Historical browser-only results</h3><p>Browser-only records remain separate from authenticated server history; they are not uploaded or combined with protected scores.</p>
-    {historical.length === 0 ? <p>No browser-only results were found.</p> : <ul className="history-list">{historical.map((record) => <li key={record.id}><strong>{record.registryTitle}</strong>{' '}<span>{record.percentage}% · {new Date(record.attemptedAt).toLocaleString()}</span></li>)}</ul>}
+    {historical.length === 0 ? <p>No browser-only results were found.</p> : <ul className="history-list">{historical.map((record) => <li key={record.id}><strong>{getSavedResultExamLabel(record.registryExamId)}</strong>{' '}<span>{record.percentage}% · Historical browser result · {new Date(record.attemptedAt).toLocaleString()}</span></li>)}</ul>}
     {onBack ? <button type="button" className="primary-button" onClick={onBack}>Return home</button> : null}
   </section>;
 }
@@ -137,9 +142,8 @@ function ProtectedResultDetail({ attemptId, client, onBack }) {
     return () => controller.abort();
   }, [attemptId, client]);
   const value = detail.value;
-  return <section className="form-panel protected-result-detail" aria-labelledby="protected-result-detail-heading"><p className="eyebrow">Saved Result</p><h2 id="protected-result-detail-heading">Result summary</h2>{detail.state === 'loading' ? <p role="status">Loading result summary…</p> : null}{detail.message ? <p role={detail.state === 'error' ? 'alert' : 'status'}>{detail.message}</p> : null}{value ? <><dl className="exam-stats compact"><div><dt>Exam</dt><dd>{getExamDisplayName(value.exam?.key)}</dd></div><div><dt>Exam profile</dt><dd>{value.profile?.name || 'Standard profile'}</dd></div><div><dt>Attempt</dt><dd>{value.source === 'legacy_authoritative' && isAssessmentResult(value) ? 'Historical exam attempt' : getAttemptKindLabel(value)}</dd></div><div><dt>Score</dt><dd>{value.percentage == null ? 'Not recorded' : `${value.percentage}%`}</dd></div><div><dt>Status</dt><dd>{value.passed === true ? 'Passed' : value.passed === false ? 'Needs review' : 'Not recorded'}</dd></div><div><dt>Completed</dt><dd>{new Date(value.completedAt).toLocaleString()}</dd></div><div><dt>Review</dt><dd>{value.reviewStatus === 'released' ? 'Released' : 'Withheld'}</dd></div></dl><p>Question and answer review is available only when the applicable release policy permits it.</p><button className="secondary-button no-print" type="button" onClick={() => window.print()}>Print result summary</button></> : null}<button type="button" className="primary-button no-print" onClick={onBack}>Back to Saved Results</button></section>;
+  return <section className="form-panel protected-result-detail" aria-labelledby="protected-result-detail-heading"><p className="eyebrow">Saved Result</p><h2 id="protected-result-detail-heading">Result summary</h2>{detail.state === 'loading' ? <p role="status">Loading result summary…</p> : null}{detail.message ? <p role={detail.state === 'error' ? 'alert' : 'status'}>{detail.message}</p> : null}{value ? <><dl className="exam-stats compact"><div><dt>Exam</dt><dd>{getSavedResultExamLabel(value.exam?.key)}</dd></div><div><dt>Exam profile</dt><dd>{value.profile?.name || 'Standard profile'}</dd></div><div><dt>Attempt</dt><dd>{value.source === 'legacy_authoritative' && isAssessmentResult(value) ? 'Historical exam attempt' : getAttemptKindLabel(value)}</dd></div><div><dt>Score</dt><dd>{value.percentage == null ? 'Not recorded' : `${value.percentage}%`}</dd></div><div><dt>Status</dt><dd>{value.passed === true ? 'Passed' : value.passed === false ? 'Needs review' : 'Not recorded'}</dd></div><div><dt>Completed</dt><dd>{new Date(value.completedAt).toLocaleString()}</dd></div><div><dt>Review</dt><dd>{value.reviewStatus === 'released' ? 'Released' : 'Withheld'}</dd></div></dl><p>Question and answer review is available only when the applicable release policy permits it.</p><button className="secondary-button no-print" type="button" onClick={() => window.print()}>Print result summary</button></> : null}<button type="button" className="primary-button no-print" onClick={onBack}>Back to Saved Results</button></section>;
 }
 
 function normalizeExamKey(value) { return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); }
-function getExamDisplayName(value) { const normalized = normalizeExamKey(value); return examRegistry.find((exam) => normalizeExamKey(exam.id) === normalized)?.name ?? 'Certification exam'; }
 export function ExamProgressSummary() { return <p className="status-note">Protected progress is available after a server-authoritative assessment.</p>; }
