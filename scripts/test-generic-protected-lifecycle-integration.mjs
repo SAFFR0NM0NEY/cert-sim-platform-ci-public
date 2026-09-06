@@ -4,9 +4,9 @@ import { spawnSync } from 'node:child_process';
 import { sha256Canonical } from './backend-exam-publication/canonical-json.mjs';
 
 const url=required('SUPABASE_URL'),anon=required('SUPABASE_ANON_KEY'),service=required('SUPABASE_SERVICE_ROLE_KEY'),database=required('SUPABASE_DB_URL');
-const admin=client(service),owner=await createUser('owner'),learner=await createUser('learner'),assignedLearner=await createUser('assigned'),purchaseLearner=await createUser('purchase'),legacyWeakLearner=await createUser('legacy-weak'),activationLearner=await createUser('activation'),other=await createUser('other');
+const admin=client(service),owner=await createUser('owner'),learner=await createUser('learner'),assignedLearner=await createUser('assigned'),purchaseLearner=await createUser('purchase'),legacyWeakLearner=await createUser('legacy-weak'),activationLearner=await createUser('activation'),liveV2Learner=await createUser('live-v2'),other=await createUser('other');
 const org=crypto.randomUUID();
-sql(`insert into public.organisations(id,name,organisation_type,status) values ('${org}','Generic lifecycle fixture','internal','active'); insert into public.memberships(user_id,organisation_id,role,status) values ('${owner.id}','${org}','platform_owner','active'),('${learner.id}','${org}','student','active'),('${assignedLearner.id}','${org}','student','active'),('${purchaseLearner.id}','${org}','student','active'),('${legacyWeakLearner.id}','${org}','student','active'),('${activationLearner.id}','${org}','student','active'); insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values ('sample400','sample400','Synthetic Sample','test','certification');`);
+sql(`insert into public.organisations(id,name,organisation_type,status) values ('${org}','Generic lifecycle fixture','internal','active'); insert into public.memberships(user_id,organisation_id,role,status) values ('${owner.id}','${org}','platform_owner','active'),('${learner.id}','${org}','student','active'),('${assignedLearner.id}','${org}','student','active'),('${purchaseLearner.id}','${org}','student','active'),('${legacyWeakLearner.id}','${org}','student','active'),('${activationLearner.id}','${org}','student','active'),('${liveV2Learner.id}','${org}','student','active'); insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values ('sample400','sample400','Synthetic Sample','test','certification');`);
 
 const payload={
   packageSchemaVersion:'certsim-protected-package-v2',validationContractVersion:'certsim-protected-multi-exam-validation-v1',
@@ -56,6 +56,37 @@ if(!(await signedIn(other)).rpc) fail('CLIENT_INVALID');
 const unauthorized=await (await signedIn(other)).rpc('certsim_protected_publish_package',{p_request:{...request,publicationRequestId:crypto.randomUUID()}});
 if(!unauthorized.error) fail('NON_OWNER_PUBLICATION_ALLOWED');
 sql(`select 1/((count(*)=2)::integer) from exam_delivery.package_versions where exam_key in ('sample400','samplenever'); select 1/((count(*)=0)::integer) from exam_delivery.package_versions where exam_key like 'invalid%'; select 1/((count(*)=0)::integer) from exam_delivery.exam_access_policies where canonical_exam_key in ('sample400','samplenever'); select 1/((count(*)=0)::integer) from exam_delivery.exam_access_learners where canonical_exam_key in ('sample400','samplenever'); select 1/((count(*)=0)::integer) from exam_delivery.protected_assignments where package_version_id in (select id from exam_delivery.package_versions where exam_key in ('sample400','samplenever')); select 1/((count(*)=0)::integer) from exam_delivery.attempts where package_version_id in (select id from exam_delivery.package_versions where exam_key in ('sample400','samplenever')); select 1/((count(*)=0)::integer) from exam_delivery.attempt_results where attempt_id in (select id from exam_delivery.attempts where package_version_id in (select id from exam_delivery.package_versions where exam_key in ('sample400','samplenever'))); select 1/((count(*)=0)::integer) from exam_delivery.review_snapshots where attempt_id in (select id from exam_delivery.attempts where package_version_id in (select id from exam_delivery.package_versions where exam_key in ('sample400','samplenever')));`);
+
+// Issue #83 acceptance stage: prove the checked public boundary can call its
+// private creator, remains idempotent, and grants only the bound learner.
+sql(`insert into exam_delivery.exam_release_candidates(canonical_exam_key,package_version,profile_key,release_template,catalogue_slug,catalogue_title,catalogue_vendor,catalogue_exam_type,catalogue_source_type)
+values ('samplenever','1.0.0','sectioned','standard_active_exam_v1','sample-never','Synthetic Never','Fixture','certification','official_source');`);
+const acceptanceRequest={examKey:'sample-never',packageVersion:'1.0.0',profileKey:'sectioned',releaseStage:'acceptance',requestId:crypto.randomUUID()};
+const acceptance=await ownerClient.rpc('certsim_configure_exam_release_stage',{p_request:acceptanceRequest});
+if(acceptance.error||acceptance.data?.configured!==true||acceptance.data?.replayed!==false) fail('ACCEPTANCE_CONFIGURATION_FAILED');
+const acceptanceReplay=await ownerClient.rpc('certsim_configure_exam_release_stage',{p_request:acceptanceRequest});
+if(acceptanceReplay.error||acceptanceReplay.data?.configured!==false||acceptanceReplay.data?.replayed!==true) fail('ACCEPTANCE_CONFIGURATION_REPLAY_FAILED');
+const deniedConfiguration=await (await signedIn(other)).rpc('certsim_configure_exam_release_stage',{p_request:{...acceptanceRequest,requestId:crypto.randomUUID()}});
+if(!deniedConfiguration.error) fail('NON_OWNER_RELEASE_CONFIGURATION_ALLOWED');
+const unknownConfiguration=await ownerClient.rpc('certsim_configure_exam_release_stage',{p_request:{...acceptanceRequest,examKey:'unknown-exam',requestId:crypto.randomUUID()}});
+if(!unknownConfiguration.error) fail('UNKNOWN_RELEASE_CANDIDATE_ALLOWED');
+sql(`select 1/((count(*)=1)::integer) from exam_delivery.exam_profile_activations a join exam_delivery.package_versions pv on pv.id=a.package_version_id join exam_delivery.package_profiles pp on pp.id=a.package_profile_id where pv.exam_key='samplenever' and pp.profile_key='sectioned' and a.enabled and a.activation_kind='production';
+select 1/((count(*)=1)::integer) from exam_delivery.package_profile_defaults where canonical_exam_key='samplenever' and profile_key='sectioned' and purpose='assigned_assessment' and enabled;
+select 1/((count(*)=0)::integer) from exam_delivery.practice_policies where canonical_exam_key='samplenever';
+select 1/((count(*)=0)::integer) from public.exam_catalog where exam_delivery.normalize_exam_key(exam_key)='samplenever';`);
+const assignmentRequest={targetUserId:liveV2Learner.id,organisationId:org,examKey:'sample-never',packageVersion:'1.0.0',profileKey:'sectioned',maximumAttempts:1,reviewReleasePolicy:'never',answerReleasePolicy:'never',requestId:crypto.randomUUID()};
+const liveAssignment=await ownerClient.rpc('certsim_create_live_assignment_v2',{p_request:assignmentRequest});
+if(liveAssignment.error||liveAssignment.data?.created!==true) fail(`LIVE_V2_ASSIGNMENT_FAILED_${safeDatabaseIdentifier(liveAssignment.error?.message)}`);
+const liveAssignmentReplay=await ownerClient.rpc('certsim_create_live_assignment_v2',{p_request:assignmentRequest});
+if(liveAssignmentReplay.error||liveAssignmentReplay.data?.created!==false||liveAssignmentReplay.data?.assignmentId!==liveAssignment.data.assignmentId) fail('LIVE_V2_ASSIGNMENT_REPLAY_FAILED');
+const duplicateAssignment=await ownerClient.rpc('certsim_create_live_assignment_v2',{p_request:{...assignmentRequest,requestId:crypto.randomUUID()}});
+if(!duplicateAssignment.error) fail('LIVE_V2_DUPLICATE_ACTIVE_ALLOWED');
+sql(`select 1/((count(*)=1 and bool_and(e.enabled) and bool_and(e.learner_id='${liveV2Learner.id}'::uuid))::integer) from exam_delivery.exam_entitlements e join exam_delivery.package_versions pv on pv.id=e.package_version_id where pv.exam_key='samplenever' and e.source_assignment_id='${liveAssignment.data.assignmentId}'::uuid;
+select 1/((count(*)=0)::integer) from exam_delivery.exam_entitlements e join exam_delivery.package_versions pv on pv.id=e.package_version_id where pv.exam_key='samplenever' and e.learner_id<>'${liveV2Learner.id}'::uuid;`);
+const liveStart=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:liveV2Learner.id,p_exam_key:'sample-never',p_profile_key:'sectioned',p_request_id:crypto.randomUUID(),p_assignment_id:liveAssignment.data.assignmentId});
+if(liveStart.error||liveStart.data?.ok!==true||liveStart.data?.attempt?.assignmentId!==liveAssignment.data.assignmentId) fail(`LIVE_V2_START_FAILED_${safeCode(liveStart.data?.code)}`);
+const liveLimit=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:liveV2Learner.id,p_exam_key:'sample-never',p_profile_key:'sectioned',p_request_id:crypto.randomUUID(),p_assignment_id:liveAssignment.data.assignmentId});
+expectReason(liveLimit,'assignment_attempt_limit_reached');
 
 let eligibility=await admin.rpc('certsim_protected_check_eligibility',{p_actor_id:learner.id,p_exam_key:'sample-400',p_profile_key:'sectioned'});
 expectReason(eligibility,'exam_disabled');
@@ -143,9 +174,10 @@ const assignedSubmitted=await admin.rpc('certsim_protected_submit_attempt',{p_ac
 if(assignedSubmitted.error||assignedSubmitted.data?.ok!==true) fail('ASSIGNMENT_SUBMIT_FAILED');
 const assignmentHistory=await admin.rpc('certsim_protected_list_history',{p_actor_id:assignedLearner.id,p_exam_key:'sample-400',p_cursor:null,p_page_size:50});
 if(assignmentHistory.error||assignmentHistory.data?.items?.[0]?.assignmentId!==assignmentId) fail('ASSIGNMENT_HISTORY_CORRELATION_FAILED');
+sql(`update exam_delivery.exam_entitlements set enabled=false where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and learner_id='${learner.id}'::uuid and reason_code='integration_fixture';`);
 const deniedAssessment=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'sample-400',p_profile_key:'sectioned',p_request_id:crypto.randomUUID()});
-expectReason(deniedAssessment,'assignment_required');
-sql(`update exam_delivery.exam_access_learners set enabled=false where canonical_exam_key='sample400' and learner_id='${learner.id}';`);
+expectReason(deniedAssessment,'access_not_granted');
+sql(`update exam_delivery.exam_entitlements set enabled=true where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and learner_id='${learner.id}'::uuid and reason_code='integration_fixture'; update exam_delivery.exam_access_learners set enabled=false where canonical_exam_key='sample400' and learner_id='${learner.id}';`);
 const wrongLanguage=await admin.rpc('certsim_protected_start_practice',{p_actor_id:learner.id,p_request:{examKey:'sample-400',profileId:'sectioned',purpose:'self_directed_exam',count:10,language:'python',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID()}});
 expectReason(wrongLanguage,'invalid_request');
 const deniedOther=await admin.rpc('certsim_protected_start_practice',{p_actor_id:other.id,p_request:{examKey:'sample-400',profileId:'sectioned',purpose:'self_directed_exam',count:10,language:'not_applicable',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID()}});
@@ -377,7 +409,23 @@ const r3hCurrent=await admin.rpc('certsim_protected_discover_current_attempt',{.
 if(r3hCurrent.error||r3hCurrent.data?.attempt?.attemptId!==r3hNewId) fail('R3H_REPLACEMENT_DISCOVERY_FAILED');
 sql(`select 1/((status='voided')::integer) from exam_delivery.attempts where id='${r3hOldId}'::uuid; select 1/((status='in_progress')::integer) from exam_delivery.attempts where id='${r3hNewId}'::uuid; select 1/((count(*)=1 and bool_and(reason_code='learner_started_new_attempt'))::integer) from exam_delivery.attempt_replacements where replaced_attempt_id='${r3hOldId}'::uuid and replacement_attempt_id='${r3hNewId}'::uuid and owner_id='${learner.id}'::uuid; select 1/((count(*)=1)::integer) from exam_delivery.attempts where owner_id='${learner.id}'::uuid and package_profile_id=(select id from exam_delivery.package_profiles where profile_key='sectioned' and package_version_id=(select id from exam_delivery.package_versions where exam_key='sample400' and package_version='1.0.0')) and purpose='self_directed_exam' and status='in_progress';`);
 
-console.log(JSON.stringify({status:'PASS',publication:'v2-atomic-idempotent',presentedCount:41,scoredCount:40,caseGroups:1,pbqGroups:1,dropdowns:1,review:'withheld',crossUser:'denied',r3hReplacement:'atomic-idempotent-owner-bound'}));
+// The standard stage is a fixed server-owned template. A second request is
+// harmless, and neither invocation creates an entitlement.
+sql(`insert into exam_delivery.exam_release_candidates(canonical_exam_key,package_version,profile_key,release_template,catalogue_slug,catalogue_title,catalogue_vendor,catalogue_exam_type,catalogue_source_type)
+values ('sample400','1.0.0','sectioned','standard_active_exam_v1','sample400','Synthetic Sample','Fixture','certification','official_source');`);
+const standardRequest={examKey:'sample-400',packageVersion:'1.0.0',profileKey:'sectioned',releaseStage:'standard_active_exam_v1',requestId:crypto.randomUUID()};
+const entitlementsBeforeStandard=Number(sqlValue(`select count(*) from exam_delivery.exam_entitlements where package_version_id='${samplePackageId}'::uuid`));
+const standardConfigured=await ownerClient.rpc('certsim_configure_exam_release_stage',{p_request:standardRequest});
+if(standardConfigured.error||standardConfigured.data?.configured!==true) fail('STANDARD_RELEASE_CONFIGURATION_FAILED');
+const repeatedStandard=await ownerClient.rpc('certsim_configure_exam_release_stage',{p_request:{...standardRequest,requestId:crypto.randomUUID()}});
+if(repeatedStandard.error||repeatedStandard.data?.configured!==true) fail('STANDARD_RELEASE_REPEAT_FAILED');
+sql(`select 1/((count(*)=1)::integer) from exam_delivery.exam_profile_activations where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and activation_kind='production' and enabled;
+select 1/((count(*)=5 and bool_and(enabled) and bool_and(access_mode='production_authorized') and bool_and(maximum_completed_attempts is null) and count(*) filter(where purpose='study_sandbox' and immediate_feedback and review_release_policy='immediate_study_feedback' and answer_release_policy='immediate_study_feedback')=1 and count(*) filter(where purpose<>'study_sandbox' and not immediate_feedback and review_release_policy='after_submission' and answer_release_policy='after_submission')=4)::integer) from exam_delivery.practice_policies where canonical_exam_key='sample400' and package_version='1.0.0' and profile_key='sectioned';
+select 1/((count(*)=6 and bool_and(enabled))::integer) from exam_delivery.package_profile_defaults where canonical_exam_key='sample400' and profile_key='sectioned' and package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid;
+select 1/((count(*)=1 and bool_and(status='active') and bool_and(lifecycle='production_ready') and bool_and(current_version='1.0.0'))::integer) from public.exam_catalog where exam_delivery.normalize_exam_key(exam_key)='sample400';
+select 1/((count(*)=${entitlementsBeforeStandard})::integer) from exam_delivery.exam_entitlements where package_version_id='${samplePackageId}'::uuid;`);
+
+console.log(JSON.stringify({status:'PASS',publication:'v2-atomic-idempotent',presentedCount:41,scoredCount:40,caseGroups:1,pbqGroups:1,dropdowns:1,review:'withheld',crossUser:'denied',r3hReplacement:'atomic-idempotent-owner-bound',liveAssignmentV2:'checked-wrapper-idempotent',stagedRelease:'acceptance-isolated-standard-parity'}));
 
 function client(key){return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}})}
 function required(name){const value=process.env[name]?.trim();if(!value)fail(`MISSING_${name}`);return value}

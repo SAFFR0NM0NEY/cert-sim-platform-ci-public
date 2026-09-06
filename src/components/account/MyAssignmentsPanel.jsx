@@ -109,17 +109,21 @@ export default function MyAssignmentsPanel() {
                     {assignment.progressLabel}
                   </strong>
                   <small>{formatDueDate(assignment.dueAt)}</small>
+                  {assignment.attemptsRemaining != null ? (
+                    <small>
+                      Attempts used: {assignment.attemptsUsed} · Remaining: {assignment.attemptsRemaining}
+                    </small>
+                  ) : null}
                   <small>{assignment.targetLabel || assignment.scopeLabel}</small>
-                  {assignment.savedResultRoute ? (
-                    <a className="auth-panel-link" href={assignment.savedResultRoute}>
-                      Open saved result
+                  {assignment.learnerAction?.enabled ? (
+                    <a className="auth-panel-link assignment-action" href={assignment.learnerAction.href}>
+                      {assignment.learnerAction.label}
                     </a>
-                  ) : null}
-                  {assignment.examRoute ? (
-                    <a className="auth-panel-link" href={assignment.examRoute}>
-                      Start exam
-                    </a>
-                  ) : null}
+                  ) : (
+                    <span className="assignment-action-unavailable">
+                      {assignment.learnerAction?.reason || 'This assignment is unavailable.'}
+                    </span>
+                  )}
                 </span>
               </article>
             </li>

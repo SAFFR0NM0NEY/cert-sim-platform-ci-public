@@ -1,4 +1,5 @@
 const EXAM_IDENTITIES = Object.freeze({
+  sc200: 'sc200',
   ai901: 'ai901',
   az204: 'az204',
   az400: 'az400',
@@ -8,6 +9,9 @@ export const PROTECTED_ATTEMPT_PURPOSES = Object.freeze(['assigned_assessment', 
 export const PROTECTED_LANGUAGE_PREFERENCES = Object.freeze(['csharp', 'python', 'mixed']);
 
 const PROFILE_IDENTITIES = Object.freeze({
+  sc200: Object.freeze([
+    'sc200-full',
+  ]),
   ai901: Object.freeze([
     'ai901-controlled-beta-compact',
     'ai901-controlled-beta-full',

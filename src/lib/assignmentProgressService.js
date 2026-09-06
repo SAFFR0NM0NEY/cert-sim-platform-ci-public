@@ -7,6 +7,10 @@ import { getMySavedResults } from './savedResultsService.js';
 import { getTrainerDashboardSnapshot } from './trainerDashboardService.js';
 import { createProtectedExamClient } from './protectedExamClient.js';
 import { supabase } from './supabaseClient.js';
+import {
+  getAssignedExamAction,
+  getAssignedExamLaunchRoute,
+} from './assignedExamLaunch.js';
 
 const IS_PROTECTED_DELIVERY = typeof __CERTSIM_BUILD_DELIVERY_MODE__ !== 'undefined'
   && __CERTSIM_BUILD_DELIVERY_MODE__ === 'protected';
@@ -24,9 +28,16 @@ export async function getMyAssignmentProgress({ identity, userId = '' } = {}) {
     return assignmentsResult;
   }
 
-  const resultsResult = IS_PROTECTED_DELIVERY
-    ? await getMyProtectedAssignmentHistory()
-    : await getMySavedResults();
+  const [resultsResult, bindingsResult] = IS_PROTECTED_DELIVERY
+    ? await Promise.all([
+        getMyProtectedAssignmentHistory(),
+        getMyProtectedAssignmentBindings(assignmentsResult.data),
+      ])
+    : [await getMySavedResults(), createOkResult([])];
+
+  if (!bindingsResult.ok) {
+    return bindingsResult;
+  }
 
   const currentUserId = userId;
   const results = (resultsResult.ok ? resultsResult.data : []).map((result) => ({
@@ -37,6 +48,7 @@ export async function getMyAssignmentProgress({ identity, userId = '' } = {}) {
     assignmentsResult.data,
     results,
     identity.memberships ?? [],
+    bindingsResult.data,
   );
   if (resultsResult.complete === false) {
     assignments = assignments.map((assignment) => assignment.progressStatus === 'not-started'
@@ -50,6 +62,33 @@ export async function getMyAssignmentProgress({ identity, userId = '' } = {}) {
     results,
     summary: createProgressSummary(assignments),
   });
+}
+
+async function getMyProtectedAssignmentBindings(assignments = []) {
+  const examKeys = [...new Set(assignments
+    .filter((assignment) => assignment.contractVersion === 'live-v2')
+    .map((assignment) => normalizeText(assignment.examKey))
+    .filter(Boolean))];
+
+  if (examKeys.length === 0) return createOkResult([]);
+
+  const { data, error } = await supabase.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  if (error || !accessToken) {
+    return createErrorResult('not_signed_in', 'Sign in again to verify assigned attempts.');
+  }
+
+  try {
+    const client = createProtectedExamClient({ accessToken });
+    const pages = await Promise.all(examKeys.map((examKey) =>
+      client.listCurrentAttemptBindings(examKey, 'self_directed_exam')));
+    return createOkResult(pages.flatMap((page) => page.candidates ?? []));
+  } catch (bindingsError) {
+    return createErrorResult(
+      'attempt_status_unavailable',
+      bindingsError?.message || 'Assigned attempt status is temporarily unavailable.',
+    );
+  }
 }
 
 async function getMyProtectedAssignmentHistory() {
@@ -131,6 +170,7 @@ export function matchResultsToAssignments(
   assignments = [],
   results = [],
   memberships = [],
+  activeBindings = [],
 ) {
   const normalizedMemberships = memberships.map(normalizeMembership);
   const inferredAssignmentByResult = new Map();
@@ -143,6 +183,11 @@ export function matchResultsToAssignments(
   });
 
   return assignments.map((assignment) => {
+    const assignmentId = assignment.assignmentId || assignment.id;
+    const activeAttempt = activeBindings.find((candidate) =>
+      candidate.assignmentId === assignmentId &&
+      normalizeExamScopeKey(candidate.examKey) === normalizeExamScopeKey(assignment.examKey) &&
+      candidate.profileKey === assignment.profileId) ?? null;
     const targetStudents = getTargetStudents(assignment, normalizedMemberships);
     const targetUserIds = new Set(
       targetStudents.map((student) => student.userId).filter(Boolean),
@@ -177,14 +222,25 @@ export function matchResultsToAssignments(
       completedCount,
       totalStudents,
     });
+    const attemptsUsed = assignment.contractVersion === 'live-v2'
+      ? matchedResults.length + (activeAttempt ? 1 : 0)
+      : null;
+    const attemptsRemaining = attemptsUsed == null || assignment.maximumAttempts == null
+      ? null
+      : Math.max(0, assignment.maximumAttempts - attemptsUsed);
 
-    return {
+    const assignmentLaunchRoute = getAssignedExamLaunchRoute(assignment);
+    const enrichedAssignment = {
       ...assignment,
+      activeAttempt,
+      assignmentLaunchRoute,
+      attemptsRemaining,
+      attemptsUsed,
       completedCount,
       latestResult,
-      progressLabel: status.label,
+      progressLabel: activeAttempt ? 'In progress' : status.label,
       progressReason: status.reason,
-      progressStatus: status.status,
+      progressStatus: activeAttempt ? 'in-progress' : status.status,
       resultMatches: matchedResults,
       savedResultRoute: latestResult?.attemptId
         ? `/account/results/${latestResult.attemptId}`
@@ -192,6 +248,10 @@ export function matchResultsToAssignments(
       studentResults,
       targetStudents,
       totalStudents,
+    };
+    return {
+      ...enrichedAssignment,
+      learnerAction: getAssignedExamAction(enrichedAssignment),
     };
   });
 }

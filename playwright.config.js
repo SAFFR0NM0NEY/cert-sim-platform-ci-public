@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/r3g',
   testMatch: /.*\.spec\.js/,
-  testIgnore: /app-assigned-network\.spec\.js/,
+  testIgnore: /app-(?:assigned-network|hidden-assignment-launch)\.spec\.js/,
   timeout: 120_000,
   workers: 1,
   use: { baseURL: 'http://127.0.0.1:4177', browserName: 'chromium', headless: true, viewport: { width: 1440, height: 1000 } },

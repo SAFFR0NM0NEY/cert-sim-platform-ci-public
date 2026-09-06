@@ -531,6 +531,36 @@ button:disabled {
   text-decoration: underline;
 }
 
+.assignment-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border: 1px solid #38bdf8;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: rgba(14, 165, 233, 0.12);
+  text-align: center;
+}
+
+.assignment-action:hover {
+  background: rgba(14, 165, 233, 0.2);
+  text-decoration: none;
+}
+
+.assignment-action:focus-visible {
+  outline: 3px solid rgba(56, 189, 248, 0.55);
+  outline-offset: 2px;
+  text-decoration: none;
+}
+
+.assignment-action-unavailable {
+  max-width: 24rem;
+  color: #cbd5e1;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
 .assignment-progress-pill {
   display: inline-flex;
   align-items: center;

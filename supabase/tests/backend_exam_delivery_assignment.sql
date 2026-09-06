@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(72);
+select plan(92);
 
 select has_table('exam_delivery','protected_assignments','authoritative assignment table exists');
 select has_column('exam_delivery','attempts','protected_assignment_id','attempts require assignment linkage');
@@ -75,6 +75,27 @@ select has_function('exam_delivery','authorize_unique_ai901_technical_recovery',
 select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=10s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='authorize_unique_ai901_technical_recovery'),'identity recovery is bounded private authority');
 select ok((select not prosecdef from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_authorize_unique_ai901_recovery'),'identity recovery public wrapper is invoker');
 select ok((select pg_get_functiondef(p.oid) ~* 'owner_membership\.user_id=v_actor' and pg_get_functiondef(p.oid) ~* 'owner_membership\.organisation_id=pa\.organisation_id' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='authorize_unique_ai901_technical_recovery'),'identity recovery candidate is scoped to the invoking owner organisation');
+
+select has_table('exam_delivery','exam_release_candidates','reviewed release candidates are server-owned');
+select has_table('exam_delivery','exam_release_configuration_requests','release idempotency audit exists');
+select has_function('public','certsim_configure_exam_release_stage',array['jsonb'],'checked release boundary exists');
+select has_function('exam_delivery','configure_exam_release_stage',array['uuid','jsonb'],'private release implementation exists');
+select ok((select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='exam_release_candidates'),'release candidates use RLS defense in depth');
+select ok((select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='exam_release_configuration_requests'),'release audit uses RLS defense in depth');
+select ok(not has_table_privilege('authenticated','exam_delivery.exam_release_candidates','SELECT,INSERT,UPDATE,DELETE'),'browser cannot read or alter release candidates');
+select ok(not has_table_privilege('service_role','exam_delivery.exam_release_configuration_requests','SELECT,INSERT,UPDATE,DELETE'),'Edge cannot alter release audit rows');
+select ok(has_function_privilege('authenticated','public.certsim_configure_exam_release_stage(jsonb)','EXECUTE'),'authenticated caller can reach checked release boundary');
+select ok(not has_function_privilege('service_role','public.certsim_configure_exam_release_stage(jsonb)','EXECUTE'),'service role cannot configure releases');
+select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=10s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_create_live_assignment_v2'),'live-v2 wrapper has the bounded elevated boundary required to reach its private callee');
+select ok((select pg_get_functiondef(p.oid) ~ 'auth.uid\(\)' and pg_get_functiondef(p.oid) ~ 'platform_owner' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_create_live_assignment_v2'),'live-v2 wrapper derives and validates its owner actor');
+select ok(not (select prosecdef from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='configure_exam_release_stage'),'private release implementation is invoker');
+select ok(not has_function_privilege('authenticated','exam_delivery.configure_exam_release_stage(uuid,jsonb)','EXECUTE'),'browser cannot bypass the checked release wrapper');
+select ok((select pg_get_functiondef(p.oid) ~ '''acceptance''' and pg_get_functiondef(p.oid) ~ '''standard_active_exam_v1''' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='configure_exam_release_stage'),'only reviewed release stages are accepted');
+select ok((select pg_get_functiondef(p.oid) ~ 'production_authorized' and pg_get_functiondef(p.oid) ~ 'immediate_study_feedback' and pg_get_functiondef(p.oid) ~ 'after_submission' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='configure_exam_release_stage'),'standard stage owns the fixed policy template');
+select ok((select pg_get_functiondef(p.oid) !~* 'insert into exam_delivery\.exam_entitlements' and pg_get_functiondef(p.oid) !~* 'insert into exam_delivery\.protected_assignments' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='configure_exam_release_stage'),'release stages create neither entitlements nor legacy assignments');
+select ok((select pg_get_functiondef(p.oid) ~ 'request_id=v_request_id' and pg_get_functiondef(p.oid) ~ 'exam_release_request_conflict' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='configure_exam_release_stage'),'release configuration is request-idempotent and conflict-safe');
+select ok((select pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' and pg_get_functiondef(p.oid) ~ 'can_use_profile' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='check_assessment_eligibility_v2'),'assigned assessment uses activation, default and entitlement authorization');
+select ok((select pg_get_functiondef(p.oid) ~ 'exam_access_policies' and pg_get_functiondef(p.oid) ~ 'protected_assignments' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='check_assessment_eligibility_v2'),'historical assignment authorization remains available as fallback');
 
 select * from finish();
 rollback;
