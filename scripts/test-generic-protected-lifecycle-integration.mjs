@@ -174,9 +174,10 @@ const assignedSubmitted=await admin.rpc('certsim_protected_submit_attempt',{p_ac
 if(assignedSubmitted.error||assignedSubmitted.data?.ok!==true) fail('ASSIGNMENT_SUBMIT_FAILED');
 const assignmentHistory=await admin.rpc('certsim_protected_list_history',{p_actor_id:assignedLearner.id,p_exam_key:'sample-400',p_cursor:null,p_page_size:50});
 if(assignmentHistory.error||assignmentHistory.data?.items?.[0]?.assignmentId!==assignmentId) fail('ASSIGNMENT_HISTORY_CORRELATION_FAILED');
+sql(`update exam_delivery.exam_entitlements set enabled=false where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and learner_id='${learner.id}'::uuid and reason_code='integration_fixture';`);
 const deniedAssessment=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'sample-400',p_profile_key:'sectioned',p_request_id:crypto.randomUUID()});
 expectReason(deniedAssessment,'assignment_required');
-sql(`update exam_delivery.exam_access_learners set enabled=false where canonical_exam_key='sample400' and learner_id='${learner.id}';`);
+sql(`update exam_delivery.exam_entitlements set enabled=true where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and learner_id='${learner.id}'::uuid and reason_code='integration_fixture'; update exam_delivery.exam_access_learners set enabled=false where canonical_exam_key='sample400' and learner_id='${learner.id}';`);
 const wrongLanguage=await admin.rpc('certsim_protected_start_practice',{p_actor_id:learner.id,p_request:{examKey:'sample-400',profileId:'sectioned',purpose:'self_directed_exam',count:10,language:'python',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID()}});
 expectReason(wrongLanguage,'invalid_request');
 const deniedOther=await admin.rpc('certsim_protected_start_practice',{p_actor_id:other.id,p_request:{examKey:'sample-400',profileId:'sectioned',purpose:'self_directed_exam',count:10,language:'not_applicable',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID()}});
