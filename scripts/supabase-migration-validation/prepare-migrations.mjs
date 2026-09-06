@@ -65,6 +65,7 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260905192938_cross_version_package_compatibility.sql',
   '20260906104745_register_sc200_runtime_contract.sql',
   '20260906115046_selected_response_partial_scorer.sql',
+  '20260906134050_live_assignment_v2.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -129,6 +130,7 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260905192938_cross_version_package_compatibility.sql': '68bdd05096a3120025e739d2a8eff9f21795a68ea90cdaae6c67122668b4a909',
   '20260906104745_register_sc200_runtime_contract.sql': '7ac2d132ea4a2b3b7f3cc347b789e1d892dcebe837b841c54ee35468e98fb92f',
   '20260906115046_selected_response_partial_scorer.sql': 'af0430556e73c107a965f010fe3d517f712063b3934bb39aa386da3eef3605b5',
+  '20260906134050_live_assignment_v2.sql': '73dccae9e55ccdd0a7b567c04d0499e61b0acfe66b0104f4dc944735995504aa',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

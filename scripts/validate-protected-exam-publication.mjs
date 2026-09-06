@@ -15,7 +15,7 @@ const cli=await readFile(path.join(root,'scripts','publish-protected-package.mjs
 const runtimeConfig=await readFile(path.join(root,'scripts','protected-exam-pilot','runtime-config.mjs'),'utf8');
 const workflow=await readFile(path.join(root,'.github','workflows','backend-exam-delivery-db-validation.yml'),'utf8');
 
-assert.equal(SOURCE_MIGRATIONS.length,61);
+assert.equal(SOURCE_MIGRATIONS.length,62);
 assert.equal(SOURCE_MIGRATIONS[14],migrationName);
 for(const name of SOURCE_MIGRATIONS.slice(0,15)){
   const bytes=await readFile(path.join(root,'supabase','migrations',name));

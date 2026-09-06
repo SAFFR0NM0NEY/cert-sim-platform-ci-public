@@ -13,8 +13,8 @@ export default function MyAssignmentsPage({
           <h2 id="assignments-page-heading">My Assigned Exams</h2>
           <p className="saved-results-page-intro">
             Review assignment reminders from trainers or Platform Owners. These
-            records help track progress, but they do not restrict open exam
-            access yet.
+            records grant scoped access, track progress, and preserve the
+            package and profile selected by the assigner.
           </p>
         </div>
         <div className="button-row wrap">

@@ -177,9 +177,17 @@ export function matchResultsToAssignments(
       completedCount,
       totalStudents,
     });
+    const attemptsUsed = assignment.contractVersion === 'live-v2'
+      ? matchedResults.length
+      : null;
+    const attemptsRemaining = attemptsUsed == null || assignment.maximumAttempts == null
+      ? null
+      : Math.max(0, assignment.maximumAttempts - attemptsUsed);
 
     return {
       ...assignment,
+      attemptsRemaining,
+      attemptsUsed,
       completedCount,
       latestResult,
       progressLabel: status.label,
