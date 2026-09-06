@@ -176,7 +176,7 @@ const assignmentHistory=await admin.rpc('certsim_protected_list_history',{p_acto
 if(assignmentHistory.error||assignmentHistory.data?.items?.[0]?.assignmentId!==assignmentId) fail('ASSIGNMENT_HISTORY_CORRELATION_FAILED');
 sql(`update exam_delivery.exam_entitlements set enabled=false where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and learner_id='${learner.id}'::uuid and reason_code='integration_fixture';`);
 const deniedAssessment=await admin.rpc('certsim_protected_start_attempt',{p_actor_id:learner.id,p_exam_key:'sample-400',p_profile_key:'sectioned',p_request_id:crypto.randomUUID()});
-expectReason(deniedAssessment,'assignment_required');
+expectReason(deniedAssessment,'access_not_granted');
 sql(`update exam_delivery.exam_entitlements set enabled=true where package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and learner_id='${learner.id}'::uuid and reason_code='integration_fixture'; update exam_delivery.exam_access_learners set enabled=false where canonical_exam_key='sample400' and learner_id='${learner.id}';`);
 const wrongLanguage=await admin.rpc('certsim_protected_start_practice',{p_actor_id:learner.id,p_request:{examKey:'sample-400',profileId:'sectioned',purpose:'self_directed_exam',count:10,language:'python',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID()}});
 expectReason(wrongLanguage,'invalid_request');
