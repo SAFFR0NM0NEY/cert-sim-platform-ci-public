@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { examRegistry } from '../src/exams/examRegistry.protected.js';
+import { liveVisibleExamConfigs } from '../src/exams/examRegistry.protected.js';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const [app, runner, details, client, contract] = await Promise.all([
@@ -11,7 +11,7 @@ const [app, runner, details, client, contract] = await Promise.all([
   read('src/lib/protectedExamContract.js'),
 ]);
 
-const profiles = examRegistry.flatMap((exam) => exam.strictBetaProfiles.map((profile) => ({ exam, profile })));
+const profiles = liveVisibleExamConfigs.flatMap((exam) => exam.strictBetaProfiles.map((profile) => ({ exam, profile })));
 assert.equal(profiles.length, 11);
 for (const { exam, profile } of profiles) {
   assert.ok(exam.title && profile.name);

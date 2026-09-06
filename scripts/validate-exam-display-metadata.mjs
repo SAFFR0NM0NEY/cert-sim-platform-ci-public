@@ -10,13 +10,14 @@ import { validateExamRegistry } from '../src/utils/validateExamRegistry.js';
 import { normalizeProtectedHistoryResult } from '../src/lib/protectedHistory.js';
 
 const expected = {
+  sc200: ['sc200', 'SC-200', 'Microsoft Security Operations Analyst', 'SC-200: Microsoft Security Operations Analyst', 'Microsoft'],
   az204: ['az204', 'AZ-204', 'Developing Solutions for Microsoft Azure', 'AZ-204: Developing Solutions for Microsoft Azure', 'Microsoft'],
   'security-plus-sy0-701': ['security-plus', 'SY0-701', 'Security+', 'CompTIA Security+ (SY0-701)', 'CompTIA'],
   az400: ['az400', 'AZ-400', 'Designing and Implementing Microsoft DevOps Solutions', 'AZ-400: Designing and Implementing Microsoft DevOps Solutions', 'Microsoft'],
   ai901: ['ai901', 'AI-901', 'Azure AI Fundamentals', 'Microsoft Azure AI Fundamentals', 'Microsoft'],
 };
 
-assert.equal(examDisplayMetadata.length, 4);
+assert.equal(examDisplayMetadata.length, 5);
 for (const [id, values] of Object.entries(expected)) {
   const metadata = getExamDisplayMetadata(id);
   assert.deepEqual(
@@ -31,6 +32,7 @@ for (const [id, values] of Object.entries(expected)) {
 }
 
 for (const alias of ['AZ204', 'AZ 204', 'az-204']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'az204');
+for (const alias of ['SC200', 'SC 200', 'sc-200']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'sc200');
 for (const alias of ['Security+', 'Security Plus', 'SY0701', 'securityplussy0701']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'security-plus-sy0-701');
 assert.equal(getExamDisplayLabel('opaque-private-key'), 'Exam', 'Unknown internal identities must not leak into UI fallbacks.');
 assert.equal(

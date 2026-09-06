@@ -1,5 +1,11 @@
 const definitions = [
   {
+    canonicalId: 'sc200', routeSlug: 'sc200', code: 'SC-200',
+    shortTitle: 'Microsoft Security Operations Analyst',
+    fullTitle: 'SC-200: Microsoft Security Operations Analyst', vendor: 'Microsoft',
+    aliases: ['SC 200'], internalAliases: [], searchAliases: ['Security Operations Analyst', 'Microsoft Sentinel'],
+  },
+  {
     canonicalId: 'az204',
     routeSlug: 'az204',
     code: 'AZ-204',

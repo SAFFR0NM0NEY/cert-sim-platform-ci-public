@@ -2,6 +2,7 @@
 // metadata. This module is safe for the browser: it contains composition and
 // timing facts only, never question identities, presentation, or scoring data.
 export const protectedProfileMetadata = Object.freeze({
+  sc200: Object.freeze({packageVersion:'1.0.0',profiles:Object.freeze([profile('sc200-full','Full',50,100,{canonicalFormCount:6})])}),
   az204: Object.freeze({
     packageVersion: '1.1.0',
     profiles: Object.freeze([

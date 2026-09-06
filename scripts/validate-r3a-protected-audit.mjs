@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { examRegistry } from '../src/exams/examRegistry.protected.js';
+import { liveVisibleExamConfigs } from '../src/exams/examRegistry.protected.js';
 import { loadAllProtectedHistory, partitionProtectedHistory, validateProtectedHistoryPage } from '../src/lib/protectedHistory.js';
 import { getAttemptKindLabel } from '../src/lib/attemptPurpose.js';
 
@@ -32,9 +32,9 @@ assert.throws(() => validateProtectedHistoryPage({ ...pages[0], returnedCount: 1
 assert.throws(() => validateProtectedHistoryPage({ ...pages[0], nextCursor: {} }), /invalid_history_cursor/);
 await assert.rejects(() => loadAllProtectedHistory({ listHistory: async ({ cursor }) => cursor ? { ...pages[1], items: [pages[0].items[0]] } : pages[0] }), /duplicate_history_item/);
 
-const profiles = examRegistry.flatMap((exam) => exam.strictBetaProfiles.map((profile) => ({ exam, profile })));
+const profiles = liveVisibleExamConfigs.flatMap((exam) => exam.strictBetaProfiles.map((profile) => ({ exam, profile })));
 assert.equal(profiles.length, 11);
-assert.deepEqual(Object.fromEntries(examRegistry.map((exam) => [exam.id, exam.strictBetaProfiles.length])), { az204: 4, 'security-plus-sy0-701': 2, az400: 3, ai901: 2 });
+assert.deepEqual(Object.fromEntries(liveVisibleExamConfigs.map((exam) => [exam.id, exam.strictBetaProfiles.length])), { az204: 4, 'security-plus-sy0-701': 2, az400: 3, ai901: 2 });
 for (const { exam, profile } of profiles) {
   assert.ok(profile.routeAction);
   assert.ok(profile.description);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { examRegistry } from '../src/exams/examRegistry.protected.js';
+import { liveVisibleExamConfigs } from '../src/exams/examRegistry.protected.js';
 import { protectedProfileMetadata } from '../src/exams/protectedProfileMetadata.js';
 
 const expected = {
@@ -25,7 +25,7 @@ const expected = {
 };
 
 let count = 0;
-for (const exam of examRegistry) {
+for (const exam of liveVisibleExamConfigs) {
   const published = protectedProfileMetadata[exam.id];
   assert.ok(published, `missing safe published metadata for ${exam.id}`);
   for (const profile of exam.strictBetaProfiles) {

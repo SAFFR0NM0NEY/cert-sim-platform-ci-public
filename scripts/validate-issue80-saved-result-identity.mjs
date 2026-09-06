@@ -6,7 +6,7 @@ import {
   getSavedResultExamLabel,
   UNKNOWN_EXAM_LABEL,
 } from '../src/lib/savedResultExamIdentity.js';
-import { examRegistry } from '../src/exams/examRegistry.protected.js';
+import { liveVisibleExamConfigs } from '../src/exams/examRegistry.protected.js';
 
 const page = await readFile(
   new URL('../src/protected/ProtectedSavedResultsPage.jsx', import.meta.url),
@@ -25,7 +25,7 @@ for (const [description, identity, expected] of fixtures) {
 }
 assert.equal(getSavedResultExamLabel('unidentified-historical-exam'), UNKNOWN_EXAM_LABEL);
 
-const filterOptions = getSavedResultExamFilterOptions(examRegistry);
+const filterOptions = getSavedResultExamFilterOptions(liveVisibleExamConfigs);
 assert.equal(filterOptions.length, 4);
 assert.deepEqual(
   filterOptions.map(({ label }) => label),

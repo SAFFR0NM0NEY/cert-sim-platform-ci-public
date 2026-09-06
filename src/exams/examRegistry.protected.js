@@ -18,6 +18,12 @@ const profile = (id, name, totalScoredQuestions, timeLimitMinutes, details = {})
 
 const definitions = [
   {
+    id:'sc200', lifecycle:EXAM_LIFECYCLES.draft, statusLabel:'Protected package candidate', statusNote:'Pending protected rollout validation.',
+    questionCount:300, domainCount:3, pbqCount:0, caseStudyCount:0, passingScore:700,
+    domainNames:['Manage a security operations environment','Respond to security incidents','Perform threat hunting'],
+    modes:[mode('sc200-protected-practice','SC-200 Practice')], profiles:withRouteActions('sc200',['full']),
+  },
+  {
     id: 'az204', lifecycle: EXAM_LIFECYCLES.nearRetirement,
     statusLabel: 'Near-retirement support', statusNote: 'AZ-204 retires July 31, 2026.',
     questionCount: 287, domainCount: 5, pbqCount: 0, caseStudyCount: 8, passingScore: 700,
@@ -112,7 +118,7 @@ function createContentFreeDefinition(item) {
   });
 }
 
-export const [az204ExamDefinition, securityPlusSy0701ExamDefinition, az400ExamDefinition, ai901ExamDefinition] = definitions;
+export const [sc200ExamDefinition, az204ExamDefinition, securityPlusSy0701ExamDefinition, az400ExamDefinition, ai901ExamDefinition] = definitions;
 export const examRegistry = definitions;
 export const activeExamConfigs = examRegistry.filter(isLiveVisibleExamConfig);
 export const liveVisibleExamConfigs = examRegistry.filter(isLiveVisibleExamConfig);

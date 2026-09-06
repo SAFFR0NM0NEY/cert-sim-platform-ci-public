@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { examRegistry } from '../exams/examRegistry.js';
+import { examRegistry, liveVisibleExamConfigs } from '../exams/examRegistry.js';
 import { getAttemptHistory } from '../utils/attemptHistory.js';
 import { createProtectedExamClient } from '../lib/protectedExamClient.js';
 import { appendUniqueHistory } from '../lib/historyPagination.js';
@@ -20,7 +20,7 @@ export default function ProtectedSavedResultsPage({ attemptId, onBackHome, onOpe
 
 function ProtectedResultList({ client, onBack, onOpenAccount, onOpenDetail, openWeakAreaPractice, weakAreaPracticeExamId, onStartWeakAreaPractice }) {
   const historical = useMemo(() => examRegistry.flatMap((exam) => getAttemptHistory(exam.id).records.map((record) => ({ ...record, registryExamId: exam.id }))), []);
-  const examFilterOptions = useMemo(() => getSavedResultExamFilterOptions(examRegistry), []);
+  const examFilterOptions = useMemo(() => getSavedResultExamFilterOptions(liveVisibleExamConfigs), []);
   const [remote, setRemote] = useState({ state: 'loading', items: [], message: '', nextCursor: null, totalCount: null });
   const [range, setRange] = useState('recent');
   const [examFilter, setExamFilter] = useState('');
