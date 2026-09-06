@@ -307,5 +307,5 @@ revoke execute on function exam_delivery.guard_live_assignment_v2_immutability()
   exam_delivery.get_review(uuid,uuid) from public,anon,authenticated,service_role;
 grant execute on function public.certsim_create_live_assignment_v2(jsonb) to authenticated;
 grant execute on function exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid),
-  exam_delivery.check_practice_item(uuid,uuid,uuid,integer,uuid),exam_delivery.submit_attempt_v2(uuid,uuid,uuid),
+  exam_delivery.check_practice_item(uuid,uuid,uuid,integer,uuid),
   exam_delivery.get_review(uuid,uuid) to service_role;
