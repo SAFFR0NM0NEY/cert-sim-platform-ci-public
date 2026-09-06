@@ -1,5 +1,5 @@
 begin;
-select plan(89);
+select plan(95);
 
 select has_function('exam_delivery','publish_package_v2',array['jsonb']);
 select has_function('exam_delivery','create_protected_assignment_v2',array['uuid','uuid','text','text','text','timestamptz','timestamptz','integer','text','text']);
@@ -12,6 +12,12 @@ select has_function('exam_delivery','score_package_v2_response_with_presentation
 select has_function('public','certsim_protected_create_assignment_v2',array['uuid','uuid','text','text','text','timestamptz','timestamptz','integer','text','text']);
 select ok(exam_delivery.package_v2_runtime_supported('certsim-ai901-weighted-generator-v2','certsim-ai901-exact-scorer-v2',null),'AI-901 v2 runtime pair is admitted');
 select ok(not exam_delivery.package_v2_runtime_supported('certsim-ai901-weighted-generator-v2','certsim-az204-exact-scorer-v1',null),'AI-901 generator cannot be paired with another scorer');
+select ok(exam_delivery.package_v2_runtime_supported('certsim-sc200-canonical-forms-v1','certsim-selected-response-partial-v1',null),'SC-200 reviewed runtime pair is admitted');
+select ok(not exam_delivery.package_v2_runtime_supported('certsim-sc200-canonical-forms-v1','certsim-az204-exact-scorer-v1',null),'SC-200 generator rejects another scorer');
+select ok(not exam_delivery.package_v2_runtime_supported('certsim-az204-grouped-generator-v1','certsim-selected-response-partial-v1',null),'SC-200 scorer rejects another generator');
+select ok(not exam_delivery.package_v2_runtime_supported('certsim-sc200-canonical-forms-v1','certsim-selected-response-partial-v1','unsupported-runtime'),'SC-200 pair rejects unsupported third capability');
+select ok(not exam_delivery.package_v2_runtime_supported('unknown-generator','unknown-scorer',null),'unknown runtime pair remains rejected');
+select ok(not has_function_privilege('authenticated','exam_delivery.package_v2_runtime_supported(text,text,text)','EXECUTE'),'browser role cannot invoke private runtime registry');
 
 select ok((select prosecdef from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='publish_package_v2'),'publisher is definer');
 select ok(not (select prosecdef from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_publish_package'),'publication wrapper is invoker');
