@@ -26,10 +26,11 @@ for (const [description, identity, expected] of fixtures) {
 assert.equal(getSavedResultExamLabel('unidentified-historical-exam'), UNKNOWN_EXAM_LABEL);
 
 const filterOptions = getSavedResultExamFilterOptions(liveVisibleExamConfigs);
-assert.equal(filterOptions.length, 4);
+assert.equal(filterOptions.length, 5);
 assert.deepEqual(
   filterOptions.map(({ label }) => label),
   [
+    'SC-200 — Microsoft Security Operations Analyst',
     'AZ-204 — Developing Solutions for Microsoft Azure',
     'SY0-701 — Security+',
     'AZ-400 — Designing and Implementing Microsoft DevOps Solutions',

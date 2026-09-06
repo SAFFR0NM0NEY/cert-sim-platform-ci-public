@@ -43,7 +43,7 @@ assert.match(assignmentService, /candidate\.assignmentId === assignmentId/);
 assert.match(assignmentService, /candidate\.profileKey === assignment\.profileId/);
 assert.match(panel, /assignment\.learnerAction\.label/);
 assert.match(panel, /assignment-action-unavailable/);
-assert.match(registry, /id:'sc200', lifecycle:EXAM_LIFECYCLES\.draft/);
+assert.match(registry, /id:'sc200', lifecycle:EXAM_LIFECYCLES\.productionReady/);
 assert.match(contract, /sc200:\s*'sc200'/);
 assert.match(contract, /sc200:\s*Object\.freeze\(\[\s*'sc200-full'/);
 assert.doesNotMatch(panel, /correctAnswer|explanation|protectedPayload/);

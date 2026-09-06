@@ -33,8 +33,8 @@ assert.throws(() => validateProtectedHistoryPage({ ...pages[0], nextCursor: {} }
 await assert.rejects(() => loadAllProtectedHistory({ listHistory: async ({ cursor }) => cursor ? { ...pages[1], items: [pages[0].items[0]] } : pages[0] }), /duplicate_history_item/);
 
 const profiles = liveVisibleExamConfigs.flatMap((exam) => exam.strictBetaProfiles.map((profile) => ({ exam, profile })));
-assert.equal(profiles.length, 11);
-assert.deepEqual(Object.fromEntries(liveVisibleExamConfigs.map((exam) => [exam.id, exam.strictBetaProfiles.length])), { az204: 4, 'security-plus-sy0-701': 2, az400: 3, ai901: 2 });
+assert.equal(profiles.length, 12);
+assert.deepEqual(Object.fromEntries(liveVisibleExamConfigs.map((exam) => [exam.id, exam.strictBetaProfiles.length])), { sc200: 1, az204: 4, 'security-plus-sy0-701': 2, az400: 3, ai901: 2 });
 for (const { exam, profile } of profiles) {
   assert.ok(profile.routeAction);
   assert.ok(profile.description);
@@ -44,7 +44,7 @@ for (const { exam, profile } of profiles) {
   const visible = [exam.statusLabel, exam.statusNote, exam.shortDescription, exam.longDescription, profile.name, profile.displayName, profile.description].join(' ');
   assert.doesNotMatch(visible, /\bbeta\b|trainer validation pending/i);
 }
-assert.equal(new Set(profiles.map(({ exam, profile }) => `${exam.slug}/${profile.routeAction}`)).size, 11);
+assert.equal(new Set(profiles.map(({ exam, profile }) => `${exam.slug}/${profile.routeAction}`)).size, 12);
 assert.match(app, /protectedDeliveryMode === DELIVERY_MODES\.protected[\s\S]*getStrictProfileRouteAction/);
 assert.match(app, /return routeAction \? `\$\{dashboardPath\}\/\$\{routeAction\}` : null/);
 

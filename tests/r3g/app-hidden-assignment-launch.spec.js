@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 const assignmentId = '15000000-0000-4000-8000-000000000001';
 const learnerId = '25000000-0000-4000-8000-000000000001';
 
-test('hidden SC-200 assignment exposes its assignment-aware start action', async ({ page }) => {
+test('SC-200 assignment exposes its assignment-aware start action through the standard route', async ({ page }) => {
   await page.addInitScript(({ learnerId }) => {
     localStorage.setItem('sb-127-auth-token', JSON.stringify({
       access_token: 'fixture-access-token', refresh_token: 'fixture-refresh-token', token_type: 'bearer',
@@ -56,5 +56,9 @@ test('hidden SC-200 assignment exposes its assignment-aware start action', async
   await expect(page.getByRole('button', { name: 'Start exam' })).toBeVisible();
 
   await page.goto('/exams');
-  await expect(page.getByText('SC-200: Microsoft Security Operations Analyst')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /SC-200 Microsoft Security Operations Analyst/ })).toBeVisible();
+
+  await page.goto('/exams/sc200/full');
+  await expect(page).toHaveURL('/exams/sc200/full');
+  await expect(page.getByRole('button', { name: 'Start exam' })).toBeVisible();
 });

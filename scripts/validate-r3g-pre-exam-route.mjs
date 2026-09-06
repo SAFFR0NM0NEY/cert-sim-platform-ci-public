@@ -12,7 +12,7 @@ const [app, runner, details, client, contract] = await Promise.all([
 ]);
 
 const profiles = liveVisibleExamConfigs.flatMap((exam) => exam.strictBetaProfiles.map((profile) => ({ exam, profile })));
-assert.equal(profiles.length, 11);
+assert.equal(profiles.length, 12);
 for (const { exam, profile } of profiles) {
   assert.ok(exam.title && profile.name);
   assert.ok(Number.isInteger(profile.totalScoredQuestions) && profile.totalScoredQuestions > 0);
