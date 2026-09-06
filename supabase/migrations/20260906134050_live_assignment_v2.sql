@@ -202,7 +202,12 @@ begin
   if not found or exam_delivery.normalize_exam_key(v_assignment.exam_key)<>v_key
     or nullif(v_assignment.profile_id,'') is null or v_assignment.profile_id<>p_profile_key then
     return jsonb_build_object('ok',false,'code','assignment_conflict'); end if;
-  if v_assignment.student_user_id<>p_actor_id then return jsonb_build_object('ok',false,'code','not_assigned'); end if;
+  if not ((v_assignment.student_user_id=p_actor_id) or (v_assignment.student_user_id is null
+    and v_assignment.group_id is not null and exists(select 1 from public.memberships m
+      where m.user_id=p_actor_id and m.status='active' and m.role='student'
+        and m.organisation_id=v_assignment.organisation_id and m.group_id=v_assignment.group_id
+        and (v_assignment.campus_id is null or m.campus_id=v_assignment.campus_id)))) then
+    return jsonb_build_object('ok',false,'code','not_assigned'); end if;
   if not coalesce((exam_delivery.check_eligibility_v2(p_actor_id,p_exam_key,p_profile_key)->>'eligible')::boolean,false) then
     return jsonb_build_object('ok',false,'code',exam_delivery.check_eligibility_v2(p_actor_id,p_exam_key,p_profile_key)->>'reasonCode'); end if;
   if v_assignment.contract_version='live-v2' then
