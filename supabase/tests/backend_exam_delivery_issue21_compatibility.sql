@@ -1,0 +1,38 @@
+begin;
+select plan(32);
+
+select has_table('exam_delivery','package_profile_defaults','private defaults exist');
+select has_table('exam_delivery','package_domain_compatibility','private domain mappings exist');
+select ok((select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='package_profile_defaults'),'default RLS enabled');
+select ok((select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='package_domain_compatibility'),'mapping RLS enabled');
+select is((select count(*)::integer from pg_policies where schemaname='exam_delivery' and tablename in ('package_profile_defaults','package_domain_compatibility')),0,'no browser policies');
+select ok(not has_table_privilege('authenticated','exam_delivery.package_profile_defaults','SELECT'),'browser cannot read defaults');
+select ok(not has_table_privilege('authenticated','exam_delivery.package_domain_compatibility','SELECT'),'browser cannot read mappings');
+select ok(not has_table_privilege('service_role','exam_delivery.package_profile_defaults','SELECT'),'Edge has no direct default access');
+select has_function('exam_delivery','resolve_package_profile_default',array['text','text','exam_delivery.attempt_purpose']);
+select has_function('exam_delivery','configure_package_successor',array['uuid','text','text','text','jsonb','jsonb']);
+select has_function('exam_delivery','discover_current_formal_attempt',array['uuid','text','text','exam_delivery.attempt_purpose','text','uuid']);
+select has_function('public','certsim_protected_discover_current_formal_attempt',array['uuid','text','text','text','text','uuid']);
+select has_function('exam_delivery','create_protected_assignment_current',array['uuid','uuid','text','text','timestamptz','timestamptz','integer','text','text']);
+select ok(not has_function_privilege('authenticated','exam_delivery.configure_package_successor(uuid,text,text,text,jsonb,jsonb)','EXECUTE'),'browser cannot configure successors');
+select ok(has_function_privilege('service_role','exam_delivery.configure_package_successor(uuid,text,text,text,jsonb,jsonb)','EXECUTE'),'service rollout may configure successors');
+select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=10s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='configure_package_successor'),'configuration is bounded and definer-owned');
+select ok((select pg_get_functiondef(p.oid) !~ 'published_at' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='practice_availability'),'availability does not infer newest publication');
+select ok((select pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='practice_availability'),'availability resolves explicit default');
+select ok((select pg_get_function_arguments(p.oid) !~ 'package_version' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'resume discovery has no version selector');
+select ok((select pg_get_functiondef(p.oid) ~ 'min\(a\.id::text\)::uuid' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'resume discovery selects its unique UUID through a PostgreSQL-supported aggregate');
+select ok((select pg_get_functiondef(p.oid) ~ 'assigned_assessment.*source_assignment_id is null' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'protected and direct assigned attempts remain discoverable without exposing a private assignment id');
+select ok((select pg_get_functiondef(p.oid) ~ 'attempt_conflict' and pg_get_functiondef(p.oid) ~ 'v_count' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='discover_current_formal_attempt'),'multiple current attempts fail closed');
+select ok((select pg_get_functiondef(p.oid) ~ 'pg_advisory_xact_lock' and pg_get_functiondef(p.oid) ~ 'learner_started_new_attempt' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='replace_current_practice_attempt'),'replacement is locked and audited');
+select ok((select pg_get_functiondef(p.oid) ~ 'package_domain_compatibility' and pg_get_functiondef(p.oid) ~ 'assigned_assessment.*self_directed_exam' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='learner_weak_domain_evidence'),'weak evidence uses explicit mappings and assessment purposes');
+select ok((select pg_get_functiondef(p.oid) ~ 'create_protected_assignment_v2' and pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='create_protected_assignment_current'),'new assignments use explicit assignment default');
+select ok(exists(select 1 from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='exam_delivery' and c.relname='package_domain_compatibility' and t.tgname='guard_package_domain_compatibility'),'cross-exam mappings are guarded');
+select ok((select pg_get_functiondef(p.oid) ~ 'packageVersion.*package_version.*canonicalFormId.*questionIds' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='replace_current_practice_attempt'),'replacement rejects authoritative selectors');
+select ok((select pg_get_functiondef(p.oid) ~ 'resolve_package_profile_default' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start resolves the explicit current assignment default');
+select ok((select pg_get_functiondef(p.oid) ~ '''assigned_assessment''::exam_delivery.attempt_purpose' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start requests the assignment-purpose default');
+select ok((select pg_get_functiondef(p.oid) !~ 'order by pv.published_at desc' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start no longer infers the newest publication');
+select ok((select p.prosecdef and p.proconfig @> array['search_path=""','statement_timeout=15s'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='start_assignment_attempt'),'assignment start preserves bounded definer security configuration');
+select ok(has_function_privilege('service_role','exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)','EXECUTE') and not has_function_privilege('authenticated','exam_delivery.start_assignment_attempt(uuid,text,text,uuid,uuid)','EXECUTE'),'assignment start retains its service-only execution boundary');
+
+select * from finish();
+rollback;

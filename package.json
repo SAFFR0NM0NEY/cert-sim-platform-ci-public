@@ -1,0 +1,53 @@
+{
+  "name": "cert-sim-platform",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "validate:issue59": "node scripts/validate-issue59-functional-recovery.mjs && node scripts/validate-protected-profile-metadata.mjs && node scripts/validate-weak-area-legacy-bridge.mjs",
+    "validate:exam-library": "node scripts/validate-exam-display-metadata.mjs && node scripts/validate-exam-library.mjs",
+    "validate:history-pagination": "node scripts/validate-history-pagination.mjs && node scripts/validate-staff-history-runner.mjs && node scripts/validate-p0-production-recovery.mjs",
+    "validate:purpose-aware-readiness": "node scripts/validate-purpose-aware-readiness.mjs",
+    "validate:r3e": "node scripts/validate-r3e-performance-scope.mjs && node scripts/validate-r3f-production-correctness.mjs && node scripts/validate-issue23-performance-dashboard.mjs",
+    "dev": "vite",
+    "test:r3g-browser": "playwright test && playwright test --config playwright.auth.config.js",
+    "validate": "node scripts/validate-issues76-80-staff-ux.mjs && node scripts/validate-issue80-saved-result-identity.mjs && npm run validate:protected-production-build && node scripts/validate-actions-cost-controls.mjs && npm run validate:publication && npm run validate:multi-exam && npm run validate:protected-frontend && node scripts/validate-issue65-untimed-practice.mjs && node scripts/validate-issue21-canonical-form-rotation.mjs && node scripts/validate-issue21-cross-version-compatibility.mjs && npm run validate:db-ci && npm run validate:db-operations && npm run validate:db-publication && npm run validate:db-assignment && npm run validate:edge && node scripts/validate-backend-exam-delivery-schema.mjs && node scripts/validate-browser-bank-retirement.mjs",
+    "validate:db-ci": "node scripts/validate-supabase-migration-ci.mjs",
+    "validate:db-operations": "node scripts/validate-protected-exam-delivery-operations.mjs",
+    "validate:db-publication": "node scripts/validate-protected-exam-publication.mjs",
+    "validate:db-assignment": "node scripts/validate-protected-exam-assignment.mjs",
+    "validate:edge": "node scripts/validate-protected-exam-edge-function.mjs",
+    "validate:protected-frontend": "node scripts/validate-g3b1-protected-practice.mjs && node scripts/validate-fixed-profile-counts.mjs && node scripts/validate-site-wide-maintenance.mjs && node scripts/validate-production-deployment-workflow.mjs && npm run validate:history-pagination && npm run validate:purpose-aware-readiness && npm run validate:r3e && npm run validate:exam-library && node scripts/validate-protected-access-history.mjs && node scripts/validate-issue25-learner-recovery.mjs && node scripts/validate-issue25-legacy-compatibility.mjs && node scripts/validate-production-authorized-access.mjs && node scripts/validate-r3a-protected-audit.mjs && node scripts/validate-r3d-dashboard-hotfix.mjs && node scripts/validate-r3g-pre-exam-route.mjs && node scripts/validate-issue38-ui-copy.mjs && node scripts/validate-issue26-bounded-data.mjs && node scripts/validate-issue26-p0-filter-performance.mjs && node scripts/validate-issue27-dashboard-routes.mjs && npm run validate:issue59",
+    "validate:publication": "node scripts/validate-backend-exam-publication.mjs && node scripts/validate-sc200-runtime-contract.mjs && node scripts/validate-issue83-partial-scorer.mjs && node scripts/validate-issue83-live-assignment-v2.mjs && node scripts/validate-issue83-assigned-launch.mjs",
+    "validate:multi-exam": "node scripts/validate-multi-exam-protected-foundation.mjs && node scripts/validate-external-protected-package.mjs && node scripts/validate-protected-pbq-runtime.mjs && node scripts/validate-generic-protected-lifecycle.mjs && node scripts/validate-package-v2-ordering-scoring.mjs && node scripts/validate-generic-protected-privileges.mjs",
+    "validate:protected-content": "node scripts/validate-protected-content-root.mjs",
+    "publish:protected": "node scripts/publish-protected-package.mjs",
+    "pilot:ai901": "node scripts/run-protected-ai901-pilot.mjs --run",
+    "pilot:protected": "node scripts/run-protected-ai901-pilot.mjs --run",
+    "pilot:practice": "node scripts/run-protected-practice-pilot.mjs",
+    "build": "vite build",
+    "build:maintenance": "node scripts/build-certsim-delivery-mode.mjs maintenance",
+    "build:protected": "node scripts/build-certsim-delivery-mode.mjs protected",
+    "build:protected:production": "node scripts/build-protected-production.mjs",
+    "deploy:protected:production": "node scripts/deploy-protected-production.mjs",
+    "validate:protected-production-build": "node scripts/test-protected-production-env.mjs",
+    "validate:protected-build": "npm run build:protected && node scripts/validate-protected-build-custody.mjs",
+    "validate:maintenance-build": "npm run build:maintenance && node scripts/validate-protected-build-custody.mjs maintenance",
+    "validate:delivery-builds": "npm run validate:maintenance-build && npm run validate:protected-build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@supabase/supabase-js": "^2.112.0",
+    "jspdf": "^4.2.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.5"
+  }
+}
