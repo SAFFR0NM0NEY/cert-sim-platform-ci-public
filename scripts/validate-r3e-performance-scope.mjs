@@ -41,7 +41,7 @@ assert.match(page, /scopedPerformance\.assignments[\s\S]*?label: name/);
 assert.match(page, /updateScopeFilter\('organisationId'/);
 assert.match(filterDraft, /organisationId: \['campusId', 'groupId', 'assignmentId', 'examKey'\]/);
 assert.match(scopeHook, /requestId !== requestRef\.current/);
-assert.match(scopeHook, /getTrainerScopePage\(selection/);
+assert.match(scopeHook, /getTrainerScopePage\(\{ \.\.\.selection, learnerCursor \}/);
 assert.match(scopeHook, /loadMoreAssignments/);
 assert.doesNotMatch(scopeHook, /pageCount > 1000/);
 assert.match(scopeHook, /existingIds/);

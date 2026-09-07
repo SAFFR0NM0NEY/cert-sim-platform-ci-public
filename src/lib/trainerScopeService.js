@@ -2,6 +2,7 @@ import { createProtectedExamClient } from './protectedExamClient.js';
 import { isSupabaseConfigured, supabase } from './supabaseClient.js';
 
 export const TRAINER_SCOPE_PAGE_SIZE = 50;
+export const TRAINER_LEARNER_PAGE_SIZE = 25;
 const scopeOptionsCache = new Map();
 
 if (supabase?.auth?.onAuthStateChange) {
@@ -37,7 +38,7 @@ export async function getTrainerScopePage(scope = {}, { signal } = {}) {
   try {
     const protectedScope = buildTrainerScopeRequest(scope);
     const payload = await createProtectedExamClient({ accessToken: token }).getStaffDashboardQuery(
-      { ...protectedScope, pageSize: TRAINER_SCOPE_PAGE_SIZE },
+      { ...protectedScope, pageSize: TRAINER_SCOPE_PAGE_SIZE, learnerPageSize: TRAINER_LEARNER_PAGE_SIZE },
       { signal },
     );
     return { ok: true, data: payload };
@@ -55,7 +56,7 @@ export function mergeAssignmentPages(current = [], incoming = []) {
 export function buildTrainerScopeRequest(scope = {}) {
   return Object.fromEntries([
     'organisationId', 'campusId', 'groupId', 'assignmentId', 'examKey',
-    'resultStatus', 'search', 'workflow', 'cursor',
+    'resultStatus', 'readinessStatus', 'search', 'workflow', 'cursor', 'learnerCursor',
   ].map((key) => [key, scope[key]]).filter(([, value]) => value !== '' && value !== null && value !== undefined));
 }
 

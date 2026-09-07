@@ -45,7 +45,7 @@ assert.match(historyMigration, /v_assignment is null/);
 const scopeHook = read('src/hooks/useTrainerScope.js');
 assert.match(scopeHook, /controllerRef\.current\?\.abort\(\)/);
 assert.match(scopeHook, /selection\.assignmentId[\s\S]*selection\.campusId[\s\S]*selection\.organisationId/);
-assert.match(page, /useTrainerScope\(\{[\s\S]*\.\.\.trainerFilters/);
+assert.match(page, /useTrainerScope\(\{[\s\S]*\.\.\.effectiveTrainerFilters/);
 assert.doesNotMatch(historyMigration, /update\s+exam_delivery\.attempts|delete\s+from\s+exam_delivery\.attempts/i);
 
 console.log(JSON.stringify({

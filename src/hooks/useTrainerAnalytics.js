@@ -9,6 +9,7 @@ export default function useTrainerAnalytics({
   completeScopeAnalytics = null,
   error = '',
   groups = [],
+  learnerPage = null,
   loading = false,
   results = [],
   students = [],
@@ -23,10 +24,10 @@ export default function useTrainerAnalytics({
         students,
       });
       return completeScopeAnalytics?.scopeComplete === true
-        ? applyAuthoritativeAnalytics(pageDerived, completeScopeAnalytics, students, groups, assignments)
+        ? applyAuthoritativeAnalytics(pageDerived, completeScopeAnalytics, students, groups, assignments, learnerPage)
         : pageDerived;
     },
-    [assignments, completeScopeAnalytics, groups, refreshVersion, results, students],
+    [assignments, completeScopeAnalytics, groups, learnerPage, refreshVersion, results, students],
   );
   const refreshAnalytics = useCallback(() => {
     setRefreshVersion((current) => current + 1);
@@ -49,8 +50,13 @@ export default function useTrainerAnalytics({
   };
 }
 
-export function applyAuthoritativeAnalytics(pageDerived, authoritative, students, groups, assignments) {
-  const studentById = new Map(students.map((student) => [student.userId, student]));
+export function applyAuthoritativeAnalytics(pageDerived, authoritative, students, groups, assignments, learnerPage = null) {
+  const pageItems = learnerPage?.items ?? [];
+  const studentById = new Map([...students, ...pageItems.map((item) => ({
+    membershipId: item.membershipId, userId: item.learnerId, displayName: item.displayName, email: item.email,
+    groupId: item.groupId, groupName: item.groupName, campusId: item.campusId,
+    campusName: item.campusName, status: item.status,
+  }))].map((student) => [student.userId, student]));
   const clientAssignmentById = new Map(assignments.map((assignment) => [assignment.id, assignment]));
   const effectiveAssignments = (authoritative.assignments ?? []).map((row) => ({
     ...row,
@@ -61,10 +67,19 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
     dueAt: clientAssignmentById.get(row.assignmentId)?.dueAt ?? row.dueAt,
     totalStudents: clientAssignmentById.get(row.assignmentId)?.totalStudents ?? row.totalStudents,
   }));
-  const authoritativeByLearner = groupRows(authoritative.learners ?? [], (row) => row.learnerId);
-  const assignmentLearnerByKey = new Map((authoritative.assignmentLearners ?? [])
-    .map((row) => [`${row.assignmentId}:${row.learnerId}`, row]));
-  const studentReadiness = (authoritative.learners ?? []).map((row) => {
+  const boundedLearners = pageItems.map((item) => ({
+    ...item.analytics,
+    learnerId: item.learnerId,
+    examKey: item.examKey,
+    serverReadinessStatus: item.readinessStatus,
+  }));
+  const authoritativeByLearner = groupRows(boundedLearners, (row) => row.learnerId);
+  const assignmentLearnerByKey = new Map(pageItems.flatMap((item) =>
+    (item.assignmentSummaries ?? []).map((summary) => [
+      `${summary.assignmentId}:${item.learnerId}`,
+      { ...summary, learnerId: item.learnerId },
+    ])));
+  const studentReadiness = boundedLearners.map((row) => {
     const student = studentById.get(row.learnerId) ?? {};
     const learnerRows = authoritativeByLearner.get(row.learnerId) ?? [];
     const learnerAssignments = effectiveAssignments.filter((assignment) => assignmentTargetsLearner(
@@ -96,6 +111,10 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
       hasDueSoonNotStarted: pendingAssignments.some((assignment) => isDueSoon(assignment.dueAt)),
       hasOverdueNotStarted: pendingAssignments.some((assignment) => isPastDue(assignment.dueAt)),
     });
+    if (row.serverReadinessStatus && readiness.status !== row.serverReadinessStatus) {
+      readiness.status = row.serverReadinessStatus;
+      readiness.label = getReadinessLabel(row.serverReadinessStatus);
+    }
     return {
       userId: row.learnerId,
       displayName: student.displayName || 'Learner',
@@ -153,15 +172,12 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
     const assignment = assignmentById.get(row.assignmentId) ?? {};
     const targetIds = new Set((assignment.targetStudents ?? []).map((student) => student.userId));
     if (assignment.studentUserId) targetIds.add(assignment.studentUserId);
-    const studentRows = studentReadiness.filter((learner) =>
-      (!targetIds.size || targetIds.has(learner.userId)) &&
-      (!assignment.examKey || learner.examScopeKey === normalizeExamScopeKey(assignment.examKey)));
-    const submittedRows = studentRows.filter((learner) =>
-      (assignmentLearnerByKey.get(`${row.assignmentId}:${learner.userId}`)?.assignmentAttemptCount ?? 0) > 0);
-    const readyCount = submittedRows.filter((learner) => learner.readinessStatus === 'ready').length;
-    const needsReviewCount = submittedRows.filter((learner) => ['needs-review', 'at-risk'].includes(learner.readinessStatus)).length;
-    const submittedCount = submittedRows.length;
-    const unsubmittedCount = Math.max(0, (assignment.totalStudents ?? targetIds.size) - submittedCount);
+    const studentRows = [];
+    const submittedRows = [];
+    const readyCount = row.readyCount ?? 0;
+    const needsReviewCount = row.needsReviewCount ?? 0;
+    const submittedCount = row.submittedCount ?? row.assessedLearnerCount ?? 0;
+    const unsubmittedCount = row.notStartedCount ?? Math.max(0, (assignment.totalStudents ?? targetIds.size) - submittedCount);
     return {
       assignmentId: row.assignmentId,
       examKey: assignment.examKey || '',
@@ -171,9 +187,9 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
       averageScore: row.averagePercentage == null ? null : row.averagePercentage * 10,
       needsReviewCount,
       readyCount,
-      completedButNotReadyCount: submittedRows.filter((learner) => learner.readinessStatus !== 'ready').length,
-      dueSoonCount: isDueSoon(assignment.dueAt) ? unsubmittedCount : 0,
-      overdueCount: isPastDue(assignment.dueAt) ? unsubmittedCount : 0,
+      completedButNotReadyCount: row.completedButNotReadyCount ?? Math.max(0, submittedCount - readyCount),
+      dueSoonCount: row.dueSoonCount ?? (isDueSoon(assignment.dueAt) ? unsubmittedCount : 0),
+      overdueCount: row.overdueCount ?? (isPastDue(assignment.dueAt) ? unsubmittedCount : 0),
       notStartedCount: unsubmittedCount,
       studentRows: studentRows.map((learner) => ({ ...learner,
         assignmentAttemptCount: assignmentLearnerByKey.get(`${row.assignmentId}:${learner.userId}`)?.assignmentAttemptCount ?? 0,
@@ -181,7 +197,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
           assignmentLearnerByKey.get(`${row.assignmentId}:${learner.userId}`)?.assignmentAttemptCount ?? 0,
           learner.readinessStatus),
       })),
-      commonWeakDomains: summarizeLearnerWeakDomains(submittedRows, 80),
+      commonWeakDomains: [],
     };
   });
   const assignmentReadinessByGroup = groupRows(assignmentReadiness, (row) => assignmentById.get(row.assignmentId)?.groupId);
@@ -194,16 +210,16 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
     const readyTotal = outcomes.reduce((total, assignment) => total + assignment.readyCount, 0);
     return {
       groupId: group.id, groupName: groupById.get(group.id)?.name || 'Unnamed group',
-      studentCount: groupStudents.length,
-      activeStudents: groupStudents.filter((student) => student.status === 'active').length,
-      studentsWithAttempts: row.assessedLearnerCount ?? 0,
-      studentsWithoutAttempts: Math.max(0, groupStudents.length - (row.assessedLearnerCount ?? 0)),
+      studentCount: row.studentCount ?? groupStudents.length,
+      activeStudents: row.activeStudents ?? groupStudents.filter((student) => student.status === 'active').length,
+      studentsWithAttempts: row.studentsWithAttempts ?? row.assessedLearnerCount ?? 0,
+      studentsWithoutAttempts: row.studentsWithoutAttempts ?? Math.max(0, groupStudents.length - (row.assessedLearnerCount ?? 0)),
       totalAttempts: row.assessmentCount ?? 0,
       averageScore: row.averagePercentage == null ? null : row.averagePercentage * 10,
       passRate: row.passRate ?? null,
       commonWeakDomains: toCommonWeakAreas(row.domains),
       completionRate: assignedTotal > 0 ? Math.min(100, (readyTotal / assignedTotal) * 100) : null,
-      readyStudents: readyTotal,
+      readyStudents: row.readyStudents ?? readyTotal,
     };
   }).filter((group) => group.studentCount > 0 || group.totalAttempts > 0);
   const domainPerformance = (authoritative.domains ?? []).map((row) => ({
@@ -219,22 +235,15 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
     rawEarnedPoints: row.rawEarnedPoints ?? null,
     rawMaximumPoints: row.rawMaximumPoints ?? null,
   }));
-  const activityByLearner = new Map();
-  (authoritative.learners ?? []).forEach((row) => {
-    const current = activityByLearner.get(row.learnerId) ?? { totalAttempts: 0, latestAttemptDate: '' };
-    current.totalAttempts += row.activityCount;
-    if ((row.latestActivity || '') > current.latestAttemptDate) current.latestAttemptDate = row.latestActivity || '';
-    activityByLearner.set(row.learnerId, current);
-  });
-  const activityRows = students.map((student) => ({ ...student, ...(activityByLearner.get(student.userId) ?? { totalAttempts: 0, latestAttemptDate: '' }) }));
-  const activeRows = activityRows.filter((row) => row.totalAttempts > 0);
+  const activity = authoritative.activitySummary ?? {};
   return {
     ...pageDerived,
     analyticsMode: 'server-authoritative-full-scope',
     activityAnalytics: {
-      mostActiveStudents: [...activeRows].sort((a, b) => b.totalAttempts - a.totalAttempts).slice(0, 5),
-      leastActiveStudents: [...activeRows].sort((a, b) => a.totalAttempts - b.totalAttempts).slice(0, 5),
-      studentsWithNoAttempts: activityRows.filter((row) => row.totalAttempts === 0).slice(0, 8),
+      mostActiveStudents: activity.mostActive ?? [],
+      leastActiveStudents: activity.leastActive ?? [],
+      studentsWithNoAttempts: activity.noAttemptPreview ?? [],
+      studentsWithNoAttemptsCount: activity.noAttemptCount ?? 0,
     },
     assignmentReadiness,
     examAnalytics,
@@ -246,7 +255,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
     },
     readinessSummary: pageDerived.readinessSummary.map((entry) => ({
       ...entry,
-      count: studentReadiness.filter((row) => row.readinessStatus === entry.id).length,
+      count: authoritative.readinessSummary?.[entry.id] ?? 0,
     })),
     totals: {
       ...pageDerived.totals,
@@ -327,6 +336,17 @@ function getAssignmentStatus(assignment, attemptCount, readinessStatus) {
   if (isPastDue(assignment.dueAt)) return { status: 'overdue', label: 'Overdue - no attempt submitted' };
   if (isDueSoon(assignment.dueAt)) return { status: 'due-soon', label: 'Due soon' };
   return { status: 'not-started', label: 'Not started' };
+}
+
+function getReadinessLabel(status) {
+  return ({
+    ready: 'Ready',
+    'almost-ready': 'Almost ready',
+    'needs-review': 'Needs review',
+    'at-risk': 'At risk',
+    'insufficient-data': 'Insufficient data',
+    'not-started': 'Not started',
+  })[status] ?? 'Needs review';
 }
 
 function isPastDue(value) {
