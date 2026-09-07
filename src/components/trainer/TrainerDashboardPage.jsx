@@ -75,7 +75,7 @@ export default function TrainerDashboardPage({
     sectionErrors,
     selectedResult,
     setResultsRange,
-    students,
+    students: dashboardStudents,
     clearSelectedResult,
     updateStudentDisplayName,
   } = dashboard;
@@ -152,13 +152,27 @@ export default function TrainerDashboardPage({
     setTrainerFilters((current) => ({ ...current, organisationId }));
     setDraftFilters((current) => ({ ...current, organisationId }));
   }, [scopeOptions.loading, scopeOptions.organisations, scopeOptions.selection?.organisationId, trainerFilters.organisationId]);
+  const debouncedSearch = useDebouncedValue(trainerFilters.search, 200);
+  const effectiveTrainerFilters = useMemo(
+    () => ({ ...trainerFilters, search: debouncedSearch }),
+    [debouncedSearch, trainerFilters],
+  );
   const scopedPerformance = useTrainerScope({
-    ...trainerFilters,
+    ...effectiveTrainerFilters,
     workflow: activeSection === 'detail' ? 'results' : activeSection,
   }, {
     enabled: ['overview', 'analytics', 'assignments', 'students', 'results', 'detail'].includes(activeSection)
       && Boolean(trainerFilters.organisationId),
   });
+  const students = useMemo(
+    () => [...new Map((scopedPerformance.learnerPage?.items ?? []).map((item) => [item.learnerId, {
+      membershipId: item.membershipId, userId: item.learnerId, displayName: item.displayName, email: item.email,
+      groupId: item.groupId ?? '', groupName: item.groupName ?? '',
+      campusId: item.campusId ?? '', campusName: item.campusName ?? '',
+      status: item.status, organisationId: trainerFilters.organisationId,
+    }])).values()],
+    [scopedPerformance.learnerPage?.items, trainerFilters.organisationId],
+  );
   const effectiveOrganisationId = trainerFilters.organisationId || scopedPerformance.selection?.organisationId || '';
   const effectiveCampusId = trainerFilters.campusId || scopedPerformance.selection?.campusId || '';
   const requiresOrganisationSelection = ['platform_owner', 'developer'].includes(scopedPerformance.role) && !effectiveOrganisationId;
@@ -181,11 +195,6 @@ export default function TrainerDashboardPage({
   const selectedAssignment = useMemo(
     () => protectedAssignments.find((assignment) => assignment.assignmentId === trainerFilters.assignmentId) ?? null,
     [protectedAssignments, trainerFilters.assignmentId],
-  );
-  const debouncedSearch = useDebouncedValue(trainerFilters.search, 200);
-  const effectiveTrainerFilters = useMemo(
-    () => ({ ...trainerFilters, search: debouncedSearch }),
-    [debouncedSearch, trainerFilters],
   );
   const filteredAssignments = useMemo(
     () =>
@@ -212,11 +221,9 @@ export default function TrainerDashboardPage({
       students.filter((student) =>
         !requiresOrganisationSelection &&
         (!effectiveOrganisationId || student.organisationId === effectiveOrganisationId) &&
-        (!effectiveCampusId || student.campusId === effectiveCampusId) &&
-        (!effectiveOrganisationId || scopedPerformance.learnerIds.includes(student.userId)) &&
-        matchesTrainerStudentFilters(student, effectiveTrainerFilters),
+        (!effectiveCampusId || student.campusId === effectiveCampusId),
       ),
-    [effectiveCampusId, effectiveOrganisationId, effectiveTrainerFilters, requiresOrganisationSelection, scopedPerformance.learnerIds, students],
+    [effectiveCampusId, effectiveOrganisationId, requiresOrganisationSelection, students],
   );
   const scopedResults = useMemo(
     () => requiresOrganisationSelection || !effectiveOrganisationId
@@ -254,6 +261,7 @@ export default function TrainerDashboardPage({
     completeScopeAnalytics: scopedPerformance.analytics,
     error: error || assignmentError || progressError,
     groups: filteredGroups,
+    learnerPage: scopedPerformance.learnerPage,
     loading: dashboardLoading || assignmentLoading || progressLoading,
     results: assessmentResults,
     students: filteredStudents,
@@ -363,7 +371,7 @@ export default function TrainerDashboardPage({
         <>
           <section className="management-summary-grid" aria-label="Trainer dashboard summary">
             <SummaryTile label="Groups / Classes" value={dashboardSummaryValue({ loading: dashboardLoading, error: sectionErrors?.groups, value: groups.length })} />
-            <SummaryTile label="Assigned students" value={dashboardSummaryValue({ loading: dashboardLoading, error: sectionErrors?.students, value: students.length })} />
+            <SummaryTile label="Assigned students" value={dashboardSummaryValue({ loading: scopedPerformance.loading, error: scopedPerformance.error, value: scopedPerformance.analytics?.totals?.visibleLearners ?? dashboardStudents.length })} />
             <SummaryTile label="Scoped assignment results" value={dashboardSummaryValue({ loading: scopedPerformance.loading, error: scopedPerformance.error, value: scopedPerformance.history?.totalCount ?? 0 })} />
             <SummaryTile label="Assignments" value={dashboardSummaryValue({ loading: assignmentLoading || progressLoading, error: assignmentError || progressError, value: trackedAssignments.length })} />
             <SummaryTile label="Access role" value={getRoleLabel(primaryRole)} />
@@ -547,6 +555,7 @@ export default function TrainerDashboardPage({
             onOpenResult={handleOpenResultDetail}
             onOpenStudentReport={onOpenStudentReport}
           />
+          <LearnerPageControls scope={scopedPerformance} />
         </AnalyticsCard>
 
         <section className="analytics-grid">
@@ -835,7 +844,7 @@ export default function TrainerDashboardPage({
               </thead>
               <tbody>
                 {filteredStudents.map((student) => (
-                  <tr key={student.membershipId}>
+                  <tr key={student.userId}>
                     <td className="profile-cell">
                       <strong>{student.displayName}</strong>
                       <span className="table-subtext">
@@ -861,6 +870,7 @@ export default function TrainerDashboardPage({
             </table>
           </div>
         ) : null}
+        <LearnerPageControls scope={scopedPerformance} />
       </ManagementSection>
       )}
 
@@ -1037,14 +1047,8 @@ export default function TrainerDashboardPage({
     await Promise.all([refresh(), refreshAssignments(), refreshProgress()]);
   }
 
-  async function handleOpenResultDetail(attemptId) {
-    const result = await loadResultDetail(attemptId);
-
-    if (result.ok) {
-      onNavigateSection?.('detail', attemptId);
-    }
-
-    return result;
+  function handleOpenResultDetail(attemptId) {
+    onNavigateSection?.('detail', attemptId);
   }
 
   async function handleStudentDisplaySubmit(event) {
@@ -1108,6 +1112,36 @@ function SummaryTile({ label, value }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
+  );
+}
+
+function LearnerPageControls({ scope }) {
+  const page = scope.learnerPage;
+  if (!page || page.totalCount === 0) return null;
+  return (
+    <nav className="management-actions no-print" aria-label="Learner pages">
+      <span>
+        Showing {page.returnedCount} of {page.filteredCount} matching learner rows
+        {page.filteredCount !== page.totalCount ? ` (${page.totalCount} learners in scope)` : ''}
+      </span>
+      <button
+        className="secondary-button compact-button"
+        type="button"
+        disabled={!scope.hasPreviousLearners || scope.loading}
+        onClick={scope.loadPreviousLearners}
+      >
+        Previous
+      </button>
+      <span>Page {scope.learnerPageNumber}</span>
+      <button
+        className="secondary-button compact-button"
+        type="button"
+        disabled={!scope.hasNextLearners || scope.loading}
+        onClick={scope.loadNextLearners}
+      >
+        Next
+      </button>
+    </nav>
   );
 }
 

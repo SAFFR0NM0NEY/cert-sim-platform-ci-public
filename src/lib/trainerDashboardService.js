@@ -129,10 +129,9 @@ export async function getTrainerDashboardSnapshot({ cursor = null } = {}) {
     return authResult;
   }
 
-  const [groupsResult, studentsResult] = await Promise.all([
-    readTrainerGroups(),
-    readTrainerStudents(),
-  ]);
+  const [groupsResult, studentsResult] = IS_PROTECTED_DELIVERY
+    ? [await readTrainerGroups(), createOkResult([])]
+    : await Promise.all([readTrainerGroups(), readTrainerStudents()]);
   // Protected institutional analytics comes from the assignment-scoped DTO.
   // Do not make the older global staff readers a hidden prerequisite for the
   // dashboard or assignment lists; legacy/unattributed history stays separate.

@@ -26,13 +26,14 @@ const ORIGIN = "http://localhost:5173";
 const EMPTY_STAFF_ANALYTICS = {
   scopeComplete: true,
   totals: { visibleLearners: 0, learnersWithActivity: 0, learnersWithoutActivity: 0, historicalActivity: 0, protectedAssessments: 0, legacyHistorical: 0 },
-  learners: [],
   exams: [],
   groups: [],
   assignments: [],
-  assignmentLearners: [],
   domains: [],
+  readinessSummary: { ready: 0, "almost-ready": 0, "needs-review": 0, "at-risk": 0, "insufficient-data": 0, "not-started": 0 },
+  activitySummary: { mostActive: [], leastActive: [], noAttemptCount: 0, noAttemptPreview: [] },
 };
+const EMPTY_LEARNER_PAGE = { items: [], returnedCount: 0, totalCount: 0, filteredCount: 0, pageSize: 25, nextCursor: null, complete: true };
 
 Deno.test("practice availability exposes only server-confirmed objective aggregates", () => {
   const mapped = mapPracticeAvailability({
@@ -73,22 +74,19 @@ Deno.test("staff analytics mapper accepts only complete bounded public aggregate
   const analytics = {
     scopeComplete: true,
     totals: { visibleLearners: 2, learnersWithActivity: 1, learnersWithoutActivity: 1, historicalActivity: 3, protectedAssessments: 2, legacyHistorical: 1 },
-    learners: [
-      { learnerId: ACTOR, examKey: "az204", activityCount: "3", assessmentCount: "2", historicalCount: "1", assessedLearnerCount: "1", needsReviewCount: "1", passedCount: "1", latestActivity: "2026-09-01T00:00:00Z", latestAttemptId: ATTEMPT, latestPercentage: "80", bestPercentage: "90", lowestPercentage: "70", averagePercentage: "80", passRate: "50", domains: [{ domainKey: "implement", averagePercentage: "65", sampleCount: "2", rawEarnedPoints: "13", rawMaximumPoints: "20" }], protectedPayload: "blocked" },
-      { learnerId: "11000000-0000-4000-8000-000000000002", examKey: "ai901", activityCount: "0", assessmentCount: "0", historicalCount: "0", assessedLearnerCount: "1", needsReviewCount: "0", passedCount: "0", latestActivity: null, latestAttemptId: null, latestPercentage: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null, domains: [] },
-    ],
     exams: [{ examKey: "az204", activityCount: "3", assessmentCount: "2", historicalCount: "1", assessedLearnerCount: "1", needsReviewCount: "1", passedCount: "1", latestActivity: "2026-09-01T00:00:00Z", bestPercentage: "90", lowestPercentage: "70", averagePercentage: "80", passRate: "50" }],
     groups: [{ groupId: ACTOR, assessmentCount: "2", assessedLearnerCount: "1", averagePercentage: "80", passRate: "50", domains: [{ examKey: "az204", domainKey: "implement", sampleCount: "2", studentCount: "1", weakCount: "1", averagePercentage: "65", rawEarnedPoints: "13", rawMaximumPoints: "20" }] }],
     assignments: [{ assignmentId: ATTEMPT, examKey: "az204", groupId: ACTOR, dueAt: null, totalStudents: "1", assessmentCount: "2", assessedLearnerCount: "1", needsReviewCount: "1", averagePercentage: "80", passRate: "50" }],
-    assignmentLearners: [{ assignmentId: ATTEMPT, learnerId: ACTOR, assignmentAttemptCount: "2", latestAssignmentActivity: "2026-09-01T00:00:00Z", latestAssignmentAttemptId: ATTEMPT }],
     domains: [{ examKey: "az204", domainKey: "implement", sampleCount: "2", studentCount: "1", weakCount: "1", averagePercentage: "65", rawEarnedPoints: "13", rawMaximumPoints: "20" }],
+    readinessSummary: { ready: 1, "almost-ready": 0, "needs-review": 0, "at-risk": 0, "insufficient-data": 1, "not-started": 0 },
+    activitySummary: { mostActive: [{ learner_id: ACTOR, display_name: "Learner", totalAttempts: "3", latestAttemptDate: "2026-09-01T00:00:00Z" }], leastActive: [], noAttemptCount: "1", noAttemptPreview: [] },
   };
   const query = mapStaffDashboardQuery({
     role: "trainer",
     workflow: "overview",
     selection: { organisationId: ACTOR, campusId: null, groupId: null, assignmentId: null },
     assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 },
-    learnerIds: [ACTOR],
+    learnerPage: { ...EMPTY_LEARNER_PAGE, returnedCount: 1, totalCount: 2, filteredCount: 2, nextCursor: "cursor", complete: false, items: [{ membershipId: ATTEMPT, learnerId: ACTOR, displayName: "Learner", email: "learner@example.invalid", groupId: null, groupName: "", campusId: null, campusName: "", status: "active", examKey: "az204", readinessStatus: "insufficient-data", assignmentSummaries: [{ assignmentId: ATTEMPT, assignmentAttemptCount: "2", protectedPayload: "blocked" }], analytics: { learnerId: ACTOR, examKey: "az204", activityCount: "3", assessmentCount: "2", historicalCount: "1", needsReviewCount: "1", passedCount: "1", latestActivity: "2026-09-01T00:00:00Z", latestAttemptId: ATTEMPT, latestPercentage: "80", bestPercentage: "90", lowestPercentage: "70", averagePercentage: "80", passRate: "50", domains: [{ domainKey: "implement", averagePercentage: "65", sampleCount: "2", rawEarnedPoints: "13", rawMaximumPoints: "20" }], protectedPayload: "blocked" } }] },
     history: {
       items: [
         { attemptId: ATTEMPT, learnerId: ACTOR, assignmentId: null, examKey: "az204", packageVersion: "1.0.0", profileKey: "full", purpose: "self_directed_exam", analyticsEligible: true, completedAt: "2026-09-01T00:00:00Z", serverAuthoritative: true, source: "protected" },
@@ -103,24 +101,28 @@ Deno.test("staff analytics mapper accepts only complete bounded public aggregate
   });
   const mapped = query.analytics as Record<string, unknown>;
   assertEquals(mapped.scopeComplete, true);
-  assertEquals((mapped.learners as Array<Record<string, unknown>>)[0].activityCount, 3);
   assertEquals((mapped.exams as Array<Record<string, unknown>>)[0].lowestPercentage, 70);
   assertEquals((mapped.exams as Array<Record<string, unknown>>)[0].latestPercentage, undefined);
-  assertEquals((mapped.learners as Array<Record<string, unknown>>)[1].latestPercentage, null);
-  assertEquals((mapped.learners as Array<Record<string, unknown>>)[0].protectedPayload, undefined);
-  assertEquals((mapped.learners as Array<Record<string, unknown>>)[0].latestAttemptId, ATTEMPT);
-  assertEquals(((mapped.learners as Array<Record<string, unknown>>)[0].domains as Array<Record<string, unknown>>)[0].rawEarnedPoints, 13);
+  const learnerPage = query.learnerPage as Record<string, unknown>;
+  const learner = (learnerPage.items as Array<Record<string, unknown>>)[0];
+  assertEquals(learner.membershipId, ATTEMPT);
+  assertEquals((learner.assignmentSummaries as Array<Record<string, unknown>>)[0], { assignmentId: ATTEMPT, assignmentAttemptCount: 2 });
+  assertEquals((learner.analytics as Record<string, unknown>).latestAttemptId, ATTEMPT);
+  assertEquals((learner.analytics as Record<string, unknown>).protectedPayload, undefined);
   assertEquals((mapped.domains as Array<Record<string, unknown>>)[0].rawMaximumPoints, 20);
-  assertEquals((mapped.assignmentLearners as Array<Record<string, unknown>>)[0].assignmentAttemptCount, 2);
   assertEquals((mapped.assignments as Array<Record<string, unknown>>)[0].totalStudents, 1);
   assertEquals((mapped.assignments as Array<Record<string, unknown>>)[0].examKey, "az204");
+});
+Deno.test("bounded learner pages reject malformed pagination and learner rows", () => {
+  assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "students", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: { items: [], returnedCount: 0, totalCount: 1, pageSize: 25, nextCursor: null, complete: true }, history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS }), SafeError);
+  assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "students", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: { ...EMPTY_LEARNER_PAGE, returnedCount: 1, totalCount: 1, filteredCount: 1, items: [{ learnerId: ACTOR, displayName: "Learner", email: "learner@example.invalid", groupId: null, campusId: null, status: "active", examKey: "az204", readinessStatus: "ready", analytics: {} }] }, history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS }), SafeError);
+  assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "students", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: { ...EMPTY_LEARNER_PAGE, nextCursor: 7 }, history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS }), SafeError);
 });
 Deno.test("staff analytics mapper fails closed on missing or malformed rows", () => {
   const totals = { visibleLearners: 0, learnersWithActivity: 0, learnersWithoutActivity: 0, historicalActivity: 0, protectedAssessments: 0, legacyHistorical: 0 };
   assertThrows(() => mapStaffAnalytics({ scopeComplete: true, totals, exams: [] }), SafeError);
-  assertThrows(() => mapStaffAnalytics({ scopeComplete: true, totals, learners: [], exams: [{ examKey: "az204", activityCount: -1, assessmentCount: 0, historicalCount: 0, assessedLearnerCount: 0, needsReviewCount: 0, latestActivity: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null }] }), SafeError);
-  assertThrows(() => mapStaffAnalytics({ scopeComplete: true, totals, learners: [], exams: [{ examKey: "az204", activityCount: "not-a-count", assessmentCount: 0, historicalCount: 0, assessedLearnerCount: 0, needsReviewCount: 0, latestActivity: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null }] }), SafeError);
-  assertThrows(() => mapStaffAnalytics({ scopeComplete: true, totals, learners: [{ learnerId: ACTOR, examKey: "az204", activityCount: 0, assessmentCount: 0, historicalCount: 0, assessedLearnerCount: 1, needsReviewCount: 0, passedCount: 0, latestActivity: null, latestAttemptId: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null, domains: [] }], exams: [], groups: [], assignments: [], assignmentLearners: [], domains: [] }), SafeError);
+  assertThrows(() => mapStaffAnalytics({ ...EMPTY_STAFF_ANALYTICS, totals, exams: [{ examKey: "az204", activityCount: -1, assessmentCount: 0, historicalCount: 0, assessedLearnerCount: 0, needsReviewCount: 0, latestActivity: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null }] }), SafeError);
+  assertThrows(() => mapStaffAnalytics({ ...EMPTY_STAFF_ANALYTICS, totals, exams: [{ examKey: "az204", activityCount: "not-a-count", assessmentCount: 0, historicalCount: 0, assessedLearnerCount: 0, needsReviewCount: 0, latestActivity: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null }] }), SafeError);
 });
 Deno.test("staff dashboard scope mapper is content-free and fail-closed", () => {
   const assignment = "15000000-0000-4000-8000-000000000001";
@@ -150,10 +152,10 @@ Deno.test("staff filter options and bounded query DTOs stay minimal and fail clo
   const assignment = "15000000-0000-4000-8000-000000000001";
   const options = mapStaffScopeOptions({ role: "trainer", locks: { organisation: true, campus: false }, selection: { organisationId: ACTOR }, organisations: [{ id: ACTOR, name: "Org" }], campuses: [], groups: [], assignments: [{ id: assignment, name: "Assignment", organisationId: ACTOR, campusId: null, groupId: null, examKey: "az204", status: "active", hidden: "blocked" }], exams: [{ id: "az204", name: "az204" }] });
   assertEquals((options.assignments as Array<Record<string, unknown>>)[0].hidden, undefined);
-  const query = mapStaffDashboardQuery({ role: "trainer", workflow: "results", selection: { organisationId: ACTOR, campusId: null, groupId: null, assignmentId: null }, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerIds: [], history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS });
+  const query = mapStaffDashboardQuery({ role: "trainer", workflow: "results", selection: { organisationId: ACTOR, campusId: null, groupId: null, assignmentId: null }, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: EMPTY_LEARNER_PAGE, history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS });
   assertEquals(query.workflow, "results");
   assertEquals((query.history as Record<string, unknown>).nextCursor, null);
-  assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "results", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerIds: [], history: { items: [], totalCount: 0, completedCount: 0, nextCursor: null } }), SafeError);
+  assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "results", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: EMPTY_LEARNER_PAGE, history: { items: [], totalCount: 0, completedCount: 0, nextCursor: null } }), SafeError);
   assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "results", selection: {}, assignmentPage: { items: [], nextCursor: 7, complete: true, returnedCount: 0, totalCount: 0 }, learnerIds: [], history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null } }), SafeError);
   assertThrows(() => mapStaffScopeOptions({ role: "trainer", organisations: [], campuses: [], groups: [], assignments: [], exams: [{ id: "", name: "bad" }] }), SafeError);
 });

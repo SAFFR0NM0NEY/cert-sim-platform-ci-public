@@ -7,7 +7,7 @@ import {
 } from '../lib/trainerScopeService.js';
 
 const emptyScope = {
-  organisations: [], campuses: [], groups: [], assignments: [], learnerIds: [], history: null,
+  organisations: [], campuses: [], groups: [], assignments: [], learnerPage: null, history: null,
   locks: { organisation: false, campus: false }, selection: {}, role: '',
 };
 
@@ -17,6 +17,8 @@ export default function useTrainerScope(selection = {}, { enabled = true } = {})
   const [error, setError] = useState('');
   const [assignmentNextCursor, setAssignmentNextCursor] = useState(null);
   const [historyNextCursor, setHistoryNextCursor] = useState(null);
+  const [learnerCursor, setLearnerCursor] = useState(null);
+  const [learnerCursorHistory, setLearnerCursorHistory] = useState([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const requestRef = useRef(0);
   const controllerRef = useRef(null);
@@ -29,7 +31,7 @@ export default function useTrainerScope(selection = {}, { enabled = true } = {})
     controllerRef.current = controller;
     setLoading(true);
     setError('');
-    const result = await getTrainerScopePage(selection, { signal: controller.signal });
+    const result = await getTrainerScopePage({ ...selection, learnerCursor }, { signal: controller.signal });
       if (requestId !== requestRef.current || controller.signal.aborted) return { ok: false, reason: 'stale_request' };
       if (!result.ok) {
         setError(result.message);
@@ -46,14 +48,19 @@ export default function useTrainerScope(selection = {}, { enabled = true } = {})
       setState({
         ...result.data,
         assignments: pageItems,
-        learnerIds: result.data?.learnerIds ?? [],
       });
       setAssignmentNextCursor(result.data.assignmentPage?.nextCursor ?? null);
       setHistoryNextCursor(result.data.history?.nextCursor ?? null);
       setLoading(false);
     }
     return { ok: true };
-  }, [enabled, selection.assignmentId, selection.campusId, selection.examKey, selection.groupId, selection.organisationId, selection.resultStatus, selection.search, selection.workflow]);
+  }, [enabled, learnerCursor, selection.assignmentId, selection.campusId, selection.examKey, selection.groupId, selection.organisationId, selection.readinessStatus, selection.resultStatus, selection.search, selection.workflow]);
+
+  useEffect(() => {
+    setLearnerCursor(null);
+    setLearnerCursorHistory([]);
+  }, [selection.assignmentId, selection.campusId, selection.examKey, selection.groupId,
+    selection.organisationId, selection.readinessStatus, selection.resultStatus, selection.search, selection.workflow]);
 
   useEffect(() => {
     if (enabled) refresh();
@@ -127,6 +134,22 @@ export default function useTrainerScope(selection = {}, { enabled = true } = {})
     return { ok: true };
   }, [historyNextCursor, loadingMore, selection, state.history]);
 
+  const loadNextLearners = useCallback(() => {
+    const nextCursor = state.learnerPage?.nextCursor;
+    if (!nextCursor || nextCursor === learnerCursor) return { ok: false, reason: 'no_more_learners' };
+    setLearnerCursorHistory((current) => [...current, learnerCursor]);
+    setLearnerCursor(nextCursor);
+    return { ok: true };
+  }, [learnerCursor, state.learnerPage?.nextCursor]);
+
+  const loadPreviousLearners = useCallback(() => {
+    if (learnerCursorHistory.length === 0) return { ok: false, reason: 'first_page' };
+    const previous = learnerCursorHistory.at(-1) ?? null;
+    setLearnerCursorHistory((current) => current.slice(0, -1));
+    setLearnerCursor(previous);
+    return { ok: true };
+  }, [learnerCursorHistory]);
+
   return {
     ...state,
     loading,
@@ -134,8 +157,13 @@ export default function useTrainerScope(selection = {}, { enabled = true } = {})
     error,
     hasMoreAssignments: Boolean(assignmentNextCursor),
     hasMoreHistory: Boolean(historyNextCursor),
+    hasNextLearners: Boolean(state.learnerPage?.nextCursor),
+    hasPreviousLearners: learnerCursorHistory.length > 0,
+    learnerPageNumber: learnerCursorHistory.length + 1,
     loadMoreAssignments,
     loadMoreHistory,
+    loadNextLearners,
+    loadPreviousLearners,
     refresh,
   };
 }

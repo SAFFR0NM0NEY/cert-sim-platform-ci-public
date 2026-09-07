@@ -62,7 +62,7 @@ assert.equal(progress.progress.totalSavedAttempts, 75);
 assert.equal(progress.examProgress[0].scopedAttemptCount, 75);
 assert.equal(progress.examProgress[0].latestAttemptId, 'latest');
 
-assert.match(trainerScope, /getTrainerScopePage\(selection/);
+assert.match(trainerScope, /getTrainerScopePage\(\{ \.\.\.selection, learnerCursor \}/);
 assert.match(trainerScope, /loadMoreAssignments/);
 assert.doesNotMatch(trainerScope, /pageCount > 1000|do \{/);
 assert.match(trainerPage, /Load more assignments/);

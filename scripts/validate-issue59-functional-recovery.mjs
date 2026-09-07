@@ -279,7 +279,12 @@ const aggregate = applyAuthoritativeAnalytics({ readinessSummary: [
   assignments: [{ assignmentId: 'assignment-1', assessmentCount: 75, assessedLearnerCount: 1, averagePercentage: 88, passRate: 100, needsReviewCount: 0 }],
   assignmentLearners: [{ assignmentId: 'assignment-1', learnerId: 'learner-1', assignmentAttemptCount: 75 }],
   domains: [{ examKey: 'az204', domainKey: 'compute', sampleCount: 75, studentCount: 0, weakCount: 0, averagePercentage: 82 }],
-}, [{ userId: 'learner-1', groupId: 'group-1', status: 'active' }], [{ id: 'group-1', name: 'G' }], [{ id: 'assignment-1', examKey: 'az204', totalStudents: 1 }]);
+}, [{ userId: 'learner-1', groupId: 'group-1', status: 'active' }], [{ id: 'group-1', name: 'G' }], [{ id: 'assignment-1', examKey: 'az204', totalStudents: 1 }], {
+  items: [{
+    learnerId: 'learner-1', examKey: 'az204', readinessStatus: 'ready',
+    analytics: { learnerId: 'learner-1', examKey: 'az204', activityCount: 75, assessmentCount: 75, historicalCount: 0, needsReviewCount: 0, latestActivity: '2026-01-02T00:00:00Z', latestPercentage: 90, bestPercentage: 95, averagePercentage: 88, passRate: 100, domains: [{ domainKey: 'compute', averagePercentage: 82, sampleCount: 75 }] },
+  }],
+});
 assert.equal(aggregate.studentReadiness[0].readinessStatus, 'ready');
 assert.equal(aggregate.groupAnalytics[0].totalAttempts, 75);
 assert.equal(aggregate.assignmentReadiness[0].submittedCount, 1);
@@ -335,7 +340,23 @@ const parityAggregate = applyAuthoritativeAnalytics(parityBaseline, {
     { examKey: 'az204', domainKey: 'weighted', sampleCount: 5, studentCount: 0, weakCount: 0, averagePercentage: 90 },
     { examKey: 'az204', domainKey: 'weak', sampleCount: 5, studentCount: 1, weakCount: 5, averagePercentage: 60 },
   ],
-}, [parityStudent], [{ id: 'group-parity', name: 'Parity' }], [parityAssignment]);
+  readinessSummary: { ready: 1, 'almost-ready': 0, 'needs-review': 0, 'at-risk': 0, 'insufficient-data': 0, 'not-started': 0 },
+  activitySummary: { mostActive: [{ learnerId: 'learner-parity', displayName: 'Learner', totalAttempts: 5, latestAttemptDate: '2026-01-06T00:00:00Z' }], leastActive: [], noAttemptCount: 0, noAttemptPreview: [] },
+}, [parityStudent], [{ id: 'group-parity', name: 'Parity' }], [parityAssignment], {
+  items: [{
+    learnerId: 'learner-parity', examKey: 'az204', readinessStatus: parityBaseline.studentReadiness[0].readinessStatus,
+    analytics: {
+      learnerId: 'learner-parity', examKey: 'az204', activityCount: 5,
+      assessmentCount: 5, historicalCount: 0, needsReviewCount: 0, passedCount: 5,
+      latestActivity: '2026-01-06T00:00:00Z', latestPercentage: 90,
+      bestPercentage: 90, lowestPercentage: 90, averagePercentage: 90, passRate: 100,
+      domains: [
+        { domainKey: 'weak', averagePercentage: 60, sampleCount: 5 },
+        { domainKey: 'weighted', averagePercentage: 90, sampleCount: 5 },
+      ],
+    },
+  }],
+});
 assert.equal(parityAggregate.studentReadiness[0].readinessStatus, parityBaseline.studentReadiness[0].readinessStatus);
 assert.equal(parityAggregate.studentReadiness[0].domainAverages[1].averagePercentage, 90);
 assert.equal(parityAggregate.examAnalytics[0].totalAttempts, parityBaseline.examAnalytics[0].totalAttempts);
@@ -402,7 +423,40 @@ const adversarialAuthoritative = applyAuthoritativeAnalytics(adversarialBaseline
     ...adversarialStudents.map((student) => ({ assignmentId: 'new-ai901', learnerId: student.userId, assignmentAttemptCount: 0 })),
   ],
   domains: [{ examKey: 'az204', domainKey: 'lowest', sampleCount: 65, studentCount: 1, weakCount: 1, averagePercentage: 74.77 }],
-}, adversarialStudents, [{ id: 'group-a', name: 'Group A' }], adversarialAssignments);
+}, adversarialStudents, [{ id: 'group-a', name: 'Group A' }], adversarialAssignments, {
+  items: adversarialBaseline.studentReadiness.map((row) => ({
+    learnerId: row.userId,
+    examKey: row.examScopeKey,
+    readinessStatus: row.readinessStatus,
+    assignmentSummaries: adversarialAssignments.map((assignment) => ({
+      assignmentId: assignment.id,
+      assignmentAttemptCount: adversarialResults.filter((result) =>
+        result.userId === row.userId && result.assignmentId === assignment.id).length,
+    })),
+    analytics: {
+      learnerId: row.userId,
+      examKey: row.examScopeKey,
+      activityCount: row.scopedAttemptCount,
+      assessmentCount: row.scopedAttemptCount,
+      historicalCount: 0,
+      needsReviewCount: row.readinessStatus === 'needs-review' ? 1 : 0,
+      passedCount: row.passCount,
+      latestActivity: row.userId === 'learner-a' && row.examScopeKey === 'az204'
+        ? '2026-07-28T06:00:00Z' : row.latestAttemptDate,
+      latestAttemptId: row.userId === 'learner-a' && row.examScopeKey === 'az204'
+        ? 'a-63' : row.latestAttemptId,
+      latestPercentage: row.latestScore == null ? null : row.latestScore / 10,
+      bestPercentage: row.bestScore == null ? null : row.bestScore / 10,
+      averagePercentage: row.averageScore == null ? null : row.averageScore / 10,
+      passRate: row.passRate,
+      domains: row.domainAverages.map((domain) => ({
+        domainKey: domain.domainId,
+        averagePercentage: domain.averagePercentage,
+        sampleCount: domain.sampleCount,
+      })),
+    },
+  })),
+});
 const learnerA = adversarialAuthoritative.studentReadiness.find((row) => row.userId === 'learner-a' && row.examScopeKey === 'az204');
 const learnerC = adversarialAuthoritative.studentReadiness.find((row) => row.userId === 'learner-c' && row.examScopeKey === 'ai901');
 assert.equal(learnerA.readinessStatus, adversarialBaseline.studentReadiness.find((row) => row.userId === 'learner-a' && row.examScopeKey === 'az204').readinessStatus);

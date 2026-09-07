@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const migration = readFileSync(new URL('../supabase/migrations/20260907152537_issue101_authoritative_trainer_analytics.sql', import.meta.url), 'utf8');
+const boundedMigration = readFileSync(new URL('../supabase/migrations/20260907175904_issue101_bounded_training_dashboard_learners.sql', import.meta.url), 'utf8');
 const mapper = readFileSync(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
 const hook = readFileSync(new URL('../src/hooks/useTrainerAnalytics.js', import.meta.url), 'utf8');
 const dashboard = readFileSync(new URL('../src/components/trainer/TrainerDashboardPage.jsx', import.meta.url), 'utf8');
@@ -23,6 +24,28 @@ assert.ok(mapper.includes('rawEarnedPoints: normalizeNonNegativeNumber(domain.ra
 assert.ok(mapper.includes('rawMaximumPoints: normalizeNonNegativeNumber(domain.rawMaximumPoints)'));
 assert.ok(hook.includes('rawEarnedPoints: domain.rawEarnedPoints ?? null'));
 assert.ok(dashboard.includes('number < 100 && Math.round(number) === 100'));
+
+for (const required of [
+  'staff_dashboard_learner_page',
+  "v_size integer := coalesce(nullif(p_request->>'learnerPageSize','')::integer, 25)",
+  "v_size < 1 or v_size > 50",
+  "lower(display_name),learner_id,exam_key",
+  "'membershipId',membership_id",
+  "'assignmentSummaries'",
+  "'filteredCount',(select count(*) from candidates)",
+  "p_full - 'learners' - 'assignmentLearners'",
+  "'readinessSummary'",
+  "'activitySummary'",
+  "v_page - 'learnerIds'",
+  "set search_path = ''",
+  "set statement_timeout = '12s'",
+]) assert.ok(boundedMigration.includes(required), `Missing bounded Issue #101 contract: ${required}`);
+assert.ok(mapper.includes('mapStaffLearnerPage'));
+assert.ok(mapper.includes('returnedCount > pageSize'));
+assert.ok(hook.includes('const boundedLearners = pageItems.map'));
+assert.ok(dashboard.includes('<LearnerPageControls scope={scopedPerformance} />'));
+assert.ok(dashboard.includes("onNavigateSection?.('detail', attemptId)"));
+assert.ok(!dashboard.includes('const result = await loadResultDetail(attemptId)'));
 
 const percentage = (rows) => rows.reduce((sum, row) => sum + row.earned, 0) * 100 /
   rows.reduce((sum, row) => sum + row.maximum, 0);

@@ -322,9 +322,9 @@ export function mapStaffAnalytics(raw: unknown): Obj {
   const value = object(raw);
   const totals = object(value.totals);
   const totalKeys = ["visibleLearners", "learnersWithActivity", "learnersWithoutActivity", "historicalActivity", "protectedAssessments", "legacyHistorical"] as const;
-  if (value.scopeComplete !== true || !Array.isArray(value.learners) || !Array.isArray(value.exams) ||
+  if (value.scopeComplete !== true || !Array.isArray(value.exams) ||
     !Array.isArray(value.groups) || !Array.isArray(value.assignments) ||
-    !Array.isArray(value.assignmentLearners) || !Array.isArray(value.domains)) {
+    !Array.isArray(value.domains)) {
     throw new SafeError("internal_failure");
   }
   const mappedTotals = Object.fromEntries(totalKeys.map((key) => [key, normalizeCount(totals[key])])) as Obj;
@@ -357,7 +357,6 @@ export function mapStaffAnalytics(raw: unknown): Obj {
     }
     return mapped;
   };
-  const learners = safeArray(value.learners, (item) => mapRow(item, "learnerId"));
   const exams = safeArray(value.exams, (item) => mapRow(item, "examKey"));
   const mapDomains = (domains: unknown) => safeArray(Array.isArray(domains) ? domains : [], (domain) => {
     if (typeof domain.domainKey !== "string" || !domain.domainKey ||
@@ -376,7 +375,7 @@ export function mapStaffAnalytics(raw: unknown): Obj {
   const aggregateRows = (items: unknown[], identityKey: string) => safeArray(items, (item) => {
     if (typeof item[identityKey] !== "string" || !item[identityKey]) throw new SafeError("internal_failure");
     const mapped = pick(item, [identityKey]);
-    ["assessmentCount", "assessedLearnerCount", "needsReviewCount", "sampleCount"].forEach((key) => {
+    ["assessmentCount", "assessedLearnerCount", "needsReviewCount", "sampleCount", "studentCount", "activeStudents", "studentsWithAttempts", "studentsWithoutAttempts", "readyStudents"].forEach((key) => {
       if (item[key] != null) mapped[key] = normalizeCount(item[key]);
     });
     ["averagePercentage", "passRate"].forEach((key) => {
@@ -388,7 +387,6 @@ export function mapStaffAnalytics(raw: unknown): Obj {
   return {
     scopeComplete: true,
     totals: mappedTotals,
-    learners,
     exams,
     groups: aggregateRows(value.groups, "groupId"),
     assignments: safeArray(value.assignments, (item) => {
@@ -407,25 +405,110 @@ export function mapStaffAnalytics(raw: unknown): Obj {
         needsReviewCount: normalizeCount(item.needsReviewCount),
         averagePercentage: normalizePercentage(item.averagePercentage),
         passRate: normalizePercentage(item.passRate),
-      };
-    }),
-    assignmentLearners: safeArray(value.assignmentLearners, (item) => {
-      if (typeof item.assignmentId !== "string" || !item.assignmentId ||
-        typeof item.learnerId !== "string" || !item.learnerId ||
-        (item.latestAssignmentActivity !== null && typeof item.latestAssignmentActivity !== "string") ||
-        (item.latestAssignmentAttemptId !== null && typeof item.latestAssignmentAttemptId !== "string")) {
-        throw new SafeError("internal_failure");
-      }
-      return {
-        assignmentId: item.assignmentId,
-        learnerId: item.learnerId,
-        assignmentAttemptCount: normalizeCount(item.assignmentAttemptCount),
-        latestAssignmentActivity: item.latestAssignmentActivity ?? null,
-        latestAssignmentAttemptId: item.latestAssignmentAttemptId ?? null,
+        submittedCount: normalizeCount(item.submittedCount ?? 0),
+        readyCount: normalizeCount(item.readyCount ?? 0),
+        completedButNotReadyCount: normalizeCount(item.completedButNotReadyCount ?? 0),
+        notStartedCount: normalizeCount(item.notStartedCount ?? 0),
+        dueSoonCount: normalizeCount(item.dueSoonCount ?? 0),
+        overdueCount: normalizeCount(item.overdueCount ?? 0),
       };
     }),
     domains: mapDomains(value.domains),
+    readinessSummary: mapReadinessSummary(value.readinessSummary),
+    activitySummary: mapActivitySummary(value.activitySummary),
   };
+}
+
+function mapReadinessSummary(raw: unknown): Obj {
+  const value = object(raw);
+  const keys = ["ready", "almost-ready", "needs-review", "at-risk", "insufficient-data", "not-started"];
+  if (Object.keys(value).some((key) => !keys.includes(key))) throw new SafeError("internal_failure");
+  return Object.fromEntries(keys.map((key) => [key, normalizeCount(value[key] ?? 0)]));
+}
+
+function mapActivitySummary(raw: unknown): Obj {
+  const value = object(raw);
+  const mapActivity = (item: Obj) => {
+    if (typeof item.learner_id !== "string" || typeof item.display_name !== "string" ||
+      (item.latestAttemptDate !== null && typeof item.latestAttemptDate !== "string")) throw new SafeError("internal_failure");
+    return {
+      learnerId: item.learner_id,
+      displayName: item.display_name,
+      totalAttempts: normalizeCount(item.totalAttempts),
+      latestAttemptDate: item.latestAttemptDate ?? null,
+    };
+  };
+  return {
+    mostActive: safeArray(value.mostActive, mapActivity),
+    leastActive: safeArray(value.leastActive, mapActivity),
+    noAttemptCount: normalizeCount(value.noAttemptCount),
+    noAttemptPreview: safeArray(value.noAttemptPreview, mapActivity),
+  };
+}
+
+function mapStaffLearnerPage(raw: unknown): Obj {
+  const value = object(raw);
+  if (!Array.isArray(value.items) || !Number.isSafeInteger(value.returnedCount) ||
+    !Number.isSafeInteger(value.totalCount) || !Number.isSafeInteger(value.filteredCount) ||
+    !Number.isSafeInteger(value.pageSize) || typeof value.complete !== "boolean" ||
+    (value.nextCursor !== null && typeof value.nextCursor !== "string")) throw new SafeError("internal_failure");
+  const returnedCount = normalizeCount(value.returnedCount);
+  const totalCount = normalizeCount(value.totalCount);
+  const filteredCount = normalizeCount(value.filteredCount);
+  const pageSize = normalizeCount(value.pageSize);
+  const items = safeArray(value.items, (item) => {
+    if (typeof item.membershipId !== "string" || typeof item.learnerId !== "string" || typeof item.displayName !== "string" ||
+      typeof item.email !== "string" || typeof item.examKey !== "string" ||
+      typeof item.readinessStatus !== "string" || typeof item.status !== "string" ||
+      (item.groupId !== null && typeof item.groupId !== "string") ||
+      (item.campusId !== null && typeof item.campusId !== "string")) throw new SafeError("internal_failure");
+    const assignmentSummaries = safeArray(item.assignmentSummaries, (summary) => {
+      if (typeof summary.assignmentId !== "string") throw new SafeError("internal_failure");
+      return { assignmentId: summary.assignmentId, assignmentAttemptCount: normalizeCount(summary.assignmentAttemptCount) };
+    });
+    return {
+      membershipId: item.membershipId,
+      learnerId: item.learnerId,
+      displayName: item.displayName,
+      email: item.email,
+      groupId: item.groupId ?? null,
+      groupName: typeof item.groupName === "string" ? item.groupName : "",
+      campusId: item.campusId ?? null,
+      campusName: typeof item.campusName === "string" ? item.campusName : "",
+      status: item.status,
+      examKey: item.examKey,
+      readinessStatus: item.readinessStatus,
+      analytics: mapStaffLearnerAnalytics(item.analytics),
+      assignmentSummaries,
+    };
+  });
+  if (items.length !== returnedCount || returnedCount > pageSize ||
+    filteredCount < returnedCount) throw new SafeError("internal_failure");
+  return pick({ ...value, items, returnedCount, totalCount, filteredCount, pageSize }, ["items", "returnedCount", "totalCount", "filteredCount", "pageSize", "nextCursor", "complete"]);
+}
+
+function mapStaffLearnerAnalytics(raw: unknown): Obj {
+  const value = object(raw);
+  if (Object.keys(value).length === 0) return {};
+  if (typeof value.learnerId !== "string" || typeof value.examKey !== "string") throw new SafeError("internal_failure");
+  const mapped = pick(value, ["learnerId", "examKey", "latestActivity", "latestAttemptId"]);
+  ["activityCount", "assessmentCount", "historicalCount", "needsReviewCount", "passedCount"].forEach((key) => {
+    mapped[key] = normalizeCount(value[key] ?? 0);
+  });
+  ["latestPercentage", "bestPercentage", "lowestPercentage", "averagePercentage", "passRate"].forEach((key) => {
+    mapped[key] = normalizePercentage(value[key] ?? null);
+  });
+  mapped.domains = safeArray(value.domains, (domain) => {
+    if (typeof domain.domainKey !== "string") throw new SafeError("internal_failure");
+    return {
+      domainKey: domain.domainKey,
+      averagePercentage: normalizePercentage(domain.averagePercentage),
+      sampleCount: normalizeCount(domain.sampleCount ?? 0),
+      rawEarnedPoints: normalizeNonNegativeNumber(domain.rawEarnedPoints),
+      rawMaximumPoints: normalizeNonNegativeNumber(domain.rawMaximumPoints),
+    };
+  });
+  return mapped;
 }
 
 export function mapStaffDashboardScope(raw: unknown): Obj {
@@ -531,8 +614,9 @@ export function mapStaffDashboardQuery(raw: unknown): Obj {
     !Number.isSafeInteger(history.totalCount) || !Number.isSafeInteger(history.returnedCount) ||
     (assignmentPage.nextCursor !== null && typeof assignmentPage.nextCursor !== "string") ||
     (history.nextCursor !== null && typeof history.nextCursor !== "string")) throw new SafeError("internal_failure");
-  const mapped = mapStaffDashboardScope({ ...value, organisations: [], campuses: [], groups: [], locks: {} });
-  return { ...mapped, workflow: value.workflow, analytics: mapStaffAnalytics(value.analytics) };
+  const mapped = mapStaffDashboardScope({ ...value, organisations: [], campuses: [], groups: [], locks: {}, learnerIds: [] });
+  delete mapped.learnerIds;
+  return { ...mapped, workflow: value.workflow, learnerPage: mapStaffLearnerPage(value.learnerPage), analytics: mapStaffAnalytics(value.analytics) };
 }
 
 function normalizeCount(value: unknown): number {
