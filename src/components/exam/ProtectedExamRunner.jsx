@@ -19,6 +19,7 @@ import { assertProtectedAttemptInventory, getProtectedItemSection } from '../../
 import useFullscreenMode from '../../utils/useFullscreenMode.js';
 import { getNormalizedDomainItems } from '../../lib/resultStorageMappers.js';
 import { resolvePracticeRequest } from '../../lib/protectedPracticeRequest.js';
+import { resolveReleasedChoiceTexts } from '../../lib/releasedAnswerDisplay.js';
 
 export default function ProtectedExamRunner({
   assignmentId = '',
@@ -636,8 +637,8 @@ export default function ProtectedExamRunner({
                 <dl className="exam-stats compact">
                   <div><dt>Result</dt><dd>{item.status ?? 'Recorded'}</dd></div>
                   <div><dt>Points</dt><dd>{item.earnedPoints != null && item.maxPoints != null ? `${item.earnedPoints} / ${item.maxPoints}` : 'Not recorded'}</dd></div>
-                  <div><dt>Your response</dt><dd>{formatReviewValue(item.response)}</dd></div>
-                  <div><dt>Correct answer</dt><dd>{formatReviewValue(item.correctAnswer)}</dd></div>
+                  <div><dt>Your response</dt><dd><ReleasedReviewAnswer presentation={item.presentation} value={item.response} /></dd></div>
+                  <div><dt>Correct answer</dt><dd><ReleasedReviewAnswer correct presentation={item.presentation} value={item.correctAnswer} /></dd></div>
                 </dl>
                 {item.explanation && <p><strong>Explanation:</strong> {item.explanation}</p>}
                 {item.remediation && <p><strong>Next step:</strong> {item.remediation}</p>}
@@ -826,6 +827,22 @@ function formatReviewValue(value) {
       .join('; ');
   }
   return String(value);
+}
+
+function ReleasedReviewAnswer({ correct = false, presentation, value }) {
+  const resolved = resolveReleasedChoiceTexts(presentation, value, { correct });
+
+  if (resolved.status === 'resolved') {
+    return (
+      <ul className="released-answer-list">
+        {resolved.texts.map((text, index) => <li key={`${index}-${text}`}>{text}</li>)}
+      </ul>
+    );
+  }
+
+  if (resolved.status === 'invalid') return 'Answer details unavailable';
+  if (resolved.status === 'empty') return 'No response recorded';
+  return formatReviewValue(value);
 }
 
 function getProtectedQuestionState(question, answers) {
