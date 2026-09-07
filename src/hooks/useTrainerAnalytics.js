@@ -77,6 +77,8 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
       ...domain,
       domainId: domain.domainId ?? domain.domainKey,
       domainLabel: domain.domainLabel ?? domain.domainKey,
+      rawEarnedPoints: domain.rawEarnedPoints ?? null,
+      rawMaximumPoints: domain.rawMaximumPoints ?? null,
     })).sort((left, right) => left.averagePercentage - right.averagePercentage);
     const weakDomains = domainAverages.filter((domain) => domain.averagePercentage < 70);
     const pendingAssignments = learnerAssignments.filter((assignment) =>
@@ -214,6 +216,8 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
     attemptCount: row.sampleCount,
     resultCount: row.sampleCount,
     weakCount: row.weakCount,
+    rawEarnedPoints: row.rawEarnedPoints ?? null,
+    rawMaximumPoints: row.rawMaximumPoints ?? null,
   }));
   const activityByLearner = new Map();
   (authoritative.learners ?? []).forEach((row) => {

@@ -68,6 +68,8 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260906134050_live_assignment_v2.sql',
   '20260906143802_issue83_staged_exam_release.sql',
   '20260907072022_issue83_sc200_mode_parity.sql',
+  '20260907101759_issue83_sc200_successor_cutover.sql',
+  '20260907152537_issue101_authoritative_trainer_analytics.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -135,6 +137,8 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260906134050_live_assignment_v2.sql': '7d69cdc786d5d2583bee11a724eacc276ac6518b40d0bda743a49bc01b6c4a50',
   '20260906143802_issue83_staged_exam_release.sql': '8053b8aac52fac1b171fef1e810cbe5adf73de7877d11a3f485ef6fdfc1c5d03',
   '20260907072022_issue83_sc200_mode_parity.sql': '4ac824ed9edb265d147307707e3c43c36e8b24405c7361610cf13a5029cc5e59',
+  '20260907101759_issue83_sc200_successor_cutover.sql': '3a6dc775b0920751f386fb7486b20e1164c3e10d83715818816a58ed428dfd5d',
+  '20260907152537_issue101_authoritative_trainer_analytics.sql': 'c620004e1a04b842924446868d66611858f5d0236975b2cfa69cc6ccee204deb',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

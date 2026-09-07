@@ -74,14 +74,14 @@ Deno.test("staff analytics mapper accepts only complete bounded public aggregate
     scopeComplete: true,
     totals: { visibleLearners: 2, learnersWithActivity: 1, learnersWithoutActivity: 1, historicalActivity: 3, protectedAssessments: 2, legacyHistorical: 1 },
     learners: [
-      { learnerId: ACTOR, examKey: "az204", activityCount: "3", assessmentCount: "2", historicalCount: "1", assessedLearnerCount: "1", needsReviewCount: "1", passedCount: "1", latestActivity: "2026-09-01T00:00:00Z", latestAttemptId: ATTEMPT, latestPercentage: "80", bestPercentage: "90", lowestPercentage: "70", averagePercentage: "80", passRate: "50", domains: [{ domainKey: "implement", averagePercentage: "65", sampleCount: "2" }], protectedPayload: "blocked" },
+      { learnerId: ACTOR, examKey: "az204", activityCount: "3", assessmentCount: "2", historicalCount: "1", assessedLearnerCount: "1", needsReviewCount: "1", passedCount: "1", latestActivity: "2026-09-01T00:00:00Z", latestAttemptId: ATTEMPT, latestPercentage: "80", bestPercentage: "90", lowestPercentage: "70", averagePercentage: "80", passRate: "50", domains: [{ domainKey: "implement", averagePercentage: "65", sampleCount: "2", rawEarnedPoints: "13", rawMaximumPoints: "20" }], protectedPayload: "blocked" },
       { learnerId: "11000000-0000-4000-8000-000000000002", examKey: "ai901", activityCount: "0", assessmentCount: "0", historicalCount: "0", assessedLearnerCount: "1", needsReviewCount: "0", passedCount: "0", latestActivity: null, latestAttemptId: null, latestPercentage: null, bestPercentage: null, lowestPercentage: null, averagePercentage: null, passRate: null, domains: [] },
     ],
     exams: [{ examKey: "az204", activityCount: "3", assessmentCount: "2", historicalCount: "1", assessedLearnerCount: "1", needsReviewCount: "1", passedCount: "1", latestActivity: "2026-09-01T00:00:00Z", bestPercentage: "90", lowestPercentage: "70", averagePercentage: "80", passRate: "50" }],
-    groups: [{ groupId: ACTOR, assessmentCount: "2", assessedLearnerCount: "1", averagePercentage: "80", passRate: "50", domains: [{ examKey: "az204", domainKey: "implement", sampleCount: "2", studentCount: "1", weakCount: "1", averagePercentage: "65" }] }],
+    groups: [{ groupId: ACTOR, assessmentCount: "2", assessedLearnerCount: "1", averagePercentage: "80", passRate: "50", domains: [{ examKey: "az204", domainKey: "implement", sampleCount: "2", studentCount: "1", weakCount: "1", averagePercentage: "65", rawEarnedPoints: "13", rawMaximumPoints: "20" }] }],
     assignments: [{ assignmentId: ATTEMPT, examKey: "az204", groupId: ACTOR, dueAt: null, totalStudents: "1", assessmentCount: "2", assessedLearnerCount: "1", needsReviewCount: "1", averagePercentage: "80", passRate: "50" }],
     assignmentLearners: [{ assignmentId: ATTEMPT, learnerId: ACTOR, assignmentAttemptCount: "2", latestAssignmentActivity: "2026-09-01T00:00:00Z", latestAssignmentAttemptId: ATTEMPT }],
-    domains: [{ examKey: "az204", domainKey: "implement", sampleCount: "2", studentCount: "1", weakCount: "1", averagePercentage: "65" }],
+    domains: [{ examKey: "az204", domainKey: "implement", sampleCount: "2", studentCount: "1", weakCount: "1", averagePercentage: "65", rawEarnedPoints: "13", rawMaximumPoints: "20" }],
   };
   const query = mapStaffDashboardQuery({
     role: "trainer",
@@ -109,6 +109,8 @@ Deno.test("staff analytics mapper accepts only complete bounded public aggregate
   assertEquals((mapped.learners as Array<Record<string, unknown>>)[1].latestPercentage, null);
   assertEquals((mapped.learners as Array<Record<string, unknown>>)[0].protectedPayload, undefined);
   assertEquals((mapped.learners as Array<Record<string, unknown>>)[0].latestAttemptId, ATTEMPT);
+  assertEquals(((mapped.learners as Array<Record<string, unknown>>)[0].domains as Array<Record<string, unknown>>)[0].rawEarnedPoints, 13);
+  assertEquals((mapped.domains as Array<Record<string, unknown>>)[0].rawMaximumPoints, 20);
   assertEquals((mapped.assignmentLearners as Array<Record<string, unknown>>)[0].assignmentAttemptCount, 2);
   assertEquals((mapped.assignments as Array<Record<string, unknown>>)[0].totalStudents, 1);
   assertEquals((mapped.assignments as Array<Record<string, unknown>>)[0].examKey, "az204");

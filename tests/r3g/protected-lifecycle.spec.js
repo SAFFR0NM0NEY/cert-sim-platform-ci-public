@@ -277,3 +277,44 @@ test('stale advertised resume recovers inline to Start exam without a terminal s
   await expect(page.getByText(/No resumable protected attempt/)).toHaveCount(0);
   await expect(page.locator('.coding-language-panel')).toHaveCount(1);
 });
+
+test('released shuffled choice review renders stable option text as accessible lists', async ({ page }) => {
+  const reviewOptions = [
+    { id: 'D', text: 'Allow anonymous access.' },
+    { id: 'B', text: 'Store a client secret.' },
+    { id: 'A', text: 'Use managed identity.' },
+    { id: 'C', text: 'Use a shared access key.' },
+  ];
+  const reviewItems = [
+    { itemId: 'review-single', questionId: 'single', questionType: 'single-choice', domain: 'Identity', section: 'standard', response: { answer: 'A' }, status: 'Correct', earnedPoints: 1, maxPoints: 1, correctAnswer: { correctAnswer: 'A' }, presentation: { type: 'single-choice', question: 'Synthetic single choice.', options: reviewOptions } },
+    { itemId: 'review-two', questionId: 'select-two', questionType: 'multi-select', domain: 'Identity', section: 'standard', response: { answer: ['A'] }, status: 'Partial', earnedPoints: 1, maxPoints: 2, correctAnswer: { correctAnswers: ['A', 'C'] }, presentation: { type: 'multi-select', question: 'Synthetic select two.', options: reviewOptions } },
+    { itemId: 'review-three', questionId: 'select-three', questionType: 'multi-select', domain: 'Identity', section: 'standard', response: { answer: ['D'] }, status: 'Incorrect', earnedPoints: 0, maxPoints: 3, correctAnswer: { correctOptionIds: ['A', 'C', 'D'] }, presentation: { type: 'multi-select', question: 'Synthetic select three.', options: [...reviewOptions].reverse() } },
+  ];
+
+  await page.route('**/functions/v1/certsim-protected-exam/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.split('/certsim-protected-exam')[1];
+    const json = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+    if (path.startsWith('/practice/availability')) return json({ examKey:'az400', packageVersion:'1.0.0', profileKey:'az400-sectioned-full-exam-profile', purpose:'self_directed_exam', available:true, selectedCount:80, adjustedCount:false, profileQuestionCount:80, timeLimitMinutes:120, fixedProfileSize:true, domainCounts:{}, missedCount:0, newCount:80, pbqCount:2, languages:[] });
+    if (path.startsWith('/attempts/current-bindings')) return json({ candidates: [] });
+    if (path === '/practice/sessions' && request.method() === 'POST') return json({ attempt:{ attemptId, examKey:'az400', packageVersion:'1.0.0', profileKey:'az400-sectioned-full-exam-profile', profileName:'Sectioned', status:'in_progress', startedAt:'2026-09-02T10:00:00.000Z', expiresAt:deadline, timeLimitMinutes:120, purpose:'self_directed_exam', languagePreference:null }, items }, 201);
+    if (path.endsWith('/flags')) return json({ itemIds: [] });
+    if (path.endsWith('/submit')) return json({ result:{ attemptId, examKey:'az400', profileKey:'az400-sectioned-full-exam-profile', completedAt:new Date().toISOString(), questionCount:80, answeredCount:0, rawScore:0, maxScore:80, rawPercentage:0, scaledScore:0, passed:false, passMark:700, domainBreakdown:[], reviewStatus:'released', serverAuthoritative:true } });
+    if (path.endsWith('/review')) return json({ review: { items: reviewItems } });
+    return json({ error: { code: 'unexpected_fixture_route' } }, 500);
+  });
+
+  await page.goto('/tests/r3g/protected-runner-harness.html');
+  await page.getByRole('button', { name: /Start/ }).click();
+  await page.getByRole('button', { name: 'Go to lab 2' }).click();
+  await page.getByRole('button', { name: 'Submit exam' }).click();
+  await page.getByRole('button', { name: 'Submit Final Attempt' }).click();
+  await page.getByRole('button', { name: 'View released review' }).click();
+
+  const reviewCards = page.locator('.protected-review-list article');
+  await expect(reviewCards).toHaveCount(3);
+  await expect(reviewCards.nth(0).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.']);
+  await expect(reviewCards.nth(1).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.']);
+  await expect(reviewCards.nth(2).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.', 'Allow anonymous access.']);
+  await expect(page.getByText('A, C', { exact: true })).toHaveCount(0);
+});

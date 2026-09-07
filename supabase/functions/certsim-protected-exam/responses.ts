@@ -350,6 +350,8 @@ export function mapStaffAnalytics(raw: unknown): Obj {
           domainKey: domain.domainKey,
           averagePercentage: normalizePercentage(domain.averagePercentage),
           sampleCount: normalizeCount(domain.sampleCount ?? 0),
+          rawEarnedPoints: normalizeNonNegativeNumber(domain.rawEarnedPoints),
+          rawMaximumPoints: normalizeNonNegativeNumber(domain.rawMaximumPoints),
         };
       });
     }
@@ -367,6 +369,8 @@ export function mapStaffAnalytics(raw: unknown): Obj {
       studentCount: normalizeCount(domain.studentCount ?? 0),
       weakCount: normalizeCount(domain.weakCount ?? 0),
       averagePercentage: normalizePercentage(domain.averagePercentage),
+      rawEarnedPoints: normalizeNonNegativeNumber(domain.rawEarnedPoints),
+      rawMaximumPoints: normalizeNonNegativeNumber(domain.rawMaximumPoints),
     };
   });
   const aggregateRows = (items: unknown[], identityKey: string) => safeArray(items, (item) => {
@@ -541,6 +545,13 @@ function normalizePercentage(value: unknown): number | null {
   if (value === null) return null;
   const number = typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : value;
   if (typeof number !== "number" || !Number.isFinite(number) || number < 0 || number > 100) throw new SafeError("internal_failure");
+  return number;
+}
+
+function normalizeNonNegativeNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const number = typeof value === "string" && /^\d+(?:\.\d+)?$/.test(value) ? Number(value) : value;
+  if (typeof number !== "number" || !Number.isFinite(number) || number < 0) throw new SafeError("internal_failure");
   return number;
 }
 export function mapHistorySummary(raw: unknown): Obj {

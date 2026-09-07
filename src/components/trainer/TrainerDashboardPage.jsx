@@ -2096,7 +2096,11 @@ function formatAnalyticsScore(value) {
 
 function formatAnalyticsRate(value) {
   if (value || value === 0) {
-    return `${Math.round(Number(value))}%`;
+    const number = Number(value);
+    if (number < 100 && Math.round(number) === 100) {
+      return `${number.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}%`;
+    }
+    return `${Math.round(number)}%`;
   }
 
   return 'Not recorded';
@@ -2142,9 +2146,18 @@ function formatDomainAverage(domain = {}) {
     domain.domainId ||
     'Domain';
   const percentage = domain.averagePercentage ?? domain.percentage;
-  const samples = domain.samples ? `, ${domain.samples} samples` : '';
+  const sampleCount = Number(domain.sampleCount ?? domain.samples ?? 0);
+  const points = Number(domain.rawMaximumPoints) > 0
+    ? `, ${formatCompactNumber(domain.rawEarnedPoints)} / ${formatCompactNumber(domain.rawMaximumPoints)} points`
+    : '';
+  const samples = sampleCount > 0 ? `, ${sampleCount} submitted attempt${sampleCount === 1 ? '' : 's'}` : '';
 
-  return `${label}: ${formatAnalyticsRate(percentage)}${samples}`;
+  return `${label}: ${formatAnalyticsRate(percentage)}${points}${samples}`;
+}
+
+function formatCompactNumber(value) {
+  const number = Number(value);
+  return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
 
 function formatDomainSummaryList(domains = []) {

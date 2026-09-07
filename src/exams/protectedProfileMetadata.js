@@ -2,12 +2,13 @@
 // metadata. This module is safe for the browser: it contains composition and
 // timing facts only, never question identities, presentation, or scoring data.
 export const protectedProfileMetadata = Object.freeze({
-  sc200: Object.freeze({packageVersion:'1.1.0',profiles:Object.freeze([
+  sc200: Object.freeze({packageVersion:'1.1.0',inventoryCount:300,profiles:Object.freeze([
     profile('sc200-full','Full',50,100,{canonicalFormCount:6}),
     profile('sc200-compact','Compact',25,50,{canonicalFormCount:6}),
   ])}),
   az204: Object.freeze({
     packageVersion: '1.1.0',
+    inventoryCount: 287,
     profiles: Object.freeze([
       profile('standard-profile', 'Standard', 50, 120, { standardQuestionCount: 43, caseStudyCount: 1, caseStudyQuestionCount: 7, longCaseStudyCount: 1, shortCaseStudyCount: 0 }),
       profile('compact-profile', 'Compact', 40, 100, { standardQuestionCount: 37, caseStudyCount: 1, caseStudyQuestionCount: 3, longCaseStudyCount: 0, shortCaseStudyCount: 1 }),
@@ -17,6 +18,7 @@ export const protectedProfileMetadata = Object.freeze({
   }),
   'security-plus-sy0-701': Object.freeze({
     packageVersion: '1.0.0',
+    inventoryCount: 370,
     profiles: Object.freeze([
       profile('strict-beta-compact', 'Compact', 45, 60, { standardQuestionCount: 42, pbqCount: 3, pbqPlacement: 'front-loaded' }),
       profile('strict-beta-full', 'Full', 90, 90, { standardQuestionCount: 86, pbqCount: 4, pbqPlacement: 'front-loaded' }),
@@ -24,6 +26,7 @@ export const protectedProfileMetadata = Object.freeze({
   }),
   az400: Object.freeze({
     packageVersion: '1.0.0',
+    inventoryCount: 433,
     profiles: Object.freeze([
       profile('az400-mvp-compact-profile', 'Compact', 60, 90, { standardQuestionCount: 60, sectionOrder: 'standard' }),
       profile('az400-mvp-full-profile', 'Full', 80, 120, { standardQuestionCount: 80, sectionOrder: 'standard' }),
@@ -31,7 +34,8 @@ export const protectedProfileMetadata = Object.freeze({
     ]),
   }),
   ai901: Object.freeze({
-    packageVersion: '2.0.0',
+    packageVersion: '3.0.0',
+    inventoryCount: 334,
     profiles: Object.freeze([
       profile('ai901-controlled-beta-compact', 'Compact', 25, 25, { standardQuestionCount: 25 }),
       profile('ai901-controlled-beta-full', 'Full', 50, 45, { standardQuestionCount: 50 }),
@@ -41,6 +45,17 @@ export const protectedProfileMetadata = Object.freeze({
 
 export function getProtectedProfileMetadata(examId) {
   return protectedProfileMetadata[examId] ?? null;
+}
+
+export function getProtectedDashboardMetadata(examId, source = protectedProfileMetadata) {
+  const metadata = source[examId];
+  if (!metadata || !/^\d+\.\d+\.\d+$/.test(metadata.packageVersion) || !Number.isInteger(metadata.inventoryCount) || metadata.inventoryCount < 1) {
+    return null;
+  }
+  return Object.freeze({
+    packageVersion: metadata.packageVersion,
+    questionCount: metadata.inventoryCount,
+  });
 }
 
 function profile(id, name, totalScoredQuestions, timeLimitMinutes, details = {}) {
