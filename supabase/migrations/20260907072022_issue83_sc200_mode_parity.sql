@@ -82,7 +82,7 @@ begin
     $$'domainCounts',v_domains,'missedCount'$$,
     $$'domainCounts',v_domains,'objectiveCounts',v_objectives,'confirmedDomain',case when v_purpose='targeted_domain' then p_request->>'domain' else null end,'confirmedObjective',case when v_purpose='targeted_domain' then nullif(p_request->>'objective','') else null end,'missedCount'$$);
   if v_updated = v_definition or position('v_objectives' in v_updated)=0
-    or position("q.section_key=p_request->>'objective'" in v_updated)=0
+    or position($needle$q.section_key=p_request->>'objective'$needle$ in v_updated)=0
   then raise exception 'issue83_practice_availability_contract_drift'; end if;
   execute v_updated;
 
