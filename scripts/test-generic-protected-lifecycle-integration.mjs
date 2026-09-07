@@ -351,7 +351,7 @@ for(const config of [
 const practiceHistory=await admin.rpc('certsim_protected_list_history',{p_actor_id:learner.id,p_exam_key:'sample-400',p_cursor:null,p_page_size:20});
 const practiceHistoryItems=Array.isArray(practiceHistory.data?.items)?practiceHistory.data.items:[];
 const practiceHistoryPurposes=new Set(practiceHistoryItems.map((item)=>item.purpose));
-if(practiceHistory.error||practiceHistoryItems.length!==6||practiceHistoryPurposes.size!==5) fail(`PRACTICE_HISTORY_CLASSIFICATION_FAILED_${safeCode(practiceHistory.error?.code)}_${practiceHistoryItems.length}_${practiceHistoryPurposes.size}`);
+if(practiceHistory.error||practiceHistoryItems.length!==7||practiceHistoryPurposes.size!==5) fail(`PRACTICE_HISTORY_CLASSIFICATION_FAILED_${safeCode(practiceHistory.error?.code)}_${practiceHistoryItems.length}_${practiceHistoryPurposes.size}`);
 const practiceSummary=await admin.rpc('certsim_protected_history_summary',{p_actor_id:learner.id,p_exam_key:'sample-400'});
 if(practiceSummary.error||practiceSummary.data?.completedCount!==2) fail('PRACTICE_SUMMARY_FILTER_FAILED');
 sql(`select 1/((count(*)=3 and bool_and(protected_assignment_id is null) and bool_and(purpose='self_directed_exam') and count(*) filter(where status='expired')=1)::integer) from exam_delivery.attempts where owner_id='${learner.id}'::uuid and purpose='self_directed_exam'; update exam_delivery.practice_policies set enabled=false,access_mode='disabled' where canonical_exam_key='sample400'; update exam_delivery.exam_access_policies set require_assignment=false where canonical_exam_key='sample400'; update exam_delivery.exam_access_learners set enabled=true where canonical_exam_key='sample400' and learner_id='${learner.id}';`);
