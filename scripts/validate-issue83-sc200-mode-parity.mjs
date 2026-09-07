@@ -32,6 +32,7 @@ assert.match(responses, /"objectiveCounts"[\s\S]*"confirmedDomain"[\s\S]*"confir
 
 for (const token of [
   'skillGroupTargetsByForm', 'practice_availability', 'target_objective',
+  'materialize_attempt_items_issue21_unrotated_base',
   'transition_live_assignment_v2', "package_version='1.0.0'", "packageVersion'<>'1.1.0'",
   "status='archived'", "reviewReleasePolicy'<>'after_submission'",
 ]) assert.match(migration, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));

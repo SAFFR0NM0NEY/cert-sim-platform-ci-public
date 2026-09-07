@@ -86,7 +86,7 @@ begin
   then raise exception 'issue83_practice_availability_contract_drift'; end if;
   execute v_updated;
 
-  v_definition := pg_get_functiondef('exam_delivery.materialize_attempt_items(uuid,uuid,integer)'::regprocedure);
+  v_definition := pg_get_functiondef('exam_delivery.materialize_attempt_items_issue21_unrotated_base(uuid,uuid,integer)'::regprocedure);
   v_updated := replace(v_definition,
     $$bool_or(domain_key=v_attempt.practice_configuration->>'domain') target_domain,$$,
     $$bool_or(domain_key=v_attempt.practice_configuration->>'domain') target_domain, bool_or(section_key=v_attempt.practice_configuration->>'objective') target_objective,$$);
