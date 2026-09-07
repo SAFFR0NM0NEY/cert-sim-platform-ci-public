@@ -11,6 +11,7 @@ export const PROTECTED_LANGUAGE_PREFERENCES = Object.freeze(['csharp', 'python',
 const PROFILE_IDENTITIES = Object.freeze({
   sc200: Object.freeze([
     'sc200-full',
+    'sc200-compact',
   ]),
   ai901: Object.freeze([
     'ai901-controlled-beta-compact',

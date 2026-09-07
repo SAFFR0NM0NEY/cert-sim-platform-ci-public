@@ -2463,9 +2463,13 @@ export default function App() {
       {screen === 'targeted-practice' && practiceExamConfig && (
         <ProtectedTargetedDomainSetup
           domains={practiceExamConfig.domainNames}
+          objectiveGroups={practiceExamConfig.objectiveGroups}
           exam={createSelectedExamSummary(practiceExamConfig)}
           onBack={handleBackToExamDashboard}
-          onContinue={(domain) => openProtectedPractice(practiceExamConfig, 'targeted_domain', { domain })}
+          onContinue={({ domain, objective }) => openProtectedPractice(practiceExamConfig, 'targeted_domain', {
+            domain: normalizeDomainKey(domain),
+            ...(objective ? { objective: normalizeDomainKey(objective) } : {}),
+          })}
         />
       )}
 

@@ -707,9 +707,12 @@ export default function ProtectedExamRunner({
             selectedCount: availability?.selectedCount ?? authoritativeQuestionCount,
             domain: practiceRequest.domain,
             domainLabel: (examConfig.domainNames ?? []).find((domain) => normalizeDomainKey(domain) === practiceRequest.domain) ?? practiceRequest.domain,
+            objective: practiceRequest.objective,
+            objectiveLabel: examConfig.objectiveGroups?.flatMap((group) => group.objectives)
+              .find((objective) => normalizeDomainKey(objective) === practiceRequest.objective) ?? practiceRequest.objective,
             contentKind: practiceRequest.contentKind,
             domains: examConfig.domainNames ?? [],
-            onDomainChange: practiceRequest.purpose === 'targeted_domain' && onPracticeRequestChange
+            onDomainChange: practiceRequest.purpose === 'targeted_domain' && !practiceRequest.objective && onPracticeRequestChange
               ? (domain) => onPracticeRequestChange({ ...practiceRequest, domain: normalizeDomainKey(domain) })
               : null,
           } : null}

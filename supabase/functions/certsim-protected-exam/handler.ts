@@ -320,6 +320,7 @@ function validatePracticeRequest(value: Record<string, unknown>, mutation: boole
   if (!isCanonicalLanguage(value.examKey, value.language)) throw new SafeError("invalid_request");
   if (value.mixStrategy != null && !["missed-heavy", "balanced", "new-heavy"].includes(String(value.mixStrategy))) throw new SafeError("invalid_request");
   if (value.domain != null && (typeof value.domain !== "string" || value.domain.length > 128)) throw new SafeError("invalid_request");
+  if (value.objective != null && (typeof value.objective !== "string" || value.objective.length > 160)) throw new SafeError("invalid_request");
   if (value.contentKind != null && !["pbq", "case-study"].includes(String(value.contentKind))) throw new SafeError("invalid_request");
   if (mutation) assertUuid(value.clientRequestId);
   const canonical: Record<string, unknown> = { ...value, ...(count == null ? {} : { count }), includePbqs: value.includePbqs === true || value.includePbqs === "true" };

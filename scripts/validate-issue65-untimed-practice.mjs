@@ -33,7 +33,7 @@ assert.match(app, /purpose === 'weak_area' \? \(overrides\.count \?\? 20\) : ove
 assert.doesNotMatch(app, /targeted_domain', \{ domain: examConfig\.domainNames\?\.\[0\] \}/);
 assert.match(app, /ProtectedTargetedDomainSetup/);
 assert.match(chooser, /Choose a domain/);
-assert.match(chooser, /disabled=\{!domain\}/);
+assert.match(chooser, /disabled=\{!selected\}/);
 assert.match(chooser, /No session is created until/);
 assert.match(runner, /isPracticeSession \? 'Start practice' : 'Start exam'/);
 assert.match(runner, /timed: availability\?\.timed === true/);

@@ -45,7 +45,7 @@ assert.match(panel, /assignment\.learnerAction\.label/);
 assert.match(panel, /assignment-action-unavailable/);
 assert.match(registry, /id:'sc200', lifecycle:EXAM_LIFECYCLES\.productionReady/);
 assert.match(contract, /sc200:\s*'sc200'/);
-assert.match(contract, /sc200:\s*Object\.freeze\(\[\s*'sc200-full'/);
+assert.match(contract, /sc200:\s*Object\.freeze\(\[\s*'sc200-full',\s*'sc200-compact'/);
 assert.doesNotMatch(panel, /correctAnswer|explanation|protectedPayload/);
 
 console.log('Issue #83 assigned launch validation passed.');

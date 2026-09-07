@@ -10,7 +10,7 @@ import { corsHeaders } from "../cors.ts";
 import { SafeError, translateRpcFailure } from "../errors.ts";
 import { handleProtectedExam } from "../handler.ts";
 import { matchRoute } from "../routes.ts";
-import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapPracticeCheck, mapQuestionIssue, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffScopeOptions } from "../responses.ts";
+import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapPracticeAvailability, mapPracticeCheck, mapQuestionIssue, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffScopeOptions } from "../responses.ts";
 import {
   MAX_BODY_BYTES,
   readJsonBody,
@@ -33,6 +33,27 @@ const EMPTY_STAFF_ANALYTICS = {
   assignmentLearners: [],
   domains: [],
 };
+
+Deno.test("practice availability exposes only server-confirmed objective aggregates", () => {
+  const mapped = mapPracticeAvailability({
+    ok: true,
+    examKey: "sc200",
+    packageVersion: "1.1.0",
+    profileKey: "sc200-compact",
+    purpose: "targeted_domain",
+    selectedCount: 24,
+    domainCounts: { manage: 126 },
+    objectiveCounts: { manage: { detections: 24 } },
+    confirmedDomain: "manage",
+    confirmedObjective: "detections",
+    questionIds: ["blocked"],
+    correctAnswers: ["blocked"],
+  });
+  assertEquals(mapped.confirmedObjective, "detections");
+  assertEquals(mapped.objectiveCounts, { manage: { detections: 24 } });
+  assert(!("questionIds" in mapped));
+  assert(!("correctAnswers" in mapped));
+});
 
 Deno.test("result mapper explicitly retains only the strict authority marker", () => {
   const mapped = mapResult({

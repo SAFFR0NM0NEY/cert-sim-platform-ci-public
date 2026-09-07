@@ -769,7 +769,7 @@ function getDashboardSummaryStats(exam) {
   stats.push(
     {
       label: 'Domains',
-      value: exam.domains.length,
+      value: exam.domainSummary ?? exam.domains.length,
     },
     {
       label: 'Status',

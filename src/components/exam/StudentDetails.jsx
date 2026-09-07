@@ -106,6 +106,7 @@ export default function StudentDetails({
               <div><dt>Practice items</dt><dd>{practiceSession.selectedCount ?? 'Checking...'}</dd></div>
               <div><dt>Timing</dt><dd>{practiceSession.timed ? `${practiceSession.timeLimitMinutes} min` : 'Untimed'}</dd></div>
               {practiceSession.domain ? <div><dt>Selected domain</dt><dd>{practiceSession.domainLabel}</dd></div> : null}
+              {practiceSession.objective ? <div><dt>Objective group</dt><dd>{practiceSession.objectiveLabel}</dd></div> : null}
               {practiceSession.contentKind ? <div><dt>Content</dt><dd>{formatPracticeContent(practiceSession.contentKind)}</dd></div> : null}
             </dl>
           ) : <dl className="profile-facts">

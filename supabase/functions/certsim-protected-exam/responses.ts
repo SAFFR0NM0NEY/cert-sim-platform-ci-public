@@ -274,7 +274,7 @@ export function assertNoProtectedPreReview(value: unknown): void {
 }
 
 export function mapPracticeAvailability(raw: unknown): Obj {
-  const mapped = pick(object(raw), ["examKey", "packageVersion", "profileKey", "purpose", "available", "selectedCount", "adjustedCount", "profileQuestionCount", "timeLimitMinutes", "timed", "deliveryMode", "fixedProfileSize", "profileComposition", "domainCounts", "missedCount", "newCount", "pbqCount", "languages"]);
+  const mapped = pick(object(raw), ["examKey", "packageVersion", "profileKey", "purpose", "available", "selectedCount", "adjustedCount", "profileQuestionCount", "timeLimitMinutes", "timed", "deliveryMode", "fixedProfileSize", "profileComposition", "domainCounts", "objectiveCounts", "confirmedDomain", "confirmedObjective", "missedCount", "newCount", "pbqCount", "languages"]);
   if (mapped.examKey !== "az204") mapped.languages = [];
   return mapped;
 }

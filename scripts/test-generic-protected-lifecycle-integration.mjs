@@ -322,6 +322,7 @@ sql(`select 1/((count(*)=1 and bool_and(response_count=1) and bool_and(reason_co
 for(const config of [
   {purpose:'study_sandbox',language:'not_applicable',check:true},
   {purpose:'targeted_domain',language:'not_applicable',domain:'d1'},
+  {purpose:'targeted_domain',language:'not_applicable',domain:'d1',objective:'standard',objectiveCheck:true},
   {purpose:'pbq_practice',language:'not_applicable'},
 ]){
   const request={examKey:'sample-400',profileId:'sectioned',includePbqs:true,mixStrategy:'balanced',clientRequestId:crypto.randomUUID(),...config};
@@ -332,6 +333,8 @@ for(const config of [
   const discoveredPurpose=await admin.rpc('certsim_protected_discover_current_attempt',{p_actor_id:learner.id,p_exam_key:'sample-400',p_package_version:'1.0.0',p_profile_key:'sectioned',p_purpose:config.purpose,p_language:'not_applicable'});
   if(discoveredPurpose.error||discoveredPurpose.data?.attempt?.attemptId!==purposeId) fail(`PRACTICE_${config.purpose.toUpperCase()}_DISCOVERY_FAILED`);
   const scoredPurposeItems=startedPurpose.data.items.filter((item)=>item.questionType!=='case-study-context');
+  if(config.objectiveCheck && (scoredPurposeItems.length===0 || scoredPurposeItems.some((item)=>item.section!=='standard')))
+    fail('TARGETED_OBJECTIVE_SELECTION_FAILED');
   for(const item of scoredPurposeItems){
     const saved=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:purposeId,p_item_id:item.itemId,p_response:responseFor(item),p_expected_revision:0,p_request_id:crypto.randomUUID()});
     if(saved.error||saved.data?.revision!==1) fail(`PRACTICE_${config.purpose.toUpperCase()}_SAVE_FAILED`);

@@ -21,7 +21,13 @@ const definitions = [
     id:'sc200', lifecycle:EXAM_LIFECYCLES.productionReady, statusLabel:'Protected practice', statusNote:'Protected practice.',
     questionCount:300, domainCount:3, pbqCount:0, caseStudyCount:0, passingScore:700,
     domainNames:['Manage a security operations environment','Respond to security incidents','Perform threat hunting'],
-    modes:[mode('sc200-protected-practice','SC-200 Practice')], profiles:withRouteActions('sc200',['full']),
+    domainSummary:'3 domains · 9 objective groups',
+    objectiveGroups:[
+      {domain:'Manage a security operations environment',objectives:['Configure automation for Microsoft Defender XDR and Microsoft Sentinel','Configure the Microsoft Sentinel SIEM and platform','Ingest data into the Microsoft Sentinel SIEM and platform','Configure detections']},
+      {domain:'Respond to security incidents',objectives:['Respond to alerts and incidents in Microsoft Defender XDR','Respond to alerts and incidents in Microsoft Defender for Endpoint','Investigate Microsoft 365 activities to identify threats']},
+      {domain:'Perform threat hunting',objectives:['Detect threats by using Microsoft Defender XDR','Detect threats by using the Microsoft Sentinel platform']},
+    ],
+    modes:[mode('sc200-protected-practice','SC-200 Practice')], profiles:withRouteActions('sc200',['full','compact']),
   },
   {
     id: 'az204', lifecycle: EXAM_LIFECYCLES.nearRetirement,
