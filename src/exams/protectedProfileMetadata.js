@@ -7,7 +7,7 @@ export const protectedProfileMetadata = Object.freeze({
     inventoryCount: 276,
     profiles: Object.freeze([
       profile('inf303-standard', 'Full Simulation', 40, 120, { standardQuestionCount: 40, canonicalFormCount: 6 }),
-      profile('inf303-compact', 'Compact Simulation', 20, 60, { standardQuestionCount: 20, canonicalFormCount: 6 }),
+      profile('inf303-compact', 'Compact', 20, 60, { standardQuestionCount: 20, canonicalFormCount: 6 }),
     ]),
   }),
   sc200: Object.freeze({packageVersion:'1.1.0',inventoryCount:300,profiles:Object.freeze([
