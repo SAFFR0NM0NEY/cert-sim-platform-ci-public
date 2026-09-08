@@ -24,6 +24,17 @@ const migration = await readFile(new URL('../supabase/migrations/20260908120351_
 for (const token of ['true-false-single-v1', 'true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1', 'correctValuesByStatement', 'correctTargetIdsBySource', 'correctOptionIdsByBlank', 'maximumRawPoints']) assert.match(migration, new RegExp(token));
 assert.match(migration, /revoke execute on function exam_delivery\.package_v2_response_valid[^;]+from public,anon,authenticated,service_role/i);
 assert.doesNotMatch(migration, /grant execute on function exam_delivery\.score_package_v2_response/i);
+const publicationMigration = await readFile(new URL('../supabase/migrations/20260908134811_issue85_python_standard_publication_contract.sql', import.meta.url), 'utf8');
+for (const capability of ['true-false-single-v1', 'true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1']) {
+  assert.match(publicationMigration, new RegExp(`'${capability}'`));
+}
+assert.match(publicationMigration, /p_generator\s*=\s*'certsim-python-standard-canonical-forms-v1'[\s\S]+p_scorer\s*=\s*'certsim-versioned-structured-partial-v1'[\s\S]+p_pbq_runtime is null/i);
+assert.match(publicationMigration, /alter function exam_delivery\.package_v2_runtime_supported\(text,text,text\) owner to postgres/i);
+assert.match(publicationMigration, /revoke execute on function exam_delivery\.package_v2_runtime_supported\(text,text,text\)[\s\S]+from public, anon, authenticated, service_role/i);
+assert.match(publicationMigration, /create or replace function exam_delivery\.publish_package_v2\(p_request jsonb\)[\s\S]+security definer[\s\S]+set search_path = ''[\s\S]+set statement_timeout = '15s'/i);
+assert.match(publicationMigration, /alter function exam_delivery\.publish_package_v2\(jsonb\) owner to postgres/i);
+assert.match(publicationMigration, /revoke execute on function exam_delivery\.publish_package_v2\(jsonb\)[\s\S]+from public, anon, authenticated, service_role[\s\S]+grant execute on function exam_delivery\.publish_package_v2\(jsonb\)[\s\S]+to authenticated/i);
+assert.doesNotMatch(publicationMigration, /grant execute on function exam_delivery\.package_v2_runtime_supported\(text,text,text\) to (anon|authenticated|service_role)/i);
 const edge = await readFile(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
 assert.match(edge, /sanitizeQuestionPresentation/); assert.match(edge, /safeArray\(presentation\.blanks/); assert.doesNotMatch(edge, /privateScoring/);
 const card = await readFile(new URL('../src/components/exam/QuestionCard.jsx', import.meta.url), 'utf8');
