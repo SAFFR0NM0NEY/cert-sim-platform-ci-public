@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { serializeProtectedResponse, deserializeProtectedResponse, toPresentationQuestion } from '../src/lib/protectedExamContract.js';
-import { getStructuredResponseState } from '../src/lib/structuredResponse.js';
+import { getStructuredResponseState, normalizeKeyedStructuredAnswer, updateKeyedStructuredAnswer } from '../src/lib/structuredResponse.js';
 import { resolveReleasedStructuredPairs, resolveReleasedTrueFalse } from '../src/lib/releasedAnswerDisplay.js';
 
 const composite = { id: 'item-c', type: 'true-false-composite-v1', statements: [{ id: 's1' }, { id: 's2' }] };
@@ -17,6 +17,11 @@ for (const [question, answer] of [[composite, { s1: true, s2: false }], [matchin
 const singleBoolean = { id: 'item-b', type: 'true-false-single-v1' };
 assert.deepEqual(serializeProtectedResponse(singleBoolean, false), { answer: false });
 assert.equal(deserializeProtectedResponse(singleBoolean, { answer: false }), false);
+assert.deepEqual(updateKeyedStructuredAnswer({ s1: 't1', s2: 't2' }, 's2', ''), { s1: 't1' });
+assert.deepEqual(updateKeyedStructuredAnswer({ s1: 't1' }, 's1', ''), {});
+assert.deepEqual(normalizeKeyedStructuredAnswer({ s1: 't1', s2: '', s3: null }), { s1: 't1' });
+assert.deepEqual(serializeProtectedResponse(matching, { s1: 't1', s2: '' }), { answer: { s1: 't1' } });
+assert.deepEqual(serializeProtectedResponse(dropdown, { b1: 'o1', b2: '' }), { answer: { b1: 'o1' } });
 const safe = toPresentationQuestion({ itemId: 'item-c', questionId: 'private-question-id', questionType: composite.type, questionNumber: 4, presentation: { prompt: 'Fixture', interactionVersion: composite.type, statements: [{ id: 's1', text: 'Fixture statement' }] }, revision: 2 });
 assert.equal(safe.question, 'Fixture'); assert.equal(safe.type, composite.type); assert.equal(safe.revision, 2);
 assert.throws(() => toPresentationQuestion({ itemId: 'x', questionType: composite.type, presentation: { prompt: 'Fixture', correctValuesByStatement: { s1: true } } }), /protected_field_detected/);
@@ -67,6 +72,7 @@ const card = await readFile(new URL('../src/components/exam/QuestionCard.jsx', i
 for (const component of ['TrueFalseQuestion', 'AccessibleMatchingQuestion', 'CodeDropdownCompletionQuestion']) assert.match(card, new RegExp(component));
 const matchingUi = await readFile(new URL('../src/components/exam/AccessibleMatchingQuestion.jsx', import.meta.url), 'utf8');
 assert.match(matchingUi, /<select/); assert.match(matchingUi, /aria-label/);
+assert.match(matchingUi, /allowTargetReuse === false/); assert.match(matchingUi, /disabled=\{selectedByAnotherSource\}/);
 const tfPresentation = { type: 'true-false-composite-v1', statements: [{ id: 's1', text: 'First statement' }, { id: 's2', text: 'Second statement' }] };
 assert.deepEqual(resolveReleasedTrueFalse(tfPresentation, { answer: { s1: true, s2: false } }).entries.map(({ text }) => text), ['True', 'False']);
 assert.equal(resolveReleasedTrueFalse(tfPresentation, { answer: { unknown: true } }).status, 'invalid');

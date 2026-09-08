@@ -1,3 +1,5 @@
+import { normalizeKeyedStructuredAnswer } from './structuredResponse.js';
+
 const EXAM_IDENTITIES = Object.freeze({
   sc200: 'sc200',
   ai901: 'ai901',
@@ -110,7 +112,10 @@ export function serializeProtectedResponse(question, answer) {
   if (['multi-select', 'reorder'].includes(type)) {
     return { answer: Array.isArray(answer) ? [...answer] : [] };
   }
-  if (['drag-drop-match', 'dropdown-code', 'dropdown-command', 'true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1'].includes(type)) {
+  if (['true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1'].includes(type)) {
+    return { answer: normalizeKeyedStructuredAnswer(answer) };
+  }
+  if (['drag-drop-match', 'dropdown-code', 'dropdown-command'].includes(type)) {
     return {
       answer: answer && typeof answer === 'object' && !Array.isArray(answer)
         ? structuredClone(answer)
