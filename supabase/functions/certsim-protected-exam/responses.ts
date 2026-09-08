@@ -87,7 +87,7 @@ export function mapAttempt(raw: unknown): Obj {
         "revision",
       ]),
       questionNumber,
-      presentation: sanitizePresentation(item.presentation),
+      presentation: sanitizeQuestionPresentation(item.questionType, item.presentation),
     })),
     page: v.page == null
       ? { afterPosition: 0, returnedThrough: Array.isArray(v.items) ? v.items.length : 0, totalCount: Array.isArray(v.items) ? v.items.length : 0, hasMore: false }
@@ -110,7 +110,7 @@ export function mapAttemptItemPage(raw: unknown): Obj {
     items: mapPresentationItems(v.items, (item, questionNumber) => ({
       ...pick(item, ["itemId", "questionId", "questionType", "domain", "section", "response", "revision"]),
       questionNumber: Number.isInteger(item.questionNumber) ? item.questionNumber : questionNumber,
-      presentation: sanitizePresentation(item.presentation),
+      presentation: sanitizeQuestionPresentation(item.questionType, item.presentation),
     })),
   };
 }
@@ -210,7 +210,7 @@ export function mapReview(raw: unknown): Obj {
           "remediation",
         ]),
         questionNumber,
-        presentation: sanitizePresentation(item.presentation),
+        presentation: sanitizeQuestionPresentation(item.questionType, item.presentation),
       })),
     },
   };
@@ -240,6 +240,8 @@ const PROTECTED_KEYS = new Set([
   "scoringkey", "scoringkeys", "scoringrules", "weight", "weights",
   "protectedpayload", "protectedsnapshot", "packagehash", "validationhash",
   "publicationrequestid", "internaluuid",
+  "correctvalue", "correctvaluesbystatement", "correcttargetidsbysource",
+  "correctoptionidsbyblank", "pointsbyblank", "maximumrawpoints", "modelsolution",
 ]);
 const PRE_REVIEW_RESPONSE_KEYS = new Set([
   "acceptedanswer", "acceptedanswers", "answerkey", "correctanswer",
@@ -249,6 +251,8 @@ const PRE_REVIEW_RESPONSE_KEYS = new Set([
   "scoringkey", "scoringkeys", "scoringrules", "protectedpayload",
   "protectedsnapshot", "packagehash", "validationhash",
   "publicationrequestid", "internaluuid",
+  "correctvalue", "correctvaluesbystatement", "correcttargetidsbysource",
+  "correctoptionidsbyblank", "pointsbyblank", "maximumrawpoints", "modelsolution",
 ]);
 function sanitizePresentation(
   value: unknown,
@@ -267,6 +271,28 @@ function sanitizePresentation(
     output[key] = sanitizePresentation(entry, depth + 1, blockedKeys);
   }
   return output;
+}
+
+function sanitizeQuestionPresentation(questionType: unknown, value: unknown): unknown {
+  const type = String(questionType ?? "");
+  const presentation = object(sanitizePresentation(value));
+  const item = (entry: unknown) => pick(object(entry), ["id", "text"]);
+  if (type === "true-false-single-v1") {
+    return pick(presentation, ["prompt", "statementId", "interactionVersion"]);
+  }
+  if (type === "true-false-composite-v1") {
+    return { ...pick(presentation, ["prompt", "interactionVersion"]), statements: safeArray(presentation.statements, item) };
+  }
+  if (type === "matching-v1") {
+    return { ...pick(presentation, ["prompt", "allowTargetReuse", "interactionVersion"]), sources: safeArray(presentation.sources, item), targets: safeArray(presentation.targets, item) };
+  }
+  if (type === "code-dropdown-completion-v1") {
+    return {
+      ...pick(presentation, ["prompt", "codeTemplate", "interactionVersion", "language"]),
+      blanks: safeArray(presentation.blanks, (blank) => ({ ...pick(blank, ["id", "label"]), options: safeArray(blank.options, item) })),
+    };
+  }
+  return presentation;
 }
 
 export function assertNoProtectedPreReview(value: unknown): void {

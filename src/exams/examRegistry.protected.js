@@ -18,6 +18,14 @@ const profile = (id, name, totalScoredQuestions, timeLimitMinutes, details = {})
 
 const definitions = [
   {
+    id: 'inf303', lifecycle: EXAM_LIFECYCLES.draft,
+    statusLabel: 'Protected package candidate', statusNote: 'Pending protected rollout validation.',
+    domainCount: 6, pbqCount: 0, caseStudyCount: 0, passingScore: 700,
+    domainNames: ['Python fundamentals', 'Data types and operators', 'Flow control', 'Data collections', 'Functions and exceptions', 'Modules and tools'],
+    modes: [mode('inf303-protected-practice', 'Python Standard Practice')],
+    profiles: withRouteActions('inf303', ['full']),
+  },
+  {
     id:'sc200', lifecycle:EXAM_LIFECYCLES.productionReady, statusLabel:'Protected practice', statusNote:'Protected practice.',
     domainCount:3, pbqCount:0, caseStudyCount:0, passingScore:700,
     domainNames:['Manage a security operations environment','Respond to security incidents','Perform threat hunting'],
@@ -136,7 +144,7 @@ function createContentFreeDefinition(item) {
   });
 }
 
-export const [sc200ExamDefinition, az204ExamDefinition, securityPlusSy0701ExamDefinition, az400ExamDefinition, ai901ExamDefinition] = definitions;
+export const [inf303ExamDefinition, sc200ExamDefinition, az204ExamDefinition, securityPlusSy0701ExamDefinition, az400ExamDefinition, ai901ExamDefinition] = definitions;
 export const examRegistry = definitions;
 export const activeExamConfigs = examRegistry.filter(isLiveVisibleExamConfig);
 export const liveVisibleExamConfigs = examRegistry.filter(isLiveVisibleExamConfig);

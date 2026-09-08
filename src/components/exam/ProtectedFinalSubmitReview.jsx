@@ -1,4 +1,5 @@
 import FinalSubmitReviewPresentation from './FinalSubmitReviewPresentation.jsx';
+import { getStructuredResponseState } from '../../lib/structuredResponse.js';
 
 export default function ProtectedFinalSubmitReview({ answers, exam, flaggedQuestionIds, onNavigateToItem, onReturnToExam, onSubmitFinal, questions, remainingSeconds }) {
   const flaggedSet = new Set(flaggedQuestionIds);
@@ -12,6 +13,8 @@ export default function ProtectedFinalSubmitReview({ answers, exam, flaggedQuest
 }
 function getAnswerState(question, value) {
   if (question.type === 'case-study-info') return 'info';
+  const structuredState = getStructuredResponseState(question, value);
+  if (structuredState) return structuredState;
   if (value == null || value === '') return 'unanswered';
   if (Array.isArray(value)) return value.length ? 'answered' : 'unanswered';
   if (typeof value === 'object') return Object.values(value).some((entry) => entry != null && entry !== '' && (!Array.isArray(entry) || entry.length)) ? 'answered' : 'unanswered';

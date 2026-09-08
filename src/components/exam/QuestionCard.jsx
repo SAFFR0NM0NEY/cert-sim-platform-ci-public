@@ -3,6 +3,9 @@ import DragDropMatchQuestion from './DragDropMatchQuestion.jsx';
 import DropdownCodeQuestion from './DropdownCodeQuestion.jsx';
 import DropdownCommandQuestion from './DropdownCommandQuestion.jsx';
 import ReorderQuestion from './ReorderQuestion.jsx';
+import TrueFalseQuestion from './TrueFalseQuestion.jsx';
+import AccessibleMatchingQuestion from './AccessibleMatchingQuestion.jsx';
+import CodeDropdownCompletionQuestion from './CodeDropdownCompletionQuestion.jsx';
 import PBQExamQuestion from '../pbq/PBQExamQuestion.jsx';
 import { getQuestionCodingLanguageMeta } from '../../utils/codingLanguage.js';
 import { isPBQQuestion } from '../../lib/questionType.js';
@@ -68,6 +71,18 @@ export default function QuestionCard({
         />
       </QuestionShell>
     );
+  }
+
+  if (question.type === 'matching-v1') {
+    return <QuestionShell hideTrainingLabels={hideTrainingLabels} question={question} typeLabel="Matching"><AccessibleMatchingQuestion answer={answer} onAnswerChange={onAnswerChange} question={question} /></QuestionShell>;
+  }
+
+  if (['true-false-single-v1', 'true-false-composite-v1'].includes(question.type)) {
+    return <QuestionShell hideTrainingLabels={hideTrainingLabels} question={question} typeLabel="True or False"><TrueFalseQuestion answer={answer} onAnswerChange={onAnswerChange} question={question} /></QuestionShell>;
+  }
+
+  if (question.type === 'code-dropdown-completion-v1') {
+    return <QuestionShell hideTrainingLabels={hideTrainingLabels} question={question} typeLabel="Code completion"><CodeDropdownCompletionQuestion answer={answer} onAnswerChange={onAnswerChange} question={question} /></QuestionShell>;
   }
 
   if (question.type === 'reorder') {

@@ -1,5 +1,16 @@
 const definitions = [
   {
+    canonicalId: 'inf303',
+    routeSlug: 'inf303',
+    code: 'INF-303',
+    shortTitle: 'Python Standard',
+    fullTitle: 'INF-303: Python Standard',
+    vendor: 'Certiport',
+    aliases: ['INF 303', 'INF-303', 'ITS 303', 'ITS-303', 'Python Standard'],
+    internalAliases: [],
+    searchAliases: ['Python', 'Information Technology Specialist'],
+  },
+  {
     canonicalId: 'sc200', routeSlug: 'sc200', code: 'SC-200',
     shortTitle: 'Microsoft Security Operations Analyst',
     fullTitle: 'SC-200: Microsoft Security Operations Analyst', vendor: 'Microsoft',

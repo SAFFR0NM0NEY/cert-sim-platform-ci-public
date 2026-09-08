@@ -4,6 +4,7 @@ const EXAM_IDENTITIES = Object.freeze({
   az204: 'az204',
   az400: 'az400',
   'security-plus-sy0-701': 'securityplussy0701',
+  inf303: 'inf303',
 });
 export const PROTECTED_ATTEMPT_PURPOSES = Object.freeze(['assigned_assessment', 'self_directed_exam', 'study_sandbox', 'targeted_domain', 'weak_area', 'pbq_practice']);
 export const PROTECTED_LANGUAGE_PREFERENCES = Object.freeze(['csharp', 'python', 'mixed']);
@@ -32,11 +33,14 @@ const PROFILE_IDENTITIES = Object.freeze({
     'strict-beta-full',
     'strict-beta-compact',
   ]),
+  inf303: Object.freeze(['inf303-standard']),
 });
 
 const SAFE_PRESENTATION_TYPES = new Set([
   'single-choice', 'multi-select', 'reorder', 'drag-drop-match',
   'dropdown-code', 'dropdown-command', 'case-study-context', 'informational',
+  'true-false-single-v1', 'true-false-composite-v1', 'matching-v1',
+  'code-dropdown-completion-v1',
   'pbq-terminal', 'pbq-multi-host-terminal', 'pbq-firewall', 'pbq-siem',
   'pbq-network-diagram', 'pbq-config-panel', 'pbq-hotspot',
   'pbq-drag-drop-match', 'pbq-ordering', 'pbq-workspace',
@@ -51,6 +55,8 @@ const BLOCKED_PRESENTATION_KEYS = new Set([
   'scoringkey', 'scoringkeys', 'scoringrules', 'weight', 'weights',
   'protectedpayload', 'protectedsnapshot', 'packagehash', 'validationhash',
   'publicationrequestid', 'internaluuid',
+  'correctvalue', 'correctvaluesbystatement', 'correcttargetidsbysource',
+  'correctoptionidsbyblank', 'pointsbyblank', 'maximumrawpoints', 'modelsolution',
 ]);
 
 export function getProtectedExamKey(frontendExamId) {
@@ -82,6 +88,7 @@ export function toPresentationQuestion(item) {
     : item.questionType;
   return {
     ...presentation,
+    question: presentation.question ?? presentation.prompt ?? '',
     id: item.itemId,
     sourceQuestionId: item.questionId,
     questionNumber: item.questionNumber,
@@ -99,10 +106,11 @@ export function serializeProtectedResponse(question, answer) {
   }
   if (type === 'case-study-info' || type === 'informational') return null;
   if (type === 'single-choice') return { answer: answer ?? '' };
+  if (type === 'true-false-single-v1') return { answer: typeof answer === 'boolean' ? answer : null };
   if (['multi-select', 'reorder'].includes(type)) {
     return { answer: Array.isArray(answer) ? [...answer] : [] };
   }
-  if (['drag-drop-match', 'dropdown-code', 'dropdown-command'].includes(type)) {
+  if (['drag-drop-match', 'dropdown-code', 'dropdown-command', 'true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1'].includes(type)) {
     return {
       answer: answer && typeof answer === 'object' && !Array.isArray(answer)
         ? structuredClone(answer)
@@ -130,7 +138,7 @@ export function deserializeProtectedResponse(question, response) {
     throw new Error('unsupported_question_type');
   }
   if (type === 'case-study-info' || type === 'informational') return undefined;
-  if (['single-choice', 'multi-select', 'reorder', 'drag-drop-match', 'dropdown-code', 'dropdown-command'].includes(type)) {
+  if (['single-choice', 'true-false-single-v1', 'multi-select', 'reorder', 'drag-drop-match', 'dropdown-code', 'dropdown-command', 'true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1'].includes(type)) {
     return structuredClone(response.answer);
   }
   if (type === 'pbq-ordering') {

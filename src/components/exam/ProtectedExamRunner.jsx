@@ -23,6 +23,7 @@ import { getNormalizedDomainItems } from '../../lib/resultStorageMappers.js';
 import { resolvePracticeRequest } from '../../lib/protectedPracticeRequest.js';
 import ReleasedReviewAnswer from './ReleasedReviewAnswer.jsx';
 import { downloadProtectedResultSummaryPdf } from '../../lib/savedResultReportExport.js';
+import { getStructuredResponseState } from '../../lib/structuredResponse.js';
 
 export default function ProtectedExamRunner({
   assignmentId = '',
@@ -846,6 +847,8 @@ export default function ProtectedExamRunner({
 function getProtectedQuestionState(question, answers) {
   if (question.type === 'case-study-info') return 'info';
   const value = answers[question.id];
+  const structuredState = getStructuredResponseState(question, value);
+  if (structuredState) return structuredState;
   if (value == null || value === '') return 'unanswered';
   if (Array.isArray(value)) return value.length ? 'answered' : 'unanswered';
   if (typeof value === 'object') return Object.values(value).some((entry) => entry != null && entry !== '' && (!Array.isArray(entry) || entry.length)) ? 'answered' : 'unanswered';

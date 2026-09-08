@@ -14,6 +14,7 @@ const page = await readFile(
 );
 
 const fixtures = [
+  ['current protected Python Standard', 'inf303', 'INF-303 — Python Standard'],
   ['current protected AI-901', 'ai901', 'AI-901 — Azure AI Fundamentals'],
   ['current protected AZ-204', 'az204', 'AZ-204 — Developing Solutions for Microsoft Azure'],
   ['historical alias', 'Microsoft Azure AI Fundamentals', 'AI-901 — Azure AI Fundamentals'],

@@ -1058,3 +1058,16 @@ Deno.test("generic lifecycle reasons map to stable privacy-safe codes", () => {
   assertEquals(translateRpcFailure({ code: "assignment_required" }).code, "not_assigned");
   assertEquals(translateRpcFailure({ code: "invalid_response" }).code, "invalid_request");
 });
+
+Deno.test("Python Standard presentation mapper exposes only versioned public fields", () => {
+  const mapped = mapAttempt({
+    attempt: { attemptId: ATTEMPT, examKey: "inf303", packageVersion: "1.0.0", profileKey: "inf303-standard", status: "in_progress" },
+    items: [{
+      itemId: ITEM, questionId: "protected-id", questionType: "code-dropdown-completion-v1", domain: "domain-1", section: "objective-1", response: null, revision: 0,
+      presentation: { prompt: "Fixture", codeTemplate: "value = [[B1]]", interactionVersion: "code-dropdown-completion-v1", language: "python", blanks: [{ id: "B1", label: "Blank one", options: [{ id: "o1", text: "value" }] }], authoringNote: "must be dropped" },
+    }],
+  });
+  const presentation = (mapped.items as Record<string, unknown>[])[0].presentation as Record<string, unknown>;
+  assertEquals(Object.keys(presentation).sort(), ["blanks", "codeTemplate", "interactionVersion", "language", "prompt"]);
+  assertEquals(presentation.authoringNote, undefined);
+});

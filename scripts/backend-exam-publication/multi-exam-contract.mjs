@@ -11,6 +11,10 @@ export const MULTI_EXAM_QUESTION_CAPABILITIES = Object.freeze([
   'drag-drop-match',
   'dropdown-code',
   'dropdown-command',
+  'true-false-single-v1',
+  'true-false-composite-v1',
+  'matching-v1',
+  'code-dropdown-completion-v1',
   'case-study-context',
   'informational',
   'pbq-terminal',
@@ -41,6 +45,8 @@ const BLOCKED_PRESENTATION_KEYS = new Set([
   'answer', 'answers', 'correctanswer', 'correctanswers', 'correctorder',
   'correctpairs', 'expectedactions', 'explanation', 'partialcredit',
   'remediation', 'rubric', 'score', 'scoring', 'scoringrules',
+  'correctvalue', 'correctvaluesbystatement', 'correcttargetidsbysource',
+  'correctoptionidsbyblank', 'pointsbyblank', 'maximumrawpoints', 'modelsolution',
 ]);
 
 export function normalizeExamKey(value) {
@@ -174,7 +180,38 @@ function validateQuestionRecords(questions, capabilities) {
     requireObject(record.presentation, 'PRESENTATION_REQUIRED');
     requireObject(record.privateReview, 'PRIVATE_REVIEW_REQUIRED');
     assertPresentationPayloadSafe(record.presentation, record.id);
+    validateVersionedInteraction(record);
   }
+}
+
+function validateVersionedInteraction(record) {
+  const { presentation, privateScoring } = record;
+  if (record.type === 'true-false-single-v1') {
+    if (presentation.interactionVersion !== record.type || typeof presentation.statementId !== 'string' || typeof privateScoring.correctValue !== 'boolean' || privateScoring.maximumRawPoints !== 1) fail('TRUE_FALSE_SINGLE_INVALID');
+  } else if (record.type === 'true-false-composite-v1') {
+    validatePublicItems(presentation.statements, 'COMPOSITE_STATEMENTS_INVALID');
+    validateExactMap(privateScoring.correctValuesByStatement, presentation.statements, (value) => typeof value === 'boolean', 'COMPOSITE_SCORING_INVALID');
+    if (privateScoring.maximumRawPoints !== presentation.statements.length) fail('COMPOSITE_RAW_MAXIMUM_INVALID');
+  } else if (record.type === 'matching-v1') {
+    validatePublicItems(presentation.sources, 'MATCHING_SOURCES_INVALID'); validatePublicItems(presentation.targets, 'MATCHING_TARGETS_INVALID');
+    const targetIds = new Set(presentation.targets.map(({ id }) => id));
+    validateExactMap(privateScoring.correctTargetIdsBySource, presentation.sources, (value) => targetIds.has(value), 'MATCHING_SCORING_INVALID');
+    if (privateScoring.maximumRawPoints !== presentation.sources.length) fail('MATCHING_RAW_MAXIMUM_INVALID');
+  } else if (record.type === 'code-dropdown-completion-v1') {
+    if (presentation.interactionVersion !== record.type || typeof presentation.codeTemplate !== 'string' || !presentation.codeTemplate || !Array.isArray(presentation.blanks) || !presentation.blanks.length) fail('DROPDOWN_PRESENTATION_INVALID');
+    presentation.blanks.forEach((blank) => validatePublicItems(blank.options, 'DROPDOWN_OPTIONS_INVALID'));
+    validateExactMap(privateScoring.correctOptionIdsByBlank, presentation.blanks, (value, blank) => blank.options.some(({ id }) => id === value), 'DROPDOWN_SCORING_INVALID');
+    const maximum = presentation.blanks.reduce((sum, blank) => sum + Number(privateScoring.pointsByBlank?.[blank.id] ?? 0), 0);
+    if (maximum <= 0 || maximum !== privateScoring.maximumRawPoints) fail('DROPDOWN_RAW_MAXIMUM_INVALID');
+  }
+}
+
+function validatePublicItems(items, code) {
+  if (!Array.isArray(items) || !items.length || new Set(items.map(({ id }) => id)).size !== items.length || items.some((item) => !item || typeof item.id !== 'string' || typeof item.text !== 'string' || !item.text)) fail(code);
+}
+
+function validateExactMap(map, items, valueValid, code) {
+  if (!map || typeof map !== 'object' || Array.isArray(map) || Object.keys(map).length !== items.length || items.some((item) => !Object.hasOwn(map, item.id) || !valueValid(map[item.id], item))) fail(code);
 }
 
 function walk(value, reference) {

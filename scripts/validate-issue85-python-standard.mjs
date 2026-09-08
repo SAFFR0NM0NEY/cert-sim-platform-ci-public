@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { serializeProtectedResponse, deserializeProtectedResponse, toPresentationQuestion } from '../src/lib/protectedExamContract.js';
+import { getStructuredResponseState } from '../src/lib/structuredResponse.js';
+import { resolveReleasedStructuredPairs, resolveReleasedTrueFalse } from '../src/lib/releasedAnswerDisplay.js';
+
+const composite = { id: 'item-c', type: 'true-false-composite-v1', statements: [{ id: 's1' }, { id: 's2' }] };
+const matching = { id: 'item-m', type: 'matching-v1', sources: [{ id: 's1' }, { id: 's2' }] };
+const dropdown = { id: 'item-d', type: 'code-dropdown-completion-v1', blanks: [{ id: 'b1' }, { id: 'b2' }] };
+for (const [question, answer] of [[composite, { s1: true, s2: false }], [matching, { s1: 't2', s2: 't1' }], [dropdown, { b1: 'o1', b2: 'o4' }]]) {
+  const payload = serializeProtectedResponse(question, answer);
+  assert.deepEqual(payload, { answer }); assert.deepEqual(deserializeProtectedResponse(question, payload), answer);
+  assert.equal(getStructuredResponseState(question, answer), 'answered');
+  assert.equal(getStructuredResponseState(question, { [Object.keys(answer)[0]]: Object.values(answer)[0] }), 'incomplete');
+  assert.equal(getStructuredResponseState(question, {}), 'unanswered');
+}
+const singleBoolean = { id: 'item-b', type: 'true-false-single-v1' };
+assert.deepEqual(serializeProtectedResponse(singleBoolean, false), { answer: false });
+assert.equal(deserializeProtectedResponse(singleBoolean, { answer: false }), false);
+const safe = toPresentationQuestion({ itemId: 'item-c', questionId: 'private-question-id', questionType: composite.type, questionNumber: 4, presentation: { prompt: 'Fixture', interactionVersion: composite.type, statements: [{ id: 's1', text: 'Fixture statement' }] }, revision: 2 });
+assert.equal(safe.question, 'Fixture'); assert.equal(safe.type, composite.type); assert.equal(safe.revision, 2);
+assert.throws(() => toPresentationQuestion({ itemId: 'x', questionType: composite.type, presentation: { prompt: 'Fixture', correctValuesByStatement: { s1: true } } }), /protected_field_detected/);
+const migration = await readFile(new URL('../supabase/migrations/20260908120351_issue85_python_standard_interaction_scoring.sql', import.meta.url), 'utf8');
+for (const token of ['true-false-single-v1', 'true-false-composite-v1', 'matching-v1', 'code-dropdown-completion-v1', 'correctValuesByStatement', 'correctTargetIdsBySource', 'correctOptionIdsByBlank', 'maximumRawPoints']) assert.match(migration, new RegExp(token));
+assert.match(migration, /revoke execute on function exam_delivery\.package_v2_response_valid[^;]+from public,anon,authenticated,service_role/i);
+assert.doesNotMatch(migration, /grant execute on function exam_delivery\.score_package_v2_response/i);
+const edge = await readFile(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
+assert.match(edge, /sanitizeQuestionPresentation/); assert.match(edge, /safeArray\(presentation\.blanks/); assert.doesNotMatch(edge, /privateScoring/);
+const card = await readFile(new URL('../src/components/exam/QuestionCard.jsx', import.meta.url), 'utf8');
+for (const component of ['TrueFalseQuestion', 'AccessibleMatchingQuestion', 'CodeDropdownCompletionQuestion']) assert.match(card, new RegExp(component));
+const matchingUi = await readFile(new URL('../src/components/exam/AccessibleMatchingQuestion.jsx', import.meta.url), 'utf8');
+assert.match(matchingUi, /<select/); assert.match(matchingUi, /aria-label/);
+const tfPresentation = { type: 'true-false-composite-v1', statements: [{ id: 's1', text: 'First statement' }, { id: 's2', text: 'Second statement' }] };
+assert.deepEqual(resolveReleasedTrueFalse(tfPresentation, { answer: { s1: true, s2: false } }).entries.map(({ text }) => text), ['True', 'False']);
+assert.equal(resolveReleasedTrueFalse(tfPresentation, { answer: { unknown: true } }).status, 'invalid');
+const matchPresentation = { type: 'matching-v1', sources: [{ id: 's2', text: 'Second source' }, { id: 's1', text: 'First source' }], targets: [{ id: 't1', text: 'First target' }, { id: 't2', text: 'Second target' }] };
+assert.deepEqual(resolveReleasedStructuredPairs(matchPresentation, { answer: { s1: 't1', s2: 't2' } }).pairs.map(({ leftText, rightText }) => [leftText, rightText]), [['Second source', 'Second target'], ['First source', 'First target']]);
+const codePresentation = { type: 'code-dropdown-completion-v1', blanks: [{ id: 'b1', label: 'First blank', options: [{ id: 'o1', text: 'print' }] }] };
+assert.deepEqual(resolveReleasedStructuredPairs(codePresentation, { correctOptionIdsByBlank: { b1: 'o1' } }, { correct: true }).pairs[0], { leftText: 'First blank', rightText: 'print' });
+assert.equal(resolveReleasedStructuredPairs(codePresentation, { answer: { b1: 'internal-id' } }).status, 'invalid');
+console.log('Issue #85 Python Standard structured interactions validated.');
