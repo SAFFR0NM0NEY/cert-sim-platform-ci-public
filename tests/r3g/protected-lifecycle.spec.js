@@ -8,6 +8,46 @@ const option = [{ id: 'a', text: 'Option A' }, { id: 'b', text: 'Option B' }];
 const makeItem = (index, type, section, questionNumber) => ({ itemId: `item-${index}`, questionId: `source-${index}`, questionNumber, questionType: type, domain: 'Sanitized domain', section, response: null, revision: 0, presentation: type === 'case-study-context' ? { title: `Case ${index}`, content: 'Sanitized case.', facts: [] } : type.startsWith('pbq-') ? { type, title: `Lab ${index}`, scenario: 'Sanitized.', instructions: ['Choose.'], tasks: { prompt: 'Choose.', answerOptions: option.map(({ id, text }) => ({ id, label: text })) }, safetyNote: 'Fixture.' } : { question: `Sanitized question ${index}`, options: option } });
 const items = [makeItem(1,'case-study-context','case-1',null), ...Array.from({length:6},(_,i)=>makeItem(i+2,'single-choice','case-1',i+1)), makeItem(8,'case-study-context','case-2',null), ...Array.from({length:6},(_,i)=>makeItem(i+9,'single-choice','case-2',i+7)), ...Array.from({length:66},(_,i)=>makeItem(i+15,'single-choice','standard',i+13)), makeItem(81,'pbq-siem','pbq',79), makeItem(82,'pbq-workspace','pbq',80)];
 
+test('active runner preserves an unsaved answer across token rotation and one authentication retry', async ({ page }) => {
+  const authorization = [];
+  const saveBodies = [];
+  let saveRequests = 0;
+  let committedSaves = 0;
+  await page.route('**/functions/v1/certsim-protected-exam/**', async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.split('/certsim-protected-exam')[1];
+    const json = (value, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(value) });
+    if (path.startsWith('/attempts/current-bindings')) return json({ candidates: [] });
+    if (path.startsWith('/practice/availability')) return json({ examKey:'az400', packageVersion:'1.0.0', profileKey:'az400-sectioned-full-exam-profile', purpose:'self_directed_exam', available:true, selectedCount:80, adjustedCount:false, profileQuestionCount:80, timeLimitMinutes:120, fixedProfileSize:true, domainCounts:{}, missedCount:0, newCount:80, pbqCount:2, languages:[] });
+    if (path === '/practice/sessions') return json({ attempt:{ attemptId, examKey:'az400', packageVersion:'1.0.0', profileKey:'az400-sectioned-full-exam-profile', profileName:'Sectioned', status:'in_progress', startedAt:'2026-09-02T10:00:00.000Z', expiresAt:deadline, timeLimitMinutes:120, purpose:'self_directed_exam', languagePreference:null }, items }, 201);
+    if (path.endsWith('/flags')) return json({ itemIds: [] });
+    if (path.includes('/response')) {
+      saveRequests += 1;
+      authorization.push(request.headers().authorization);
+      saveBodies.push(request.postDataJSON());
+      if (saveRequests === 1) {
+        await page.evaluate(() => window.__setProtectedAccessToken('rotated-token'));
+        return json({ error: { code: 'unauthenticated' } }, 401);
+      }
+      committedSaves += 1;
+      return json({ itemId:'item-15', revision:1, updatedAt:new Date().toISOString() });
+    }
+    return json({ error: { code: 'unexpected_fixture_route' } }, 500);
+  });
+
+  await page.goto('/tests/r3g/protected-runner-harness.html');
+  await page.getByRole('button', { name: /Start/ }).click();
+  await page.getByRole('button', { name: 'Go to question 13' }).click();
+  await page.locator('.question-card input[type="radio"]').first().check();
+  await page.getByRole('button', { name: 'Go to question 14' }).click();
+  await expect(page.getByText('Standard Questions: Question 14 of 66')).toBeVisible();
+  expect(authorization).toEqual(['Bearer fixture-token', 'Bearer rotated-token']);
+  expect(saveBodies).toHaveLength(2);
+  expect(saveBodies[0]).toEqual(saveBodies[1]);
+  expect(saveBodies[0]).toMatchObject({ expectedRevision: 0 });
+  expect(committedSaves).toBe(1);
+});
+
 test('routed protected runner recovers technical refresh, then abandons explicitly without a result', async ({ page }) => {
   const recorder = { starts: [], saves: [], flags: [], issues: [], submits: [], abandons: [], resumes: [], bindings: [], deadline };
   let active = false; let saved = null; let flagged = false;

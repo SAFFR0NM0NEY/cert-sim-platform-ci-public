@@ -93,6 +93,19 @@ export async function signUpWithEmailPassword(email, password, displayName = '')
   };
 }
 
+export async function refreshCurrentSession() {
+  if (!isSupabaseConfigured || !supabase) {
+    return getAuthUnavailableResult();
+  }
+
+  const { data, error } = await supabase.auth.refreshSession();
+
+  return {
+    data,
+    error: getFriendlyAuthError(error, 'Could not refresh the current account session.'),
+  };
+}
+
 export async function requestPasswordReset(email) {
   if (!isSupabaseConfigured || !supabase) {
     return getAuthUnavailableResult();

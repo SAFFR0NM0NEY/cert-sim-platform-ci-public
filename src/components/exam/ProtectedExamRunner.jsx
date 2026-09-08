@@ -14,6 +14,8 @@ import {
   createProtectedExamClient,
   submitProtectedAttemptWithRecovery,
 } from '../../lib/protectedExamClient.js';
+import { createProtectedAccessTokenProvider } from '../../lib/protectedAccessToken.js';
+import { refreshCurrentSession } from '../../lib/authService.js';
 import { getServerRemainingSeconds } from '../../lib/protectedRunnerState.js';
 import { assertProtectedAttemptInventory, getProtectedItemSection } from '../../lib/protectedAttemptInventory.js';
 import useFullscreenMode from '../../utils/useFullscreenMode.js';
@@ -49,12 +51,17 @@ export default function ProtectedExamRunner({
   const practiceInitializationKey = effectivePracticeRequest
     ? JSON.stringify(effectivePracticeRequest)
     : '';
-  const client = useMemo(
-    () => session?.access_token
-      ? createProtectedExamClient({ accessToken: session.access_token })
-      : null,
-    [session?.access_token],
-  );
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const client = useMemo(() => {
+    if (!session?.access_token) return null;
+    return createProtectedExamClient({
+      getAccessToken: createProtectedAccessTokenProvider({
+        getCurrentAccessToken: () => sessionRef.current?.access_token,
+        refreshSession: refreshCurrentSession,
+      }),
+    });
+  }, [Boolean(session?.access_token)]);
   const [state, setState] = useState('eligibility-loading');
   const [message, setMessage] = useState('Checking protected-exam eligibility...');
   const [attempt, setAttempt] = useState(null);

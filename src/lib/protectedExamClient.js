@@ -34,31 +34,42 @@ const REASON_MESSAGES = Object.freeze({
   submission_state_conflict: 'The protected submission state could not be verified. Return to Saved Results before trying again.',
 });
 
-export function createProtectedExamClient({ accessToken, fetchImpl = fetch } = {}) {
-  if (!accessToken || typeof accessToken !== 'string') {
+export function createProtectedExamClient({ accessToken, getAccessToken, fetchImpl = fetch } = {}) {
+  const tokenProvider = typeof getAccessToken === 'function'
+    ? getAccessToken
+    : async () => accessToken;
+  if (typeof getAccessToken !== 'function' && (!accessToken || typeof accessToken !== 'string')) {
     throw new Error('protected_session_required');
   }
   const baseUrl = `${supabaseConfig.supabaseUrl}/functions/v1/${FUNCTION_NAME}`;
 
   async function request(path, { method = 'GET', body, signal } = {}) {
-    const maximumAttempts = method === 'GET' ? 2 : 1;
-    for (let attemptNumber = 1; attemptNumber <= maximumAttempts; attemptNumber += 1) {
+    const maximumTransportAttempts = method === 'GET' ? 2 : 1;
+    let transportAttempt = 0;
+    let authenticationRecoveryUsed = false;
+    let rejectedAccessToken = '';
+    while (transportAttempt < maximumTransportAttempts) {
+      const requestAccessToken = await resolveRequestAccessToken(tokenProvider, {
+        forceRefresh: authenticationRecoveryUsed,
+        rejectedAccessToken,
+      });
       const timeout = AbortSignal.timeout(TIMEOUT_MS);
       const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
       let response;
       try {
+        transportAttempt += 1;
         response = await fetchImpl(`${baseUrl}${path}`, {
         method,
         signal: combinedSignal,
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${requestAccessToken}`,
           apikey: supabaseConfig.supabaseAnonKey,
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
       } catch (error) {
-        if (attemptNumber < maximumAttempts && !signal?.aborted) continue;
+        if (transportAttempt < maximumTransportAttempts && !signal?.aborted) continue;
         const code = error?.name === 'TimeoutError' ? 'request_timeout' : 'network_failure';
         throw createClientError(code, 'The protected exam service could not be reached.', {
           ambiguousTransport: true,
@@ -66,8 +77,21 @@ export function createProtectedExamClient({ accessToken, fetchImpl = fetch } = {
       }
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        if (attemptNumber < maximumAttempts && response.status >= 500) continue;
-        const code = payload?.error?.code ?? 'internal_failure';
+        if (
+          response.status === 401 &&
+          !authenticationRecoveryUsed &&
+          !signal?.aborted &&
+          isAuthenticationRetrySafe(method, body)
+        ) {
+          authenticationRecoveryUsed = true;
+          rejectedAccessToken = requestAccessToken;
+          transportAttempt -= 1;
+          continue;
+        }
+        if (transportAttempt < maximumTransportAttempts && response.status >= 500) continue;
+        const code = response.status === 401
+          ? 'unauthenticated'
+          : payload?.error?.code ?? 'internal_failure';
         throw createClientError(code, REASON_MESSAGES[code] ?? 'The protected exam request failed.', {
           httpStatus: response.status,
         });
@@ -126,6 +150,27 @@ export function createProtectedExamClient({ accessToken, fetchImpl = fetch } = {
     getHistorySummary: (examKey, options) => request(`/history/summary?${new URLSearchParams({ examKey }).toString()}`, options),
     getPrintableSummary: (attemptId, options) => request(`/attempts/${attemptId}/print-summary`, options),
   });
+}
+
+function isAuthenticationRetrySafe(method, body) {
+  if (method === 'GET') return true;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+  return ['requestId', 'clientRequestId', 'submissionId']
+    .some((key) => typeof body[key] === 'string' && body[key].length > 0);
+}
+
+async function resolveRequestAccessToken(tokenProvider, context) {
+  let token;
+  try {
+    token = await tokenProvider(context);
+  } catch (error) {
+    if (error?.code === 'unauthenticated') throw error;
+    throw createClientError('unauthenticated', REASON_MESSAGES.unauthenticated);
+  }
+  if (!token || typeof token !== 'string' || (context.forceRefresh && token === context.rejectedAccessToken)) {
+    throw createClientError('unauthenticated', REASON_MESSAGES.unauthenticated);
+  }
+  return token;
 }
 
 function compactParams(value) {
