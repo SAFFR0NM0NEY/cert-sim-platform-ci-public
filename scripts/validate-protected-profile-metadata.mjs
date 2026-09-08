@@ -5,6 +5,7 @@ import { protectedProfileMetadata } from '../src/exams/protectedProfileMetadata.
 const expected = {
   inf303: {
     'inf303-standard': [40, 120, 40, 0, 0, 0, null],
+    'inf303-compact': [20, 60, 20, 0, 0, 0, null],
   },
   sc200: {
     'sc200-full': [50, 100, 50, 0, 0, 0, null],
@@ -53,5 +54,5 @@ for (const exam of liveVisibleExamConfigs) {
     count += 1;
   }
 }
-assert.equal(count, 14, 'all production-enabled protected profiles must be checked');
+assert.equal(count, 15, 'all production-enabled protected profiles must be checked');
 console.log(`Protected profile metadata parity validation passed (${count} profiles).`);

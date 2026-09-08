@@ -23,7 +23,7 @@ const definitions = [
     domainCount: 6, pbqCount: 0, caseStudyCount: 0, passingScore: 700,
     domainNames: ['Python fundamentals', 'Data types and operators', 'Flow control', 'Data collections', 'Functions and exceptions', 'Modules and tools'],
     modes: [mode('inf303-protected-practice', 'Python Standard Practice')],
-    profiles: withRouteActions('inf303', ['full']),
+    profiles: withRouteActions('inf303', ['full', 'compact']),
   },
   {
     id:'sc200', lifecycle:EXAM_LIFECYCLES.productionReady, statusLabel:'Protected practice', statusNote:'Protected practice.',

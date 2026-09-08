@@ -77,6 +77,8 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260908134811_issue85_python_standard_publication_contract.sql',
   '20260908151342_issue85_python_standard_form_materialization.sql',
   '20260908155215_issue85_inf303_release_configuration.sql',
+  '20260908182505_issue85_inf303_compact_mode_parity.sql',
+  '20260908182511_issue85_inf303_successor_cutover.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -153,6 +155,8 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260908134811_issue85_python_standard_publication_contract.sql': 'a45945d8b06b8ddd357c70f163d4c9da7c4b866fec15c6759027bb757fedcb72',
   '20260908151342_issue85_python_standard_form_materialization.sql': '1c7c450932a0f7a42a5716a991f01bdcf42136d5ef5bfd71e16a927d2938d0aa',
   '20260908155215_issue85_inf303_release_configuration.sql': '3d0c8bf303871ae8d7621f71518b5dbec85fb687d7cb386f1fa7d03d19c57928',
+  '20260908182505_issue85_inf303_compact_mode_parity.sql': '51c0afe1656469ba5742fc174845e0686167cf7e4e748facec370cebba0eb6a4',
+  '20260908182511_issue85_inf303_successor_cutover.sql': 'b73747ee42ea8c6a850c12b0fc4d7a9e15ef25366b4cb96c60f01be5637e382d',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

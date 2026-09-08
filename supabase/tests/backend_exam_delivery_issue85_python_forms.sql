@@ -1,5 +1,5 @@
 begin;
-select plan(33);
+select plan(39);
 
 select is((select pg_get_userbyid(proowner) from pg_proc where oid='exam_delivery.prepare_canonical_forms_on_publish()'::regprocedure),'postgres','form trigger function owner remains postgres');
 select ok((select prosecdef from pg_proc where oid='exam_delivery.prepare_canonical_forms_on_publish()'::regprocedure),'form trigger function remains security definer');
@@ -71,7 +71,17 @@ begin
     'exam',jsonb_build_object('examKey',p_exam,'packageVersion','1.0.0','capabilities',jsonb_build_array('true-false-single-v1','true-false-composite-v1','matching-v1','code-dropdown-completion-v1')),
     'source',jsonb_build_object('sourceHash',repeat('a',64),'validationHash',repeat('b',64)),
     'runtime',runtime,
-    'profiles',jsonb_build_array(jsonb_build_object('profileKey','python-standard','displayName','Python Standard','questionCount',3,'timeLimitMinutes',60,'selection',jsonb_build_object('canonicalForms',form_contract,'scoringContract','synthetic'))),
+    'profiles',case when p_exam='fixture85pymulti' then jsonb_build_array(
+      jsonb_build_object('profileKey','python-standard','displayName','Python Standard','questionCount',3,'timeLimitMinutes',60,'selection',jsonb_build_object('canonicalForms',form_contract,'scoringContract','synthetic')),
+      jsonb_build_object('profileKey','python-compact','displayName','Python Compact','questionCount',2,'timeLimitMinutes',30,'selection',jsonb_build_object('canonicalForms',jsonb_build_object(
+        'contractVersion','certsim-python-standard-forms-v1','cycleLength',2,'reservePolicy','profile-specific-reserve',
+        'reserveQuestionIds',jsonb_build_array('q3','q6','q7','q8'),
+        'forms',jsonb_build_array(
+          jsonb_build_object('formKey','PY-C01','ordinal',1,'questionIds',jsonb_build_array('q1','q2'),'membershipHash',exam_delivery.canonical_sha256(jsonb_build_array('q1','q2')),'rawMaximum',2),
+          jsonb_build_object('formKey','PY-C02','ordinal',2,'questionIds',jsonb_build_array('q4','q5'),'membershipHash',exam_delivery.canonical_sha256(jsonb_build_array('q4','q5')),'rawMaximum',2)
+        )
+      ),'scoringContract','synthetic'))
+    ) else jsonb_build_array(jsonb_build_object('profileKey','python-standard','displayName','Python Standard','questionCount',3,'timeLimitMinutes',60,'selection',jsonb_build_object('canonicalForms',form_contract,'scoringContract','synthetic'))) end,
     'questions',questions,
     'releasePolicy',jsonb_build_object('review','after_submission','answers','after_submission')
   );
@@ -89,6 +99,15 @@ select is((select count(*)::integer from exam_delivery.package_form_questions fq
 select is((select count(*)::integer from exam_delivery.package_reserve_questions r join exam_delivery.package_versions pv on pv.id=r.package_version_id where pv.exam_key='fixture85pyok'),2,'Python reserves are materialized');
 select results_eq($$select declared_review_release_policy,declared_answer_release_policy from exam_delivery.package_versions where exam_key='fixture85pyok'$$,$$values ('after_submission'::text,'after_submission'::text)$$,'Python package declares after-submission review and answers');
 select ok((select bool_and(not (blueprint_contract ?| array['skillGroupTargets','requiredObjectiveKeys','minimumCoverageTagCounts','difficultyRequirements'])) from exam_delivery.package_forms f join exam_delivery.package_versions pv on pv.id=f.package_version_id where pv.exam_key='fixture85pyok'),'Python blueprint metadata contains no invented rich-v2 fields');
+
+set local role authenticated;
+select lives_ok($$select public.certsim_protected_publish_package(pg_temp.issue85_python_form_request('fixture85pymulti','85100000-0000-0000-0000-000000000121'))$$,'multi-profile Python package publishes through the normal RPC');
+reset role;
+select is((select count(*)::integer from exam_delivery.package_profiles pp join exam_delivery.package_versions pv on pv.id=pp.package_version_id where pv.exam_key='fixture85pymulti'),2,'multi-profile Python package stores both profiles');
+select is((select count(*)::integer from exam_delivery.package_forms f join exam_delivery.package_versions pv on pv.id=f.package_version_id where pv.exam_key='fixture85pymulti'),4,'multi-profile Python forms materialize independently');
+select is((select count(*)::integer from exam_delivery.package_form_questions fq join exam_delivery.package_versions pv on pv.id=fq.package_version_id where pv.exam_key='fixture85pymulti'),10,'multi-profile memberships retain profile scope');
+select results_eq($$select profile_key,jsonb_array_length(selection_config#>'{canonicalForms,reserveQuestionIds}') from exam_delivery.package_profiles pp join exam_delivery.package_versions pv on pv.id=pp.package_version_id where pv.exam_key='fixture85pymulti' order by profile_key$$,$$values ('python-compact'::text,4),('python-standard'::text,2)$$,'profile-specific reserves remain preserved in immutable selection contracts');
+select is((select count(*)::integer from exam_delivery.package_reserve_questions r join exam_delivery.package_versions pv on pv.id=r.package_version_id where pv.exam_key='fixture85pymulti'),2,'package-global reserve contains only questions unused by every profile');
 
 insert into exam_delivery.exam_release_candidates(
   canonical_exam_key,package_version,profile_key,release_template,
@@ -118,7 +137,7 @@ select throws_ok($$select exam_delivery.publish_package_v2(pg_temp.issue85_pytho
 select throws_ok($$select exam_delivery.publish_package_v2(pg_temp.issue85_python_form_request('fixture85pymaximum','85100000-0000-0000-0000-000000000110','wrong_raw_maximum'))$$,'22023',null,'incorrect Python raw maximum fails');
 select throws_ok($$select exam_delivery.publish_package_v2(pg_temp.issue85_python_form_request('fixture85pyinventory','85100000-0000-0000-0000-000000000111','incomplete_inventory'))$$,'22023',null,'incomplete Python package inventory union fails');
 select throws_ok($$select exam_delivery.publish_package_v2(pg_temp.issue85_python_form_request('fixture85pyreserve','85100000-0000-0000-0000-000000000112','malformed_reserve'))$$,'22023',null,'malformed Python reserve collection fails');
-select is((select count(*)::integer from exam_delivery.package_versions where exam_key like 'fixture85py%'),1,'all failed Python publications remain atomic');
+select is((select count(*)::integer from exam_delivery.package_versions where exam_key like 'fixture85py%'),2,'all failed Python publications remain atomic');
 
 select * from finish();
 rollback;

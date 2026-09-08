@@ -35,7 +35,7 @@ const PROFILE_IDENTITIES = Object.freeze({
     'strict-beta-full',
     'strict-beta-compact',
   ]),
-  inf303: Object.freeze(['inf303-standard']),
+  inf303: Object.freeze(['inf303-standard', 'inf303-compact']),
 });
 
 const SAFE_PRESENTATION_TYPES = new Set([
