@@ -16,7 +16,7 @@ const select = (state = {}) => filterAndSortExamLibrary(exams, {
   ...state,
 });
 
-assert.equal(exams.length, 5, 'The visible protected registry should contain five exams.');
+assert.equal(exams.length, 6, 'The visible protected registry should contain six exams.');
 assert.equal(normalizeExamLibrarySearch('  AI–901  '), 'ai 901');
 
 for (const query of ['AI-901', 'ai-901', 'ai901', '  AI-901  ', 'AI 901', 'Azure AI', 'AI Fundamentals']) {
@@ -36,20 +36,23 @@ assert.deepEqual(ids(select({ query: 'DevOps' })), ['az400']);
 for (const query of ['SC-200', 'sc200', 'Security Operations Analyst', 'Microsoft Sentinel']) {
   assert.deepEqual(ids(select({ query })), ['sc200'], `${query} should find SC-200.`);
 }
+for (const query of ['INF-303', 'inf303', 'ITS-303', 'Python Standard', 'Certiport']) {
+  assert.deepEqual(ids(select({ query })), ['inf303'], `${query} should find Python Standard.`);
+}
 assert.deepEqual(ids(select({ query: 'Microsoft', vendor: 'Microsoft', lifecycle: 'controlledBeta' })), ['az400', 'ai901']);
-assert.deepEqual(ids(select({ lifecycle: 'productionReady' })), ['sc200', 'security-plus-sy0-701']);
+assert.deepEqual(ids(select({ lifecycle: 'productionReady' })), ['inf303', 'sc200', 'security-plus-sy0-701']);
 assert.deepEqual(ids(select({ vendor: 'CompTIA', lifecycle: 'productionReady' })), ['security-plus-sy0-701']);
 assert.deepEqual(ids(select({ query: 'Security+', vendor: 'Microsoft' })), []);
 
 const canonicalIds = ids(exams);
 const sourceBeforeSort = ids(exams);
 assert.deepEqual(ids(select()), canonicalIds, 'Recommended must preserve registry order.');
-assert.deepEqual(ids(select({ sort: 'name' })), ['az204', 'az400', 'security-plus-sy0-701', 'ai901', 'sc200']);
-assert.deepEqual(ids(select({ sort: 'vendor' })), ['security-plus-sy0-701', 'sc200', 'az204', 'az400', 'ai901']);
+assert.deepEqual(ids(select({ sort: 'name' })), ['az204', 'az400', 'security-plus-sy0-701', 'inf303', 'ai901', 'sc200']);
+assert.deepEqual(ids(select({ sort: 'vendor' })), ['inf303', 'security-plus-sy0-701', 'sc200', 'az204', 'az400', 'ai901']);
 assert.deepEqual(ids(exams), sourceBeforeSort, 'Sorting must not mutate the registry.');
 
 const options = deriveExamLibraryOptions(exams);
-assert.deepEqual(options.vendors, ['CompTIA', 'Microsoft']);
+assert.deepEqual(options.vendors, ['Certiport', 'CompTIA', 'Microsoft']);
 assert.equal(options.lifecycles.some(({ value }) => value === 'draft'), false);
 assert.equal(select({ query: 'not a registered exam' }).length, 0);
 
@@ -63,6 +66,6 @@ console.log(JSON.stringify({
   ok: true,
   visibleCertificationExams: exams.length,
   vendors: options.vendors.length,
-  searchCases: 28,
+  searchCases: 33,
   itDirectionCounted: false,
 }));

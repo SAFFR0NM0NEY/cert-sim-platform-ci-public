@@ -54,6 +54,13 @@ assert.equal(formMigration.slice(retainedV2Start, retainedV2End), originalFormMi
 const databaseWorkflow = await readFile(new URL('../.github/workflows/backend-exam-delivery-db-validation.yml', import.meta.url), 'utf8');
 assert.match(databaseWorkflow, /backend_exam_delivery_issue85_publication_contract\.sql/);
 assert.match(databaseWorkflow, /backend_exam_delivery_issue85_python_forms\.sql/);
+const releaseMigration = await readFile(new URL('../supabase/migrations/20260908155215_issue85_inf303_release_configuration.sql', import.meta.url), 'utf8');
+for (const token of ["'inf303'", "'1.0.0'", "'inf303-standard'", "'INF-303 — Python Standard'", "'Certiport'", "question_type like 'pbq-%'"]) assert.match(releaseMigration, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+assert.match(releaseMigration, /exam_delivery\.configure_exam_release_stage\(uuid,jsonb\)[\s\S]+owner to postgres[\s\S]+revoke execute[\s\S]+from public, anon, authenticated, service_role/i);
+const protectedRegistry = await readFile(new URL('../src/exams/examRegistry.protected.js', import.meta.url), 'utf8');
+assert.match(protectedRegistry, /id:\s*'inf303',\s*lifecycle:\s*EXAM_LIFECYCLES\.productionReady/);
+const displayMetadata = await readFile(new URL('../src/exams/examDisplayMetadata.js', import.meta.url), 'utf8');
+assert.match(displayMetadata, /canonicalId:\s*'inf303'[\s\S]+fullTitle:\s*'INF-303 — Python Standard'[\s\S]+vendor:\s*'Certiport'/);
 const edge = await readFile(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
 assert.match(edge, /sanitizeQuestionPresentation/); assert.match(edge, /safeArray\(presentation\.blanks/); assert.doesNotMatch(edge, /privateScoring/);
 const card = await readFile(new URL('../src/components/exam/QuestionCard.jsx', import.meta.url), 'utf8');

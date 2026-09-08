@@ -10,7 +10,7 @@ import { validateExamRegistry } from '../src/utils/validateExamRegistry.js';
 import { normalizeProtectedHistoryResult } from '../src/lib/protectedHistory.js';
 
 const expected = {
-  inf303: ['inf303', 'INF-303', 'Python Standard', 'INF-303: Python Standard', 'Certiport'],
+  inf303: ['inf303', 'INF-303', 'Python Standard', 'INF-303 — Python Standard', 'Certiport'],
   sc200: ['sc200', 'SC-200', 'Microsoft Security Operations Analyst', 'SC-200: Microsoft Security Operations Analyst', 'Microsoft'],
   az204: ['az204', 'AZ-204', 'Developing Solutions for Microsoft Azure', 'AZ-204: Developing Solutions for Microsoft Azure', 'Microsoft'],
   'security-plus-sy0-701': ['security-plus', 'SY0-701', 'Security+', 'CompTIA Security+ (SY0-701)', 'CompTIA'],

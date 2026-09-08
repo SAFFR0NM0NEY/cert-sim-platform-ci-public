@@ -18,8 +18,8 @@ const profile = (id, name, totalScoredQuestions, timeLimitMinutes, details = {})
 
 const definitions = [
   {
-    id: 'inf303', lifecycle: EXAM_LIFECYCLES.draft,
-    statusLabel: 'Protected package candidate', statusNote: 'Pending protected rollout validation.',
+    id: 'inf303', lifecycle: EXAM_LIFECYCLES.productionReady,
+    statusLabel: 'Protected practice', statusNote: 'Entitlement required.',
     domainCount: 6, pbqCount: 0, caseStudyCount: 0, passingScore: 700,
     domainNames: ['Python fundamentals', 'Data types and operators', 'Flow control', 'Data collections', 'Functions and exceptions', 'Modules and tools'],
     modes: [mode('inf303-protected-practice', 'Python Standard Practice')],

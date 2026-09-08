@@ -1,5 +1,5 @@
 begin;
-select plan(28);
+select plan(33);
 
 select is((select pg_get_userbyid(proowner) from pg_proc where oid='exam_delivery.prepare_canonical_forms_on_publish()'::regprocedure),'postgres','form trigger function owner remains postgres');
 select ok((select prosecdef from pg_proc where oid='exam_delivery.prepare_canonical_forms_on_publish()'::regprocedure),'form trigger function remains security definer');
@@ -89,6 +89,22 @@ select is((select count(*)::integer from exam_delivery.package_form_questions fq
 select is((select count(*)::integer from exam_delivery.package_reserve_questions r join exam_delivery.package_versions pv on pv.id=r.package_version_id where pv.exam_key='fixture85pyok'),2,'Python reserves are materialized');
 select results_eq($$select declared_review_release_policy,declared_answer_release_policy from exam_delivery.package_versions where exam_key='fixture85pyok'$$,$$values ('after_submission'::text,'after_submission'::text)$$,'Python package declares after-submission review and answers');
 select ok((select bool_and(not (blueprint_contract ?| array['skillGroupTargets','requiredObjectiveKeys','minimumCoverageTagCounts','difficultyRequirements'])) from exam_delivery.package_forms f join exam_delivery.package_versions pv on pv.id=f.package_version_id where pv.exam_key='fixture85pyok'),'Python blueprint metadata contains no invented rich-v2 fields');
+
+insert into exam_delivery.exam_release_candidates(
+  canonical_exam_key,package_version,profile_key,release_template,
+  catalogue_slug,catalogue_title,catalogue_vendor,catalogue_exam_type,catalogue_source_type
+) values ('fixture85pyok','1.0.0','python-standard','standard_active_exam_v1',
+  'fixture85pyok','Synthetic Python Standard','Fixture','certification','official_source');
+set local role authenticated;
+select lives_ok($$select public.certsim_configure_exam_release_stage(jsonb_build_object(
+  'examKey','fixture85pyok','packageVersion','1.0.0','profileKey','python-standard',
+  'releaseStage','standard_active_exam_v1','requestId','85100000-0000-0000-0000-000000000120'))$$,
+  'Python Standard configures through the controlled release RPC');
+reset role;
+select is((select count(*)::integer from public.exam_catalog where exam_key='fixture85pyok' and status='active'),1,'Python Standard catalogue row is active');
+select is((select count(*)::integer from exam_delivery.exam_profile_activations a join exam_delivery.package_versions pv on pv.id=a.package_version_id where pv.exam_key='fixture85pyok' and a.enabled),1,'Python Standard profile is activated once');
+select is((select count(*)::integer from exam_delivery.practice_policies where canonical_exam_key='fixture85pyok' and enabled and purpose in ('self_directed_exam','study_sandbox','targeted_domain','weak_area') and purpose<>'pbq_practice'),4,'non-PBQ Python practice policies are enabled');
+select is((select count(*)::integer from exam_delivery.practice_policies where canonical_exam_key='fixture85pyok' and purpose='pbq_practice'),0,'PBQ practice is not created without PBQ inventory');
 
 select throws_ok($$select exam_delivery.publish_package_v2(pg_temp.issue85_python_form_request('fixture85pycontract','85100000-0000-0000-0000-000000000101','wrong_contract_version'))$$,'22023',null,'unknown form contract fails closed');
 select throws_ok($$select exam_delivery.publish_package_v2(pg_temp.issue85_python_form_request('fixture85pyruntime','85100000-0000-0000-0000-000000000102','wrong_runtime'))$$,'22023',null,'Python form contract on a non-Python runtime fails');

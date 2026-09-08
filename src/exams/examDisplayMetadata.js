@@ -4,11 +4,11 @@ const definitions = [
     routeSlug: 'inf303',
     code: 'INF-303',
     shortTitle: 'Python Standard',
-    fullTitle: 'INF-303: Python Standard',
+    fullTitle: 'INF-303 — Python Standard',
     vendor: 'Certiport',
     aliases: ['INF 303', 'INF-303', 'ITS 303', 'ITS-303', 'Python Standard'],
     internalAliases: [],
-    searchAliases: ['Python', 'Information Technology Specialist'],
+    searchAliases: ['Python', 'Information Technology Specialist', 'ITS-303'],
   },
   {
     canonicalId: 'sc200', routeSlug: 'sc200', code: 'SC-200',
