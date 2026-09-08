@@ -65,7 +65,7 @@ for (const token of ['not between 1 and 20', 'package_profiles.selection_config'
 assert.doesNotMatch(compactMigration, /create table/i);
 assert.match(compactMigration, /not exists \([\s\S]+package_form_questions/i);
 const cutoverMigration = await readFile(new URL('../supabase/migrations/20260908182511_issue85_inf303_successor_cutover.sql', import.meta.url), 'utf8');
-for (const token of ['cutover_inf303_successor_release', "'inf303-standard'", "'inf303-compact'", "'1.0.0'", "'1.1.0'", '65838aa2aa7304e1ebc374c84fa69f20f3e80c019a2e75f6c939b492e382adb9']) assert.match(cutoverMigration, new RegExp(token));
+for (const token of ['cutover_inf303_successor_release', "'inf303-standard'", "'inf303-compact'", "'1.0.0'", "'1.1.0'", '112f4798ae354bf232651e3b7188240d6f87a4cb9f30e5a37221f2625578ff67']) assert.match(cutoverMigration, new RegExp(token));
 assert.match(cutoverMigration, /auth\.uid\(\)[\s\S]+platform_owner/i);
 assert.match(cutoverMigration, /expires_at>v_now/);
 assert.doesNotMatch(cutoverMigration, /delete\s+from|truncate/i);
@@ -77,6 +77,8 @@ assert.match(protectedRegistry, /id:\s*'inf303',\s*lifecycle:\s*EXAM_LIFECYCLES\
 assert.match(protectedRegistry, /profiles:\s*withRouteActions\('inf303',\s*\['full',\s*'compact'\]\)/);
 const protectedMetadata = await readFile(new URL('../src/exams/protectedProfileMetadata.js', import.meta.url), 'utf8');
 assert.match(protectedMetadata, /inf303:[\s\S]+packageVersion:\s*'1\.1\.0'[\s\S]+profile\('inf303-standard',[\s\S]+40, 120[\s\S]+profile\('inf303-compact',[\s\S]+20, 60/);
+assert.match(protectedMetadata, /profile\('inf303-standard',\s*'Full Simulation'/);
+assert.match(protectedMetadata, /profile\('inf303-compact',\s*'Compact'/);
 const displayMetadata = await readFile(new URL('../src/exams/examDisplayMetadata.js', import.meta.url), 'utf8');
 assert.match(displayMetadata, /canonicalId:\s*'inf303'[\s\S]+fullTitle:\s*'INF-303 — Python Standard'[\s\S]+vendor:\s*'Certiport'/);
 const edge = await readFile(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
