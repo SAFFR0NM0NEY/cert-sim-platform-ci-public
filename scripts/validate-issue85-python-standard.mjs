@@ -35,6 +35,25 @@ assert.match(publicationMigration, /create or replace function exam_delivery\.pu
 assert.match(publicationMigration, /alter function exam_delivery\.publish_package_v2\(jsonb\) owner to postgres/i);
 assert.match(publicationMigration, /revoke execute on function exam_delivery\.publish_package_v2\(jsonb\)[\s\S]+from public, anon, authenticated, service_role[\s\S]+grant execute on function exam_delivery\.publish_package_v2\(jsonb\)[\s\S]+to authenticated/i);
 assert.doesNotMatch(publicationMigration, /grant execute on function exam_delivery\.package_v2_runtime_supported\(text,text,text\) to (anon|authenticated|service_role)/i);
+const formMigration = (await readFile(new URL('../supabase/migrations/20260908151342_issue85_python_standard_form_materialization.sql', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+for (const token of ['certsim-python-standard-forms-v1', 'profile-specific-reserve', 'rawMaximum', 'package_forms', 'package_form_questions', 'package_reserve_questions', 'canonical_form_raw_maximum_invalid']) {
+  assert.match(formMigration, new RegExp(token));
+}
+assert.match(formMigration, /new\.generator_version\s*<>\s*'certsim-python-standard-canonical-forms-v1'[\s\S]+new\.scorer_version\s*<>\s*'certsim-versioned-structured-partial-v1'/i);
+assert.match(formMigration, /new\.declared_review_release_policy\s*:=\s*'after_submission'[\s\S]+new\.declared_answer_release_policy\s*:=\s*'after_submission'/i);
+assert.match(formMigration, /alter function exam_delivery\.prepare_canonical_forms_on_publish\(\) owner to postgres/i);
+assert.match(formMigration, /revoke execute on function exam_delivery\.prepare_canonical_forms_on_publish\(\)[\s\S]+from public, anon, authenticated, service_role[\s\S]+grant execute on function exam_delivery\.prepare_canonical_forms_on_publish\(\) to postgres/i);
+const originalFormMigration = (await readFile(new URL('../supabase/migrations/20260905153716_ai901_canonical_form_rotation.sql', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const originalV2Start = originalFormMigration.indexOf('  for v_profile in', originalFormMigration.indexOf('canonical_form_profile_declaration_incomplete'));
+const originalV2End = originalFormMigration.indexOf('\nend\n$$;', originalV2Start);
+const retainedV2Marker = formMigration.indexOf('-- Existing certsim-canonical-forms-v2 implementation begins here unchanged.');
+const retainedV2Start = formMigration.indexOf('  for v_profile in', retainedV2Marker);
+const retainedV2End = formMigration.indexOf('\nend\n$$;', retainedV2Start);
+assert.ok(originalV2Start > 0 && originalV2End > originalV2Start && retainedV2Start > retainedV2Marker && retainedV2End > retainedV2Start);
+assert.equal(formMigration.slice(retainedV2Start, retainedV2End), originalFormMigration.slice(originalV2Start, originalV2End));
+const databaseWorkflow = await readFile(new URL('../.github/workflows/backend-exam-delivery-db-validation.yml', import.meta.url), 'utf8');
+assert.match(databaseWorkflow, /backend_exam_delivery_issue85_publication_contract\.sql/);
+assert.match(databaseWorkflow, /backend_exam_delivery_issue85_python_forms\.sql/);
 const edge = await readFile(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
 assert.match(edge, /sanitizeQuestionPresentation/); assert.match(edge, /safeArray\(presentation\.blanks/); assert.doesNotMatch(edge, /privateScoring/);
 const card = await readFile(new URL('../src/components/exam/QuestionCard.jsx', import.meta.url), 'utf8');
