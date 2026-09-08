@@ -1,4 +1,4 @@
-+-- Issue #85: atomic, audited INF-303 1.0.0 -> 1.1.0 successor release.
+-- Issue #85: atomic, audited INF-303 1.0.0 -> 1.1.0 successor release.
 -- This boundary is intentionally pinned to one reviewed package transition.
 
 create table exam_delivery.inf303_successor_cutover_requests (

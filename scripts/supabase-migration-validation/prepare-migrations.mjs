@@ -156,7 +156,7 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260908151342_issue85_python_standard_form_materialization.sql': '1c7c450932a0f7a42a5716a991f01bdcf42136d5ef5bfd71e16a927d2938d0aa',
   '20260908155215_issue85_inf303_release_configuration.sql': '3d0c8bf303871ae8d7621f71518b5dbec85fb687d7cb386f1fa7d03d19c57928',
   '20260908182505_issue85_inf303_compact_mode_parity.sql': '51c0afe1656469ba5742fc174845e0686167cf7e4e748facec370cebba0eb6a4',
-  '20260908182511_issue85_inf303_successor_cutover.sql': 'b73747ee42ea8c6a850c12b0fc4d7a9e15ef25366b4cb96c60f01be5637e382d',
+  '20260908182511_issue85_inf303_successor_cutover.sql': '13c853ed3c93a83945c6a9f46370df24827c5760b087d1a6a7d3db42f46a71d7',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
