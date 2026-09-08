@@ -160,11 +160,21 @@ export async function handleProtectedExam(
       const u = new URL(request.url);
       const permitted = matched.id === "staffScopeOptions"
         ? ["organisationId"]
+        : matched.id === "staffDashboardQuery"
+        ? ["organisationId", "campusId", "groupId", "assignmentId", "examKey", "resultStatus", "readinessStatus", "search", "workflow", "cursor", "learnerCursor", "pageSize", "learnerPageSize"]
         : ["organisationId", "campusId", "groupId", "assignmentId", "examKey", "resultStatus", "search", "workflow", "cursor", "pageSize"];
       if ([...u.searchParams.keys()].some((key) => !permitted.includes(key))) throw new SafeError("invalid_request");
       const pageSize = Number(u.searchParams.get("pageSize") ?? "50");
+      const learnerPageSize = Number(u.searchParams.get("learnerPageSize") ?? "25");
       const search = u.searchParams.get("search") ?? "";
-      if (!Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50 || search.length > 100) throw new SafeError("invalid_request");
+      const readinessStatus = u.searchParams.get("readinessStatus");
+      const readinessStatuses = new Set(["ready", "almost-ready", "needs-review", "at-risk", "insufficient-data", "not-started"]);
+      if (
+        !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50 ||
+        (matched.id === "staffDashboardQuery" && (!Number.isSafeInteger(learnerPageSize) || learnerPageSize < 1 || learnerPageSize > 50)) ||
+        (readinessStatus !== null && !readinessStatuses.has(readinessStatus)) ||
+        search.length > 100
+      ) throw new SafeError("invalid_request");
       args = { p_actor_id: actorId, p_request: Object.fromEntries([...u.searchParams.entries()].filter(([, value]) => value !== "")) };
     } else if (matched.id === "staffAnalytics") {
       const u = new URL(request.url);

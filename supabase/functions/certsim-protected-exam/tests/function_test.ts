@@ -132,6 +132,52 @@ Deno.test("bounded learner pages reject malformed pagination and learner rows", 
   assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "students", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: { ...EMPTY_LEARNER_PAGE, returnedCount: 1, totalCount: 1, filteredCount: 1, items: [{ learnerId: ACTOR, displayName: "Learner", email: "learner@example.invalid", groupId: null, campusId: null, status: "active", examKey: "az204", readinessStatus: "ready", analytics: {} }] }, history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS }), SafeError);
   assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "students", selection: {}, assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 }, learnerPage: { ...EMPTY_LEARNER_PAGE, nextCursor: 7 }, history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null }, analytics: EMPTY_STAFF_ANALYTICS }), SafeError);
 });
+Deno.test("staff dashboard query accepts the bounded frontend filter contract", async () => {
+  const rpcData = {
+    role: "trainer",
+    workflow: "analytics",
+    selection: { organisationId: ACTOR, campusId: null, groupId: null, assignmentId: null },
+    assignmentPage: { items: [], nextCursor: null, complete: true, returnedCount: 0, totalCount: 0 },
+    learnerPage: EMPTY_LEARNER_PAGE,
+    history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null },
+    analytics: EMPTY_STAFF_ANALYTICS,
+  };
+  const accepted = [
+    `organisationId=${ACTOR}&workflow=analytics&pageSize=50&learnerPageSize=25`,
+    `organisationId=${ACTOR}&readinessStatus=ready&pageSize=50&learnerPageSize=25`,
+    `organisationId=${ACTOR}&learnerCursor=opaque-cursor&pageSize=50&learnerPageSize=25`,
+    `organisationId=${ACTOR}&readinessStatus=not-started&learnerCursor=opaque-cursor&pageSize=50&learnerPageSize=25`,
+    `organisationId=${ACTOR}&groupId=${ATTEMPT}&examKey=az204&resultStatus=passed&search=learner&workflow=students&cursor=assignment-cursor&pageSize=50&learnerPageSize=25`,
+  ];
+  for (const query of accepted) {
+    const d = deps(rpcData);
+    const response = await handleProtectedExam(request(`/staff/dashboard-query?${query}`), d.value);
+    assertEquals(response.status, 200);
+    assertEquals(d.calls.length, 1);
+    assertEquals(d.calls[0].name, "certsim_protected_staff_dashboard_query");
+    assertEquals(d.calls[0].args.p_actor_id, ACTOR);
+    assertEquals(d.calls[0].args.p_request, Object.fromEntries(new URLSearchParams(query)));
+  }
+});
+Deno.test("staff dashboard query rejects unsupported or unbounded filters", async () => {
+  for (const query of [
+    "unknown=value",
+    "learnerPageSize=0",
+    "learnerPageSize=-1",
+    "learnerPageSize=51",
+    "learnerPageSize=abc",
+    "learnerPageSize=1.5",
+    "readinessStatus=unknown",
+    "pageSize=0",
+    "pageSize=51",
+    "pageSize=abc",
+  ]) {
+    const d = deps();
+    const response = await handleProtectedExam(request(`/staff/dashboard-query?${query}`), d.value);
+    assertEquals(response.status, 400, query);
+    assertEquals(d.calls.length, 0, query);
+  }
+});
 Deno.test("staff analytics mapper fails closed on missing or malformed rows", () => {
   const totals = { visibleLearners: 0, learnersWithActivity: 0, learnersWithoutActivity: 0, historicalActivity: 0, protectedAssessments: 0, legacyHistorical: 0 };
   assertThrows(() => mapStaffAnalytics({ scopeComplete: true, totals, exams: [] }), SafeError);
