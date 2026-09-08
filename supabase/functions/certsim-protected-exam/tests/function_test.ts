@@ -10,7 +10,7 @@ import { corsHeaders } from "../cors.ts";
 import { SafeError, translateRpcFailure } from "../errors.ts";
 import { handleProtectedExam } from "../handler.ts";
 import { matchRoute } from "../routes.ts";
-import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapPracticeAvailability, mapPracticeCheck, mapQuestionIssue, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffScopeOptions } from "../responses.ts";
+import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapPracticeAvailability, mapPracticeCheck, mapQuestionIssue, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffScopeOptions } from "../responses.ts";
 import {
   MAX_BODY_BYTES,
   readJsonBody,
@@ -34,6 +34,20 @@ const EMPTY_STAFF_ANALYTICS = {
   activitySummary: { mostActive: [], leastActive: [], noAttemptCount: 0, noAttemptPreview: [] },
 };
 const EMPTY_LEARNER_PAGE = { items: [], returnedCount: 0, totalCount: 0, filteredCount: 0, pageSize: 25, nextCursor: null, complete: true };
+
+Deno.test("history summary exposes only content-free full-history domain aggregates", () => {
+  const domainSummary = {
+    kind: "learner_domain_history_v1",
+    source: "full_eligible_assessment_history",
+    evidenceResultCount: 22,
+    items: [{ domainId: "domain-a", domainLabel: "Domain A", earnedPoints: 21.5, maxPoints: 22, percentage: 97.73, samples: 22 }],
+  };
+  const mapped = mapHistorySummary({ ok: true, completedCount: 22, domainSummary, weakDomains: domainSummary, protectedPayload: "blocked" });
+  assertEquals(mapped.domainSummary, domainSummary);
+  assertEquals(mapped.weakDomains, domainSummary);
+  assert(!("protectedPayload" in mapped));
+  assert(!("ok" in mapped));
+});
 
 Deno.test("practice availability exposes only server-confirmed objective aggregates", () => {
   const mapped = mapPracticeAvailability({

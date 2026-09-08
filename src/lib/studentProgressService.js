@@ -13,12 +13,13 @@ import { isAssessmentResult } from './attemptPurpose.js';
 import { createProtectedExamClient } from './protectedExamClient.js';
 import { loadProtectedHistoryPage, normalizeProtectedHistoryResult, partitionProtectedHistory } from './protectedHistory.js';
 import { getNormalizedDomainItems } from './resultStorageMappers.js';
+import { protectedProfileMetadata } from '../exams/protectedProfileMetadata.js';
 
 const IS_PROTECTED_DELIVERY = typeof __CERTSIM_BUILD_DELIVERY_MODE__ !== 'undefined'
   && __CERTSIM_BUILD_DELIVERY_MODE__ === 'protected';
 
 const ASSIGNMENT_PROGRESS_TIMEOUT_MS = 8000;
-const PROTECTED_EXAM_KEYS = ['az204', 'security-plus-sy0-701', 'az400', 'ai901'];
+const PROTECTED_EXAM_KEYS = Object.freeze(Object.keys(protectedProfileMetadata));
 
 export const STUDENT_HISTORY_NOTE =
   'Cloud history saves only when you are signed in. It includes eligible scored exam results saved before and after protected delivery. Practice stays visible but does not affect formal readiness; only records whose original purpose cannot be proven remain historical activity.';
@@ -247,7 +248,9 @@ export function applyHistorySummaries(rows, summaries) {
     const passedCount = Number(summary.passedCount ?? 0);
     const needsReviewCount = Number(summary.needsReviewCount ?? 0);
     const passFailCount = passedCount + needsReviewCount;
-    const domainAverages = getNormalizedDomainItems(summary.weakDomains);
+    const authoritativeDomainSummary = summary.domainSummary ?? summary.weakDomains;
+    const domainAverages = getNormalizedDomainItems(authoritativeDomainSummary);
+    const sortedDomains = [...domainAverages].sort(compareDomainsAscending);
     const weakDomainCount = domainAverages.filter((domain) => domain.percentage != null && domain.percentage < 70).length;
     // Display values remain percentages; readiness comparisons use the shared
     // 0-1000 comparable score boundary.
@@ -269,7 +272,7 @@ export function applyHistorySummaries(rows, summaries) {
       averageScore,
       bestScore,
       domainAverages,
-      domainSampleCount: domainAverages.length ? totalAttempts : 0,
+      domainSampleCount: Number(authoritativeDomainSummary?.evidenceResultCount ?? (domainAverages.length ? totalAttempts : 0)),
       fullReadinessAvailable: totalAttempts >= MIN_FULL_READINESS_ATTEMPTS,
       fullReadinessMessage: totalAttempts >= MIN_FULL_READINESS_ATTEMPTS ? 'Full readiness available.' : `Need ${MIN_FULL_READINESS_ATTEMPTS - totalAttempts} more saved attempts for full readiness.`,
       latestAttemptDate: summary.latest?.completedAt ?? '',
@@ -283,9 +286,16 @@ export function applyHistorySummaries(rows, summaries) {
       readinessStatus: readiness.status,
       scopedAttemptCount: totalAttempts,
       weakDomainCount,
-      weakestDomain: [...domainAverages].sort((a, b) => (a.percentage ?? 101) - (b.percentage ?? 101))[0] ?? null,
+      strongestDomain: sortedDomains.at(-1) ?? null,
+      weakestDomain: sortedDomains[0] ?? null,
     };
   });
+}
+
+function compareDomainsAscending(left, right) {
+  const percentageDifference = (left.percentage ?? 101) - (right.percentage ?? 101);
+  if (percentageDifference !== 0) return percentageDifference;
+  return String(right.domainId ?? right.domainLabel ?? '').localeCompare(String(left.domainId ?? left.domainLabel ?? ''));
 }
 
 function getSummaryCompletedCount(summaries) {

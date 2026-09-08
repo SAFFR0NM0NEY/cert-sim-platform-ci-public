@@ -72,6 +72,7 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260907152537_issue101_authoritative_trainer_analytics.sql',
   '20260907175904_issue101_bounded_training_dashboard_learners.sql',
   '20260907202755_issue101_staff_dashboard_summary_alias_fix.sql',
+  '20260908074922_issue101_learner_domain_parity.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -143,6 +144,7 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260907152537_issue101_authoritative_trainer_analytics.sql': 'c620004e1a04b842924446868d66611858f5d0236975b2cfa69cc6ccee204deb',
   '20260907175904_issue101_bounded_training_dashboard_learners.sql': 'b671f0a6199ec749689e1084d8c570769e74a86ab5d5381f7e844418940e5333',
   '20260907202755_issue101_staff_dashboard_summary_alias_fix.sql': '4d33cee044440cb0191b09d238461f09a4595da7970e0c2e244fe30706b76014',
+  '20260908074922_issue101_learner_domain_parity.sql': 'bcbc4ab3f01302bf97394d48e9edd1f3da68ab510de4e743b4c2ba0343ce6e1d',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

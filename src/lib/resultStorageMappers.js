@@ -537,6 +537,7 @@ function normalizeDomainRow(row = {}, fallbackDomain = '') {
     earnedPoints,
     maxPoints,
     percentage,
+    samples: toNumberOrNull(row.samples ?? row.evidenceCount),
     status: row.status ?? classifyDomainStatus(percentage),
   };
 }

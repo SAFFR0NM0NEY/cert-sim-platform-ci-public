@@ -639,7 +639,7 @@ function normalizeNonNegativeNumber(value: unknown): number | null {
   return number;
 }
 export function mapHistorySummary(raw: unknown): Obj {
-  return pick(object(raw), ["latest", "best", "completedCount", "scoredCount", "averagePercentage", "averageScore", "passedCount", "needsReviewCount", "weakDomains", "serverAuthoritative", "historicalUnclassifiedExcluded"]);
+  return pick(object(raw), ["latest", "best", "completedCount", "scoredCount", "averagePercentage", "averageScore", "passedCount", "needsReviewCount", "domainSummary", "weakDomains", "serverAuthoritative", "historicalUnclassifiedExcluded"]);
 }
 export function mapPrintSummary(raw: unknown): Obj {
   return pick(object(raw), ["exam", "profile", "purpose", "completedAt", "score", "percentage", "passed", "domainSummary", "completionStatus", "serverAuthoritative", "reviewStatus", "source"]);
