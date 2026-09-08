@@ -5,6 +5,7 @@ import '../../src/styles/global.css';
 
 function Harness() {
   const [started, setStarted] = useState(null);
-  return <main><ProtectedSavedResultsPage session={{ access_token: 'fixture-token' }} openWeakAreaPractice onStartWeakAreaPractice={setStarted} />{started ? <output data-testid="started">{JSON.stringify(started)}</output> : null}</main>;
+  const attemptId = new URLSearchParams(window.location.search).get('attemptId') ?? '';
+  return <main><ProtectedSavedResultsPage attemptId={attemptId} session={{ access_token: 'fixture-token' }} openWeakAreaPractice onReturnToList={() => {}} onStartWeakAreaPractice={setStarted} />{started ? <output data-testid="started">{JSON.stringify(started)}</output> : null}</main>;
 }
 createRoot(document.getElementById('root')).render(<Harness />);

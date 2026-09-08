@@ -44,6 +44,68 @@ export function resolveReleasedChoiceTexts(presentation, value, { correct = fals
   return { status: 'resolved', texts };
 }
 
+export function resolveReleasedMatchingPairs(presentation, value, { correct = false } = {}) {
+  const question = asObject(presentation);
+  if (String(question.type ?? '').toLowerCase() !== 'drag-drop-match') {
+    return { status: 'not-applicable', pairs: [] };
+  }
+
+  const prompts = indexIdTextCollection(question.prompts);
+  const options = indexIdTextCollection(question.options);
+  if (prompts.status !== 'resolved' || options.status !== 'resolved') {
+    return { status: 'invalid', pairs: [] };
+  }
+
+  const source = asObject(value);
+  const rawPairs = correct
+    ? source.correctPairs ?? source.correctPairsByPrompt
+    : source.answer;
+
+  if (!correct && Object.keys(source).length === 0) return { status: 'empty', pairs: [] };
+  if (!rawPairs || typeof rawPairs !== 'object' || Array.isArray(rawPairs)) {
+    return { status: 'invalid', pairs: [] };
+  }
+
+  const pairEntries = Object.entries(rawPairs);
+  if (pairEntries.length === 0) {
+    return correct ? { status: 'invalid', pairs: [] } : { status: 'empty', pairs: [] };
+  }
+  if (new Set(pairEntries.map(([, rightId]) => rightId)).size !== pairEntries.length) {
+    return { status: 'invalid', pairs: [] };
+  }
+
+  const pairByPromptId = new Map(pairEntries);
+  if ([...pairByPromptId.keys()].some((id) => !prompts.textById.has(id)) ||
+      [...pairByPromptId.values()].some((id) => typeof id !== 'string' || !options.textById.has(id))) {
+    return { status: 'invalid', pairs: [] };
+  }
+
+  return {
+    status: 'resolved',
+    pairs: prompts.ids
+      .filter((promptId) => pairByPromptId.has(promptId))
+      .map((promptId) => ({
+        leftText: prompts.textById.get(promptId),
+        rightText: options.textById.get(pairByPromptId.get(promptId)),
+      })),
+  };
+}
+
+function indexIdTextCollection(value) {
+  if (!Array.isArray(value) || value.length === 0) return { status: 'invalid' };
+  const ids = [];
+  const textById = new Map();
+  for (const entry of value) {
+    const item = asObject(entry);
+    const id = typeof item.id === 'string' ? item.id : '';
+    const text = typeof item.text === 'string' ? item.text.trim() : '';
+    if (!id || !text || textById.has(id)) return { status: 'invalid' };
+    ids.push(id);
+    textById.set(id, text);
+  }
+  return { status: 'resolved', ids, textById };
+}
+
 function readCorrectOptionIds(value, questionType) {
   const source = asObject(value);
   const keys = questionType === 'single-choice' ? CORRECT_SINGLE_KEYS : CORRECT_MULTIPLE_KEYS;

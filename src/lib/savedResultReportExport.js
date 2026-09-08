@@ -10,6 +10,9 @@ import {
   getSavedResultDomainRows,
   getSavedResultWeakAreaRows,
 } from './savedResultFormatters.js';
+import { getAttemptKindLabel } from './attemptPurpose.js';
+import { getSavedResultExamLabel } from './savedResultExamIdentity.js';
+import { getNormalizedDomainItems } from './resultStorageMappers.js';
 
 const PAGE = {
   marginX: 14,
@@ -90,6 +93,52 @@ export async function downloadSavedResultSummaryPdf(result = {}) {
   return { filename };
 }
 
+export async function downloadProtectedResultSummaryPdf(summary = {}) {
+  const { doc, filename } = await createProtectedResultSummaryPdf(summary);
+  doc.save(filename);
+  return { filename };
+}
+
+export async function createProtectedResultSummaryPdfArtifact(summary = {}) {
+  const { doc, filename } = await createProtectedResultSummaryPdf(summary);
+  return { bytes: new Uint8Array(doc.output('arraybuffer')), filename };
+}
+
+async function createProtectedResultSummaryPdf(summary) {
+  assertSafeProtectedSummary(summary);
+  const filename = buildProtectedResultFileName(summary);
+  const writer = await createPdfWriter();
+  const domains = getProtectedDomainRows(summary.domainSummary);
+
+  writer.addTitle('CertSim Platform', 'Protected Result Summary');
+  writer.addSection('Saved Attempt Details');
+  writer.addFacts([
+    ['Exam', getSavedResultExamLabel(summary.exam?.key)],
+    ['Exam key', summary.exam?.key ?? 'Not recorded'],
+    ['Package version', summary.exam?.version ?? 'Not recorded'],
+    ['Profile', summary.profile?.name ?? summary.profile?.key ?? 'Not recorded'],
+    ['Attempt', getAttemptKindLabel(summary)],
+    ['Completed', formatSavedResultDate(summary.completedAt)],
+  ]);
+  writer.addSection('Authoritative Score Summary');
+  writer.addFacts([
+    ['Score', summary.score ?? 'Not recorded'],
+    ['Percentage', formatPercentage(summary.percentage)],
+    ['Result', summary.passed === true ? 'Passed' : summary.passed === false ? 'Needs review' : 'Not recorded'],
+    ['Completion status', summary.completionStatus ?? 'Not recorded'],
+    ['Review status', summary.reviewStatus === 'released' ? 'Released' : 'Withheld'],
+  ]);
+  writer.addSection('Domain Breakdown');
+  writer.addBullets(
+    domains.map((domain) => `${domain.label}: ${domain.score}, ${domain.percentage}`),
+    'No domain breakdown recorded.',
+  );
+  writer.addSection('Result Disclaimer');
+  writer.addParagraph('This summary uses the server-authoritative saved result. It contains no question text, learner answers, correct answers, explanations, scoring keys, or protected presentation data. CertSim results are study guidance and are not official certification results.');
+
+  return { doc: writer.doc, filename };
+}
+
 async function createPdfWriter() {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -128,6 +177,7 @@ async function createPdfWriter() {
   }
 
   return {
+    doc,
     addTitle(title, subtitle) {
       doc.setTextColor(15, 23, 42);
       addWrappedText(title, { fontSize: 18, fontStyle: 'bold', gapAfter: 1 });
@@ -179,6 +229,34 @@ async function createPdfWriter() {
       doc.save(filename);
     },
   };
+}
+
+function assertSafeProtectedSummary(summary) {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) throw new Error('invalid_protected_result_summary');
+  if (summary.source === 'protected' && summary.serverAuthoritative !== true) throw new Error('untrusted_protected_result_summary');
+  if (!['protected', 'legacy_authoritative'].includes(summary.source)) throw new Error('invalid_protected_result_source');
+}
+
+function getProtectedDomainRows(domainSummary) {
+  return getNormalizedDomainItems(domainSummary).map((item) => ({
+    label: item.domainLabel,
+    score: item.earnedPoints != null && item.maxPoints != null
+      ? `${item.earnedPoints}/${item.maxPoints}`
+      : item.correct != null && item.total != null
+        ? `${item.correct}/${item.total}`
+        : 'Score not recorded',
+    percentage: formatPercentage(item.percentage),
+  }));
+}
+
+function formatPercentage(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${Math.round(number * 100) / 100}%` : 'Not recorded';
+}
+
+function buildProtectedResultFileName(summary) {
+  const examPart = sanitizeFilePart(summary.exam?.key || 'Result');
+  return `CertSim-${examPart}-Saved-Result-${formatDateStamp(summary.completedAt)}.pdf`;
 }
 
 function buildSavedResultFileName(result) {

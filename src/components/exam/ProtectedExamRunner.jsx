@@ -21,7 +21,8 @@ import { assertProtectedAttemptInventory, getProtectedItemSection } from '../../
 import useFullscreenMode from '../../utils/useFullscreenMode.js';
 import { getNormalizedDomainItems } from '../../lib/resultStorageMappers.js';
 import { resolvePracticeRequest } from '../../lib/protectedPracticeRequest.js';
-import { resolveReleasedChoiceTexts } from '../../lib/releasedAnswerDisplay.js';
+import ReleasedReviewAnswer from './ReleasedReviewAnswer.jsx';
+import { downloadProtectedResultSummaryPdf } from '../../lib/savedResultReportExport.js';
 
 export default function ProtectedExamRunner({
   assignmentId = '',
@@ -75,6 +76,7 @@ export default function ProtectedExamRunner({
   const [result, setResult] = useState(null);
   const [review, setReview] = useState(null);
   const [reviewMessage, setReviewMessage] = useState('');
+  const [pdfState, setPdfState] = useState({ preparing: false, message: '', error: '' });
   const [availability, setAvailability] = useState(null);
   const [configuredLanguage, setConfiguredLanguage] = useState(
     examConfig?.id === 'az204' ? (practiceRequest?.language ?? codingLanguagePreference ?? 'csharp') : null,
@@ -590,6 +592,19 @@ export default function ProtectedExamRunner({
     }
   }
 
+  async function downloadResultPdf() {
+    setPdfState({ preparing: true, message: '', error: '' });
+    try {
+      const summary = await client.getPrintableSummary(attempt.attemptId, {
+        signal: operationController.current.signal,
+      });
+      const { filename } = await downloadProtectedResultSummaryPdf(summary);
+      setPdfState({ preparing: false, message: `Downloaded ${filename}.`, error: '' });
+    } catch {
+      setPdfState({ preparing: false, message: '', error: 'PDF download failed. Open this result in Saved Results and use Print as a fallback.' });
+    }
+  }
+
   if (state === 'result-available') {
     const reviewWithheld = result?.reviewStatus === 'withheld';
     const domainRows = getNormalizedDomainItems(result?.domainBreakdown ?? {});
@@ -623,6 +638,8 @@ export default function ProtectedExamRunner({
           </section>
         )}
         <p>The completed attempt is available in your signed-in Saved Results history.</p>
+        {pdfState.message ? <p className="status-note" role="status">{pdfState.message}</p> : null}
+        {pdfState.error ? <p className="error-note" role="alert">{pdfState.error}</p> : null}
         {reviewWithheld && (
           <p className="status-note" role="status">
             Question review and answers are withheld for this attempt.
@@ -630,6 +647,7 @@ export default function ProtectedExamRunner({
         )}
         <div className="exam-actions">
           {!reviewWithheld && <button className="secondary-button" type="button" onClick={loadReview}>View released review</button>}
+          <button className="secondary-button" disabled={pdfState.preparing} type="button" onClick={downloadResultPdf}>{pdfState.preparing ? 'Preparing PDF...' : 'Download PDF'}</button>
           <button className="primary-button" type="button" onClick={onExit}>Return home</button>
         </div>
         {reviewMessage && <p role="status">{reviewMessage}</p>}
@@ -823,33 +841,6 @@ export default function ProtectedExamRunner({
       timed={attempt.timed !== false}
       workspaceRef={workspaceRef}
     />;
-}
-
-function formatReviewValue(value) {
-  if (value === null || value === undefined || value === '') return 'No response recorded';
-  if (Array.isArray(value)) return value.map(formatReviewValue).join(', ');
-  if (typeof value === 'object') {
-    return Object.entries(value)
-      .map(([key, entry]) => `${key}: ${formatReviewValue(entry)}`)
-      .join('; ');
-  }
-  return String(value);
-}
-
-function ReleasedReviewAnswer({ correct = false, presentation, value }) {
-  const resolved = resolveReleasedChoiceTexts(presentation, value, { correct });
-
-  if (resolved.status === 'resolved') {
-    return (
-      <ul className="released-answer-list">
-        {resolved.texts.map((text, index) => <li key={`${index}-${text}`}>{text}</li>)}
-      </ul>
-    );
-  }
-
-  if (resolved.status === 'invalid') return 'Answer details unavailable';
-  if (resolved.status === 'empty') return 'No response recorded';
-  return formatReviewValue(value);
 }
 
 function getProtectedQuestionState(question, answers) {

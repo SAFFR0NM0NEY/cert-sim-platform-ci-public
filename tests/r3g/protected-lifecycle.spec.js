@@ -329,6 +329,7 @@ test('released shuffled choice review renders stable option text as accessible l
     { itemId: 'review-single', questionId: 'single', questionType: 'single-choice', domain: 'Identity', section: 'standard', response: { answer: 'A' }, status: 'Correct', earnedPoints: 1, maxPoints: 1, correctAnswer: { correctAnswer: 'A' }, presentation: { type: 'single-choice', question: 'Synthetic single choice.', options: reviewOptions } },
     { itemId: 'review-two', questionId: 'select-two', questionType: 'multi-select', domain: 'Identity', section: 'standard', response: { answer: ['A'] }, status: 'Partial', earnedPoints: 1, maxPoints: 2, correctAnswer: { correctAnswers: ['A', 'C'] }, presentation: { type: 'multi-select', question: 'Synthetic select two.', options: reviewOptions } },
     { itemId: 'review-three', questionId: 'select-three', questionType: 'multi-select', domain: 'Identity', section: 'standard', response: { answer: ['D'] }, status: 'Incorrect', earnedPoints: 0, maxPoints: 3, correctAnswer: { correctOptionIds: ['A', 'C', 'D'] }, presentation: { type: 'multi-select', question: 'Synthetic select three.', options: [...reviewOptions].reverse() } },
+    { itemId: 'review-match', questionId: 'matching', questionType: 'drag-drop-match', domain: 'Identity', section: 'standard', response: { answer: { 'left-a': 'right-y' } }, status: 'Partial', earnedPoints: 0.5, maxPoints: 1, correctAnswer: { correctPairs: { 'left-a': 'right-x', 'left-b': 'right-y' } }, presentation: { type: 'drag-drop-match', question: 'Synthetic matching.', prompts: [{ id: 'left-a', text: 'Detect objects in an image' }, { id: 'left-b', text: 'Extract text from a document' }], options: [{ id: 'right-y', text: 'Document Intelligence' }, { id: 'right-x', text: 'Azure AI Vision' }] } },
   ];
 
   await page.route('**/functions/v1/certsim-protected-exam/**', async (route) => {
@@ -352,9 +353,12 @@ test('released shuffled choice review renders stable option text as accessible l
   await page.getByRole('button', { name: 'View released review' }).click();
 
   const reviewCards = page.locator('.protected-review-list article');
-  await expect(reviewCards).toHaveCount(3);
+  await expect(reviewCards).toHaveCount(4);
   await expect(reviewCards.nth(0).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.']);
   await expect(reviewCards.nth(1).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.']);
   await expect(reviewCards.nth(2).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.', 'Allow anonymous access.']);
+  await expect(reviewCards.nth(3).locator('.released-answer-list').nth(0).getByRole('listitem')).toHaveText(['Detect objects in an image → Document Intelligence']);
+  await expect(reviewCards.nth(3).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Detect objects in an image → Azure AI Vision', 'Extract text from a document → Document Intelligence']);
   await expect(page.getByText('A, C', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/left-a|right-x|correctPairs|answer:/)).toHaveCount(0);
 });
