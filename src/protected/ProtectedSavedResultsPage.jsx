@@ -11,6 +11,7 @@ import {
   getSavedResultExamFilterOptions,
   getSavedResultExamLabel,
 } from '../lib/savedResultExamIdentity.js';
+import { downloadProtectedResultSummaryPdf } from '../lib/savedResultReportExport.js';
 
 export default function ProtectedSavedResultsPage({ attemptId, onBackHome, onOpenAccount, onOpenDetail, onReturnHome, onReturnToList, session, openWeakAreaPractice = false, weakAreaPracticeExamId = '', onStartWeakAreaPractice }) {
   const client = useMemo(() => session?.access_token ? createProtectedExamClient({ accessToken: session.access_token }) : null, [session?.access_token]);
@@ -135,6 +136,7 @@ function ProtectedWeakAreaPractice({ client, initialExamId, loading, onStart, re
 
 function ProtectedResultDetail({ attemptId, client, onBack }) {
   const [detail, setDetail] = useState({ state: 'loading', value: null, message: '' });
+  const [pdf, setPdf] = useState({ preparing: false, message: '', error: '' });
   useEffect(() => {
     const controller = new AbortController();
     if (!client) { setDetail({ state: 'signed-out', value: null, message: 'Sign in to open this result.' }); return () => controller.abort(); }
@@ -142,7 +144,16 @@ function ProtectedResultDetail({ attemptId, client, onBack }) {
     return () => controller.abort();
   }, [attemptId, client]);
   const value = detail.value;
-  return <section className="form-panel protected-result-detail" aria-labelledby="protected-result-detail-heading"><p className="eyebrow">Saved Result</p><h2 id="protected-result-detail-heading">Result summary</h2>{detail.state === 'loading' ? <p role="status">Loading result summary…</p> : null}{detail.message ? <p role={detail.state === 'error' ? 'alert' : 'status'}>{detail.message}</p> : null}{value ? <><dl className="exam-stats compact"><div><dt>Exam</dt><dd>{getSavedResultExamLabel(value.exam?.key)}</dd></div><div><dt>Exam profile</dt><dd>{value.profile?.name || 'Standard profile'}</dd></div><div><dt>Attempt</dt><dd>{value.source === 'legacy_authoritative' && isAssessmentResult(value) ? 'Historical exam attempt' : getAttemptKindLabel(value)}</dd></div><div><dt>Score</dt><dd>{value.percentage == null ? 'Not recorded' : `${value.percentage}%`}</dd></div><div><dt>Status</dt><dd>{value.passed === true ? 'Passed' : value.passed === false ? 'Needs review' : 'Not recorded'}</dd></div><div><dt>Completed</dt><dd>{new Date(value.completedAt).toLocaleString()}</dd></div><div><dt>Review</dt><dd>{value.reviewStatus === 'released' ? 'Released' : 'Withheld'}</dd></div></dl><p>Question and answer review is available only when the applicable release policy permits it.</p><button className="secondary-button no-print" type="button" onClick={() => window.print()}>Print result summary</button></> : null}<button type="button" className="primary-button no-print" onClick={onBack}>Back to Saved Results</button></section>;
+  async function downloadPdf() {
+    setPdf({ preparing: true, message: '', error: '' });
+    try {
+      const { filename } = await downloadProtectedResultSummaryPdf(value);
+      setPdf({ preparing: false, message: `Downloaded ${filename}.`, error: '' });
+    } catch {
+      setPdf({ preparing: false, message: '', error: 'PDF download failed. Use Print as a fallback.' });
+    }
+  }
+  return <section className="form-panel protected-result-detail" aria-labelledby="protected-result-detail-heading"><p className="eyebrow">Saved Result</p><h2 id="protected-result-detail-heading">Result summary</h2>{detail.state === 'loading' ? <p role="status">Loading result summary…</p> : null}{detail.message ? <p role={detail.state === 'error' ? 'alert' : 'status'}>{detail.message}</p> : null}{value ? <><dl className="exam-stats compact"><div><dt>Exam</dt><dd>{getSavedResultExamLabel(value.exam?.key)}</dd></div><div><dt>Exam profile</dt><dd>{value.profile?.name || 'Standard profile'}</dd></div><div><dt>Attempt</dt><dd>{value.source === 'legacy_authoritative' && isAssessmentResult(value) ? 'Historical exam attempt' : getAttemptKindLabel(value)}</dd></div><div><dt>Score</dt><dd>{value.percentage == null ? 'Not recorded' : `${value.percentage}%`}</dd></div><div><dt>Status</dt><dd>{value.passed === true ? 'Passed' : value.passed === false ? 'Needs review' : 'Not recorded'}</dd></div><div><dt>Completed</dt><dd>{new Date(value.completedAt).toLocaleString()}</dd></div><div><dt>Review</dt><dd>{value.reviewStatus === 'released' ? 'Released' : 'Withheld'}</dd></div></dl><p>Question and answer review is available only when the applicable release policy permits it.</p><div className="button-row wrap no-print"><button className="secondary-button" type="button" onClick={() => window.print()}>Print result summary</button><button className="secondary-button" disabled={pdf.preparing} type="button" onClick={downloadPdf}>{pdf.preparing ? 'Preparing PDF...' : 'Download PDF'}</button></div>{pdf.message ? <p role="status">{pdf.message}</p> : null}{pdf.error ? <p role="alert">{pdf.error}</p> : null}</> : null}<button type="button" className="primary-button no-print" onClick={onBack}>Back to Saved Results</button></section>;
 }
 
 function normalizeExamKey(value) { return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); }
