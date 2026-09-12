@@ -1,0 +1,95 @@
+name: Issue 167 resume hotfix supplemental validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'candidate/issue167-hotfix-d2a0ae5-supplemental'
+
+permissions:
+  contents: read
+
+jobs:
+  provenance-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Prove exact-source parent and CI-only diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_parent='09eb67f5a86599cbd2b117c2a3745e3e9c481f3e'
+          expected_source='d2a0ae519d3a1fbb8ce2b1ffd7e4cf478545e2f5'
+          expected_migration_sha='a4afd13f8ef4aebfe25523bb7eb0cc34cd5a5aeb1ae5ef3b8fcbe9b8138adf84'
+          migration='supabase/migrations/20260912144534_issue167_resume_rpc_volatility_fix.sql'
+
+          test "$(git rev-parse HEAD^)" = "$expected_parent"
+          mapfile -t changed_paths < <(git diff --name-only HEAD^ HEAD)
+          test "${#changed_paths[@]}" -eq 1
+          test "${changed_paths[0]}" = '.github/workflows/issue167-hotfix-supplemental-validation.yml'
+          test "$(tr -d '\r\n' < CI_SOURCE_SHA.txt)" = "$expected_source"
+          test "$(sha256sum "$migration" | awk '{print $1}')" = "$expected_migration_sha"
+          git diff --check HEAD^ HEAD
+
+  issue167-hotfix-database:
+    needs: provenance-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline
+      - name: Confirm pinned Supabase CLI
+        shell: bash
+        run: test "$(npx --yes supabase@2.115.0 --version | head -n 1)" = '2.115.0'
+      - name: Issue 167 resume hotfix disposable database validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-issue167-hotfix-db"
+          cleanup() {
+            npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true
+          }
+          trap cleanup EXIT
+
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          npx --yes supabase@2.115.0 --workdir "$workdir" test db --local \
+            "$GITHUB_WORKSPACE/supabase/tests/backend_exam_delivery_issue167.sql"
+
+          set -a
+          eval "$(npx --yes supabase@2.115.0 --workdir "$workdir" status -o env)"
+          set +a
+          migration_count="$(psql "$DB_URL" -v ON_ERROR_STOP=1 -Atc 'select count(*) from supabase_migrations.schema_migrations')"
+          test "$migration_count" = '81'
+          echo "Verified migration replay: $migration_count/81"
+
+          SUPABASE_DB_URL="$DB_URL" \
+            node scripts/test-issue167-study-sandbox-lifecycle-integration.mjs
+
+          postgrest_output="$(SUPABASE_URL="$API_URL" \
+            SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+            SUPABASE_DB_URL="$DB_URL" \
+            node scripts/test-issue167-resume-postgrest-integration.mjs 2>&1)" || {
+              printf '%s\n' "$postgrest_output"
+              exit 1
+            }
+          if grep -Fq 'POSTGREST_RESUME_SQLSTATE_25006' <<<"$postgrest_output"; then
+            printf '%s\n' "$postgrest_output"
+            exit 1
+          fi
+          printf '%s\n' "$postgrest_output"
+
+          npm run validate:issue167
+
+          npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup
+          trap - EXIT
+          echo 'Disposable Supabase stack cleanup PASS'
