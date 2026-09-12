@@ -24,6 +24,7 @@ import { resolvePracticeRequest } from '../../lib/protectedPracticeRequest.js';
 import ReleasedReviewAnswer from './ReleasedReviewAnswer.jsx';
 import { downloadProtectedResultSummaryPdf } from '../../lib/savedResultReportExport.js';
 import { getStructuredResponseState } from '../../lib/structuredResponse.js';
+import { getProtectedExitContract } from '../../lib/protectedLifecycle.js';
 
 export default function ProtectedExamRunner({
   assignmentId = '',
@@ -84,6 +85,12 @@ export default function ProtectedExamRunner({
   );
   const [activeAttemptConfiguration, setActiveAttemptConfiguration] = useState(null);
   const [resumeCandidates, setResumeCandidates] = useState([]);
+  const [recoverableSandboxes, setRecoverableSandboxes] = useState([]);
+  const [lifecycleOperation, setLifecycleOperation] = useState('');
+  const [discardSummary, setDiscardSummary] = useState(null);
+  const [discardError, setDiscardError] = useState('');
+  const [discardOutcomeAmbiguous, setDiscardOutcomeAmbiguous] = useState(false);
+  const [recoveryRetryAttemptId, setRecoveryRetryAttemptId] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [itemFeedback, setItemFeedback] = useState({});
   const [flaggedQuestionIds, setFlaggedQuestionIds] = useState([]);
@@ -105,6 +112,9 @@ export default function ProtectedExamRunner({
   const loadingPage = useRef(false);
   const operationController = useRef(new AbortController());
   const navigationSave = useRef(null);
+  const lifecycleLock = useRef(false);
+  const discardRequest = useRef({ attemptId: '', requestId: '' });
+  const recoveryRequest = useRef({ attemptId: '', requestId: '' });
   const workspaceRef = useRef(null);
   const { fullscreenMessage, fullscreenSupported, isFullscreen, toggleFullscreen } = useFullscreenMode(workspaceRef);
 
@@ -133,6 +143,9 @@ export default function ProtectedExamRunner({
     ]).filter(([, value]) => value !== undefined)));
     setRevisions(Object.fromEntries(rawItems.map((item) => [item.itemId, item.revision ?? 0])));
     setDirtyIds(new Set());
+    setRecoverableSandboxes([]);
+    setRecoveryRetryAttemptId('');
+    recoveryRequest.current = { attemptId: '', requestId: '' };
     setCurrentIndex(0);
     setRemainingSeconds(getServerRemainingSeconds(payload?.attempt));
     setState('active');
@@ -162,6 +175,7 @@ export default function ProtectedExamRunner({
         if (practiceBindingError) throw practiceBindingError;
         if (practiceRequestRef.current) {
           const configuredRequest = buildPracticeRequest(practiceRequestRef.current, configuredLanguageRef.current, examKey);
+          setRecoverableSandboxes([]);
           setState('resuming');
           setMessage('Looking for an existing protected practice attempt...');
           const reconciliation = await client.listCurrentAttemptBindings(
@@ -180,6 +194,7 @@ export default function ProtectedExamRunner({
           const singleCandidateMatchesLanguage = candidates.length === 1 &&
             normalizeAttemptLanguage(candidates[0].languagePreference) === normalizeAttemptLanguage(configuredRequest.language);
           if (singleCandidateMatchesLanguage) {
+            setRecoverableSandboxes([]);
             availabilityRef.current = candidates[0];
             setAvailability(candidates[0]);
             setActiveAttemptConfiguration(candidates[0]);
@@ -203,16 +218,19 @@ export default function ProtectedExamRunner({
             setResumeCandidates([]);
             loadAttempt(current);
           } else if (candidates.length === 1) {
+            setRecoverableSandboxes([]);
             availabilityRef.current = candidates[0];
             setAvailability(candidates[0]);
             setActiveAttemptConfiguration(candidates[0]);
             setState('ready-active');
             setMessage('An unfinished attempt uses a different language. Resume it, or explicitly start a new attempt if permitted.');
           } else if (candidates.length > 1) {
+            setRecoverableSandboxes([]);
             setActiveAttemptConfiguration(null);
             setState('resume-choice');
             setMessage('Choose the existing protected attempt you want to resume. No new attempt will be started.');
           } else if (profileCandidates.length > 0) {
+            setRecoverableSandboxes([]);
             setResumeCandidates(profileCandidates);
             setActiveAttemptConfiguration(null);
             setState('resume-choice');
@@ -223,8 +241,15 @@ export default function ProtectedExamRunner({
             availabilityRef.current = preview;
             setAvailability(preview);
             setActiveAttemptConfiguration(null);
+            const historical = configuredRequest.purpose === 'study_sandbox'
+              ? await client.listRecoverableStudySandboxes(examKey, profileKey, { signal: controller.signal })
+              : { candidates: [] };
+            if (stale()) return;
+            setRecoverableSandboxes(historical.candidates ?? []);
             setState('ready');
-            setMessage(`Ready to start ${preview.selectedCount} protected practice items${preview.adjustedCount ? ' (adjusted to the available pool)' : ''}.`);
+            setMessage((historical.candidates ?? []).length
+              ? 'Choose a saved Study Sandbox to recover, or start new. No historical sandbox is changed by this screen.'
+              : `Ready to start ${preview.selectedCount} protected practice items${preview.adjustedCount ? ' (adjusted to the available pool)' : ''}.`);
           }
           return;
         }
@@ -253,10 +278,12 @@ export default function ProtectedExamRunner({
     setMessage('Resuming the selected protected attempt...');
     const current = await readResumeCandidate(candidate, signal);
     setResumeCandidates([]);
+    setRecoverableSandboxes([]);
     loadAttempt(current);
   }
 
   async function chooseResumeCandidate(candidate) {
+    if (lifecycleLock.current || starting.current) return;
     try {
       await resumeCandidate(candidate);
     } catch (error) {
@@ -274,8 +301,63 @@ export default function ProtectedExamRunner({
     }
   }
 
+  async function recoverSavedSandbox(candidate) {
+    if (lifecycleLock.current || starting.current) return;
+    lifecycleLock.current = true;
+    setLifecycleOperation('recovering');
+    setMessage('Recovering the selected saved Study Sandbox...');
+    if (recoveryRequest.current.attemptId !== candidate.attemptId || !recoveryRequest.current.requestId) {
+      recoveryRequest.current = { attemptId: candidate.attemptId, requestId: crypto.randomUUID() };
+    }
+    let recoveryCommitted = false;
+    try {
+      const recovered = await client.recoverStudySandbox(
+        candidate.attemptId,
+        recoveryRequest.current.requestId,
+        { signal: operationController.current.signal },
+      );
+      if (recovered.attemptId !== candidate.attemptId || recovered.status !== 'in_progress') {
+        throw Object.assign(new Error('The recovered Study Sandbox identity could not be verified.'), { code: 'binding_mismatch' });
+      }
+      recoveryCommitted = true;
+      availabilityRef.current = candidate;
+      setAvailability(candidate);
+      const current = await readResumeCandidate(candidate, operationController.current.signal);
+      setResumeCandidates([]);
+      setRecoverableSandboxes([]);
+      setRecoveryRetryAttemptId('');
+      recoveryRequest.current = { attemptId: '', requestId: '' };
+      loadAttempt(current);
+    } catch (error) {
+      if (operationController.current.signal.aborted) return;
+      if (isAmbiguousProtectedMutation(error)) {
+        setRecoveryRetryAttemptId(candidate.attemptId);
+        setState('ready');
+        setMessage('The recovery outcome could not be confirmed. Retry recovery to reuse the same protected request.');
+      } else if (recoveryCommitted || ['active_sandbox_exists', 'attempt_conflict'].includes(error.code)) {
+        setRecoveryRetryAttemptId('');
+        recoveryRequest.current = { attemptId: '', requestId: '' };
+        setRecoverableSandboxes([]);
+        setState('eligibility-loading');
+        setMessage('Study Sandbox availability changed. Refreshing active attempts...');
+        setRefreshNonce((value) => value + 1);
+      } else {
+        setRecoveryRetryAttemptId('');
+        recoveryRequest.current = { attemptId: '', requestId: '' };
+        if (['attempt_not_found', 'sandbox_discarded', 'sandbox_not_recoverable', 'practice_unavailable', 'invalid_lifecycle_transition'].includes(error.code)) {
+          setRecoverableSandboxes((current) => current.filter((entry) => entry.attemptId !== candidate.attemptId));
+        }
+        setState(error.code === 'unauthenticated' ? 'session-expired' : 'ready');
+        setMessage(error.message);
+      }
+    } finally {
+      lifecycleLock.current = false;
+      setLifecycleOperation('');
+    }
+  }
+
   async function startAttempt() {
-    if (starting.current) return;
+    if (starting.current || lifecycleLock.current) return;
     starting.current = true;
     setState('starting');
     setMessage('Starting protected attempt...');
@@ -306,15 +388,22 @@ export default function ProtectedExamRunner({
       throw Object.assign(new Error('Protected practice configuration was not available.'), { code: 'practice_unavailable' });
     } catch (error) {
       if (operationController.current.signal.aborted) return;
-      setState(error.code === 'unauthenticated' ? 'session-expired' : 'safe-fatal-error');
-      setMessage(error.message);
+      if (effectivePracticeRequest?.purpose === 'study_sandbox' && ['active_sandbox_exists', 'attempt_conflict'].includes(error.code)) {
+        setRecoverableSandboxes([]);
+        setState('eligibility-loading');
+        setMessage('An active Study Sandbox was found. Refreshing its protected binding...');
+        setRefreshNonce((value) => value + 1);
+      } else {
+        setState(error.code === 'unauthenticated' ? 'session-expired' : 'safe-fatal-error');
+        setMessage(error.message);
+      }
     } finally {
       starting.current = false;
     }
   }
 
   async function startNewAttempt() {
-    if (!activeAttemptConfiguration?.replacementPermitted || starting.current) return;
+    if (!activeAttemptConfiguration?.replacementPermitted || starting.current || lifecycleLock.current) return;
     const languageConfigured = examKey === 'az204';
     const confirmation = languageConfigured
       ? `Start a new attempt using ${formatReason(configuredLanguage)}? Your unfinished ${formatReason(activeAttemptConfiguration.languagePreference)} attempt will be discarded and retained only for audit.`
@@ -405,6 +494,7 @@ export default function ProtectedExamRunner({
   }
 
   function changeAnswer(itemId, value) {
+    if (lifecycleLock.current || discardSummary) return;
     setAnswers((current) => ({ ...current, [itemId]: value }));
     setDirtyIds((current) => new Set(current).add(itemId));
     setSaveErrors((current) => ({ ...current, [itemId]: '' }));
@@ -443,6 +533,7 @@ export default function ProtectedExamRunner({
   }
 
   async function navigate(nextIndex) {
+    if (lifecycleLock.current || discardSummary) return;
     if (!(await saveItem(items[currentIndex].id))) return;
     if (nextIndex >= items.length && itemPage.hasMore) {
       if (loadingPage.current) return;
@@ -478,12 +569,96 @@ export default function ProtectedExamRunner({
     setCurrentIndex(Math.max(0, Math.min(nextIndex, items.length - 1)));
   }
 
-  async function abandonAndExit() {
-    if (state === 'saving' || state === 'submitting') return;
-    if (!window.confirm('End this attempt? It cannot be resumed. Your progress will be retained for audit, but no completed result will be created.')) return;
+  async function saveAndExit() {
+    if (attempt?.purpose !== 'study_sandbox' || discardSummary || lifecycleLock.current || starting.current || submitting.current) return;
+    lifecycleLock.current = true;
+    setLifecycleOperation('save-exit');
     const currentItemId = items[currentIndex]?.id;
-    if (currentItemId && !(await saveItem(currentItemId))) return;
     try {
+      if (currentItemId && !(await saveItem(currentItemId))) return;
+      onExit?.();
+    } finally {
+      lifecycleLock.current = false;
+      setLifecycleOperation('');
+    }
+  }
+
+  async function prepareSandboxDiscard() {
+    if (attempt?.purpose !== 'study_sandbox' || discardSummary || lifecycleLock.current || starting.current || submitting.current) return;
+    lifecycleLock.current = true;
+    setLifecycleOperation('discard-preflight');
+    setDiscardError('');
+    setDiscardOutcomeAmbiguous(false);
+    const currentItemId = items[currentIndex]?.id;
+    try {
+      if (currentItemId && !(await saveItem(currentItemId))) return;
+      const summary = await client.getAttemptLifecycleSummary(attempt.attemptId, {
+        signal: operationController.current.signal,
+      });
+      if (summary.attemptId !== attempt.attemptId || summary.purpose !== 'study_sandbox' || summary.status !== 'in_progress') {
+        throw Object.assign(new Error('The Study Sandbox lifecycle state could not be verified. Refresh before discarding.'), { code: 'binding_mismatch' });
+      }
+      setDiscardSummary(summary);
+    } catch (error) {
+      if (operationController.current.signal.aborted) return;
+      setMessage(error.message);
+      setState(error.code === 'unauthenticated' ? 'session-expired' : 'save-failed');
+    } finally {
+      lifecycleLock.current = false;
+      setLifecycleOperation('');
+    }
+  }
+
+  async function confirmSandboxDiscard() {
+    if (!discardSummary || lifecycleLock.current || attempt?.purpose !== 'study_sandbox') return;
+    lifecycleLock.current = true;
+    setLifecycleOperation('discarding');
+    setDiscardError('');
+    setDiscardOutcomeAmbiguous(false);
+    if (discardRequest.current.attemptId !== attempt.attemptId || !discardRequest.current.requestId) {
+      discardRequest.current = { attemptId: attempt.attemptId, requestId: crypto.randomUUID() };
+    }
+    try {
+      await client.abandonAttempt(attempt.attemptId, discardRequest.current.requestId, {
+        signal: operationController.current.signal,
+      });
+      discardRequest.current = { attemptId: '', requestId: '' };
+      setDiscardSummary(null);
+      setDiscardOutcomeAmbiguous(false);
+      onExit?.();
+    } catch (error) {
+      if (operationController.current.signal.aborted) return;
+      if (isAmbiguousProtectedMutation(error)) {
+        setDiscardOutcomeAmbiguous(true);
+        setDiscardError('The discard outcome could not be confirmed. Retry discard to reuse the same protected request.');
+      } else {
+        discardRequest.current = { attemptId: '', requestId: '' };
+        setDiscardSummary(null);
+        setDiscardOutcomeAmbiguous(false);
+        setMessage(error.message);
+        setState(error.code === 'unauthenticated' ? 'session-expired' : 'save-failed');
+      }
+    } finally {
+      lifecycleLock.current = false;
+      setLifecycleOperation('');
+    }
+  }
+
+  function cancelSandboxDiscard() {
+    if (lifecycleLock.current || discardOutcomeAmbiguous) return;
+    setDiscardSummary(null);
+    setDiscardError('');
+    setDiscardOutcomeAmbiguous(false);
+  }
+
+  async function terminalEndAndExit() {
+    if (attempt?.purpose === 'study_sandbox' || lifecycleLock.current || starting.current || submitting.current) return;
+    if (!window.confirm('End this attempt? It cannot be resumed. Your progress will be retained for audit, but no completed result will be created.')) return;
+    lifecycleLock.current = true;
+    setLifecycleOperation('ending');
+    const currentItemId = items[currentIndex]?.id;
+    try {
+      if (currentItemId && !(await saveItem(currentItemId))) return;
       await client.abandonAttempt(attempt.attemptId, crypto.randomUUID(), {
         signal: operationController.current.signal,
       });
@@ -491,12 +666,20 @@ export default function ProtectedExamRunner({
     } catch (error) {
       setMessage(error.message);
       setState(error.code === 'unauthenticated' ? 'session-expired' : 'save-failed');
+    } finally {
+      lifecycleLock.current = false;
+      setLifecycleOperation('');
     }
+  }
+
+  function handleExit() {
+    if (attempt?.purpose === 'study_sandbox') return saveAndExit();
+    return terminalEndAndExit();
   }
 
   const saveCurrentResponseBeforeNavigation = useCallback(async () => {
     if (navigationSave.current) return navigationSave.current;
-    if (state === 'saving' || state === 'submitting') return false;
+    if (state === 'saving' || state === 'submitting' || lifecycleLock.current || discardSummary) return false;
     navigationSave.current = (async () => {
       const currentItemId = items[currentIndex]?.id;
       return currentItemId ? saveItem(currentItemId) : true;
@@ -506,7 +689,7 @@ export default function ProtectedExamRunner({
     } finally {
       navigationSave.current = null;
     }
-  }, [answers, attempt?.attemptId, client, currentIndex, dirtyIds, items, revisions, state]);
+  }, [answers, attempt?.attemptId, client, currentIndex, dirtyIds, discardSummary, items, revisions, state]);
 
   useEffect(() => {
     onRegisterNavigationGuard?.(saveCurrentResponseBeforeNavigation);
@@ -514,6 +697,7 @@ export default function ProtectedExamRunner({
   }, [onRegisterNavigationGuard, saveCurrentResponseBeforeNavigation]);
 
   async function toggleFlag(itemId) {
+    if (lifecycleLock.current || discardSummary) return;
     const flagged = !flaggedQuestionIds.includes(itemId);
     try {
       const payload = await client.setFlag(attempt.attemptId, itemId, flagged, crypto.randomUUID(), { signal: operationController.current.signal });
@@ -663,8 +847,8 @@ export default function ProtectedExamRunner({
                 <dl className="exam-stats compact">
                   <div><dt>Result</dt><dd>{item.status ?? 'Recorded'}</dd></div>
                   <div><dt>Points</dt><dd>{item.earnedPoints != null && item.maxPoints != null ? `${item.earnedPoints} / ${item.maxPoints}` : 'Not recorded'}</dd></div>
-                  <div><dt>Your response</dt><dd><ReleasedReviewAnswer presentation={item.presentation} value={item.response} /></dd></div>
-                  <div><dt>Correct answer</dt><dd><ReleasedReviewAnswer correct presentation={item.presentation} value={item.correctAnswer} /></dd></div>
+                  <div><dt>Your response</dt><dd><ReleasedReviewAnswer presentation={item.presentation} questionType={item.questionType} value={item.response} /></dd></div>
+                  <div><dt>Correct answer</dt><dd><ReleasedReviewAnswer correct presentation={item.presentation} questionType={item.questionType} value={item.correctAnswer} /></dd></div>
                 </dl>
                 {item.explanation && <p><strong>Explanation:</strong> {item.explanation}</p>}
                 {item.remediation && <p><strong>Next step:</strong> {item.remediation}</p>}
@@ -688,10 +872,13 @@ export default function ProtectedExamRunner({
         : baseDisplayProfile;
       const canStart = state === 'ready' || state === 'ready-active';
       const isPracticeSession = Boolean(practiceRequest && practiceRequest.purpose !== 'self_directed_exam');
+      const hasRecoverableSandboxes = recoverableSandboxes.length > 0;
       const actionLabel = state === 'ready-active'
           ? isPracticeSession ? 'Start new practice' : 'Start new attempt'
         : state === 'ready'
-          ? isPracticeSession ? 'Start practice' : 'Start exam'
+          ? hasRecoverableSandboxes && practiceRequest?.purpose === 'study_sandbox'
+            ? 'Start new'
+            : isPracticeSession ? 'Start practice' : 'Start exam'
           : state === 'starting'
             ? isPracticeSession ? 'Starting practice...' : 'Starting exam...'
             : 'Checking availability...';
@@ -715,10 +902,47 @@ export default function ProtectedExamRunner({
           </div>
         </section>
       ) : null;
+      const recoveryChoices = recoverableSandboxes.length > 0 ? (
+        <section className="selected-profile-panel" aria-label="Recoverable Study Sandboxes">
+          <h3>Recover a saved Study Sandbox</h3>
+          <p>Recovery is optional. Choose one saved sandbox, or use Start new below without changing this history.</p>
+          <div className="recoverable-sandbox-list">
+            {recoverableSandboxes.map((candidate) => (
+              <article className="recoverable-sandbox-card" key={candidate.attemptId}>
+                <h4>{candidate.profileName}</h4>
+                <dl className="profile-facts compact">
+                  <div><dt>Package</dt><dd>{candidate.packageVersion}</dd></div>
+                  <div><dt>Started</dt><dd>{formatLifecycleDate(candidate.startedAt)}</dd></div>
+                  <div><dt>Last activity</dt><dd>{formatLifecycleDate(candidate.lastActivityAt)}</dd></div>
+                  <div><dt>Saved responses</dt><dd>{candidate.savedResponseCount}</dd></div>
+                  <div><dt>Practice items</dt><dd>{candidate.itemCount}</dd></div>
+                  {examKey === 'az204' && candidate.languagePreference
+                    ? <div><dt>Language</dt><dd>{formatReason(candidate.languagePreference)}</dd></div>
+                    : null}
+                </dl>
+                <button
+                  className="secondary-button"
+                  disabled={Boolean(lifecycleOperation) || (
+                    Boolean(recoveryRetryAttemptId) && recoveryRetryAttemptId !== candidate.attemptId
+                  )}
+                  type="button"
+                  onClick={() => recoverSavedSandbox(candidate)}
+                >
+                  {lifecycleOperation === 'recovering' && recoveryRequest.current.attemptId === candidate.attemptId
+                    ? 'Recovering...'
+                    : recoveryRetryAttemptId === candidate.attemptId
+                      ? 'Retry recovery'
+                      : 'Recover saved sandbox'}
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null;
       return (
         <StudentDetails
           accountStudent={student}
-          actionDisabled={!canStart}
+          actionDisabled={!canStart || Boolean(lifecycleOperation) || Boolean(recoveryRetryAttemptId)}
           actionLabel={actionLabel}
           codingLanguagePreference={examConfig.id === 'az204' ? selectedLanguage : null}
           exam={{ ...examConfig, name: examConfig.title ?? examConfig.name }}
@@ -749,7 +973,7 @@ export default function ProtectedExamRunner({
             : selectedMode ?? { id: 'protected', name: 'Protected exam' }}
           selectedProfile={displayProfile}
           statusMessage={message}
-          supplementalContent={resumeChoices}
+          supplementalContent={<>{resumeChoices}{recoveryChoices}</>}
         />
       );
     }
@@ -771,6 +995,8 @@ export default function ProtectedExamRunner({
     : items.filter((item) => item.type !== 'case-study-info');
   const pbqQuestions = isSectionedExam ? items.filter((item) => String(item.type).startsWith('pbq-')) : [];
   const answeredCount = items.filter((item) => getProtectedQuestionState(item, answers) === 'answered').length;
+  const exitContract = getProtectedExitContract(attempt?.purpose);
+  const interactionLocked = Boolean(lifecycleOperation) || Boolean(discardSummary) || state === 'saving' || state === 'submitting';
   const approvedExam = {
     ...examConfig,
     code: examConfig.code ?? examConfig.shortName,
@@ -787,22 +1013,24 @@ export default function ProtectedExamRunner({
     mode: selectedMode,
   };
   const actionControls = <>
+    {message && <p className="status-note" role="alert">{message}</p>}
     {saveErrors[current.id] && <p className="incomplete-warning" role="alert">Not saved: {saveErrors[current.id]}</p>}
     {issueStatus && <p className="status-note" role="status">{issueStatus}</p>}
     {itemFeedback[current.id] && <p className="status-note" role="status">{itemFeedback[current.id].status} · {itemFeedback[current.id].earnedPoints} of {itemFeedback[current.id].maxPoints} points</p>}
     <div className="exam-actions">
-      <button className={flaggedQuestionIds.includes(current.id) ? 'flag-button active' : 'flag-button'} type="button" disabled={state === 'saving'} onClick={() => toggleFlag(current.id)}>{flaggedQuestionIds.includes(current.id) ? 'Remove flag' : 'Flag for review'}</button>
-      <button className="secondary-button" type="button" onClick={() => { setIssueStatus(''); setIssueOpen(true); }}>Report question issue</button>
-      {practiceRequest?.purpose === 'study_sandbox' && <button className="secondary-button" type="button" disabled={state === 'saving'} onClick={() => checkPracticeItem(current.id)}>Check saved answer</button>}
-      <button className="secondary-button" type="button" disabled={currentIndex === 0 || state === 'saving'} onClick={() => navigate(currentIndex - 1)}>Previous</button>
+      <button className={flaggedQuestionIds.includes(current.id) ? 'flag-button active' : 'flag-button'} type="button" disabled={interactionLocked} onClick={() => toggleFlag(current.id)}>{flaggedQuestionIds.includes(current.id) ? 'Remove flag' : 'Flag for review'}</button>
+      <button className="secondary-button" disabled={interactionLocked} type="button" onClick={() => { setIssueStatus(''); setIssueOpen(true); }}>Report question issue</button>
+      {attempt?.purpose === 'study_sandbox' && <button className="secondary-button" type="button" disabled={interactionLocked} onClick={() => checkPracticeItem(current.id)}>Check saved answer</button>}
+      <button className="secondary-button" type="button" disabled={currentIndex === 0 || interactionLocked} onClick={() => navigate(currentIndex - 1)}>Previous</button>
       {currentIndex < items.length - 1 || itemPage.hasMore
-        ? <button className="secondary-button" type="button" disabled={state === 'saving'} onClick={() => navigate(currentIndex + 1)}>{state === 'saving' ? 'Saving...' : 'Next'}</button>
-        : <button className="primary-button" type="button" disabled={state === 'saving' || state === 'submitting'} onClick={() => setShowFinalSubmitReview(true)}>Submit exam</button>}
+        ? <button className="secondary-button" type="button" disabled={interactionLocked} onClick={() => navigate(currentIndex + 1)}>{state === 'saving' ? 'Saving...' : 'Next'}</button>
+        : <button className="primary-button" type="button" disabled={interactionLocked} onClick={() => setShowFinalSubmitReview(true)}>Submit exam</button>}
     </div>
   </>;
   const overlays = <>
     {showFinalSubmitReview && <ProtectedFinalSubmitReview answers={answers} exam={approvedExam} flaggedQuestionIds={flaggedQuestionIds} onNavigateToItem={(index) => { setShowFinalSubmitReview(false); setCurrentIndex(index); }} onReturnToExam={() => setShowFinalSubmitReview(false)} onSubmitFinal={submitAttempt} questions={items} remainingSeconds={remainingSeconds} />}
     {issueOpen && <div className="modal-backdrop" role="presentation"><form className="modal" role="dialog" aria-modal="true" aria-labelledby="protected-issue-heading" onSubmit={submitIssue}><h2 id="protected-issue-heading">Report a question issue</h2><p>Question {current.questionNumber ?? currentIndex + 1}. Do not include passwords or personal information.</p><label htmlFor="protected-issue-message">What appears to be wrong?</label><textarea id="protected-issue-message" maxLength={2000} required rows={5} value={issueMessage} onChange={(event) => setIssueMessage(event.target.value)} /><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setIssueOpen(false)}>Cancel</button><button className="primary-button" type="submit">Send report</button></div></form></div>}
+    {discardSummary && <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="sandbox-discard-heading" aria-describedby="sandbox-discard-description"><h2 id="sandbox-discard-heading">Permanently discard this Study Sandbox?</h2><p id="sandbox-discard-description">It contains <strong>{discardSummary.savedResponseCount} saved {discardSummary.savedResponseCount === 1 ? 'response' : 'responses'}</strong>.</p><p>The responses will remain retained for audit, but this sandbox will no longer be resumable and no result will be created.</p>{discardError ? <p className="error-note" role="alert">{discardError}</p> : null}<div className="modal-actions"><button className="secondary-button" disabled={lifecycleOperation === 'discarding' || discardOutcomeAmbiguous} type="button" onClick={cancelSandboxDiscard}>Cancel</button><button className="secondary-button danger-lite" disabled={lifecycleOperation === 'discarding'} type="button" onClick={confirmSandboxDiscard}>{lifecycleOperation === 'discarding' ? 'Discarding...' : discardOutcomeAmbiguous ? 'Retry discard' : 'Permanently discard'}</button></div></section></div>}
   </>;
   return <ExamWorkspacePresentation
       actionControls={actionControls}
@@ -811,18 +1039,21 @@ export default function ProtectedExamRunner({
       currentIndex={currentIndex}
       currentSection={getProtectedSection(current)}
       exam={approvedExam}
-      exitLabel="End attempt"
+      exitDescription={exitContract.description}
+      exitDisabled={interactionLocked}
+      exitLabel={exitContract.label}
       flaggedQuestionIds={flaggedQuestionIds}
       fullscreenMessage={fullscreenMessage}
       fullscreenSupported={fullscreenSupported}
       isFullscreen={isFullscreen}
+      interactionDisabled={interactionLocked}
       isQuestionMapOpen={showQuestionMap}
       isSectionedExam={approvedExam.hasSectionedFlow}
       navigatorQuestions={items}
       normalQuestions={normalQuestions}
       onAnswerChange={changeAnswer}
       onCloseQuestionMap={() => setShowQuestionMap(false)}
-      onExit={abandonAndExit}
+      onExit={handleExit}
       onNavigate={(index) => { setShowQuestionMap(false); navigate(index); }}
       onOpenQuestionMap={() => setShowQuestionMap(true)}
       onTimeExpired={submitAttempt}
@@ -840,6 +1071,11 @@ export default function ProtectedExamRunner({
       studentName={student?.name}
       timerExpiresAt={attempt.expiresAt}
       timed={attempt.timed !== false}
+      secondaryExitAction={attempt?.purpose === 'study_sandbox' ? {
+        disabled: interactionLocked,
+        label: lifecycleOperation === 'discard-preflight' ? 'Checking saved work...' : 'Discard saved sandbox',
+        onClick: prepareSandboxDiscard,
+      } : null}
       workspaceRef={workspaceRef}
     />;
 }
@@ -934,6 +1170,11 @@ function isAmbiguousProtectedMutation(error) {
 
 function formatReason(value) {
   return String(value ?? '').replaceAll('_', ' ');
+}
+
+function formatLifecycleDate(value) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : 'Unavailable';
 }
 
 function assertAttemptBinding(attempt, eligibility) {

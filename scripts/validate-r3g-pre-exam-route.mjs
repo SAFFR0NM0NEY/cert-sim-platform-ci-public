@@ -38,9 +38,15 @@ assert.match(runner, /const refreshedAvailability = await client\.getPracticeAva
 assert.match(runner, /languageLocked=\{false\}/);
 assert.match(runner, /setConfiguredLanguage\(nextLanguage\)/);
 assert.match(runner, /onStartExam=\{state === 'ready-active' \? startNewAttempt : startAttempt\}/);
-assert.match(runner, /async function abandonAndExit\(\)[\s\S]*await saveItem\(currentItemId\)[\s\S]*client\.abandonAttempt/);
+assert.match(runner, /async function saveAndExit\(\)[\s\S]*attempt\?\.purpose !== 'study_sandbox'[\s\S]*await saveItem\(currentItemId\)[\s\S]*onExit\?\.\(\)/);
+assert.doesNotMatch(runner.match(/async function saveAndExit\(\)[\s\S]*?\n  }/)?.[0] ?? '', /abandonAttempt/);
+assert.match(runner, /async function terminalEndAndExit\(\)[\s\S]*attempt\?\.purpose === 'study_sandbox'[\s\S]*await saveItem\(currentItemId\)[\s\S]*client\.abandonAttempt/);
+assert.match(runner, /async function prepareSandboxDiscard\(\)[\s\S]*getAttemptLifecycleSummary/);
+assert.match(runner, /async function confirmSandboxDiscard\(\)[\s\S]*discardRequest\.current\.requestId[\s\S]*client\.abandonAttempt/);
+assert.match(runner, /if \(lifecycleLock\.current \|\| discardOutcomeAmbiguous\) return;/);
+assert.match(runner, /disabled=\{lifecycleOperation === 'discarding' \|\| discardOutcomeAmbiguous\}/);
 assert.match(runner, /It cannot be resumed[\s\S]*no completed result will be created/);
-assert.match(runner, /if \(starting\.current\) return;[\s\S]*starting\.current = true/);
+assert.match(runner, /if \(starting\.current \|\| lifecycleLock\.current\) return;[\s\S]*starting\.current = true/);
 assert.doesNotMatch(runner.match(/async function initialize\(\)[\s\S]*?\n  }\n    initialize/)?.[0] ?? '', /startPractice|startAttempt\(/);
 assert.match(details, /accountStudent \? \(isProtectedPractice \? 'Practice details' : 'Exam details'\) : 'Student details'/);
 assert.match(details, /Learner:[\s\S]*accountStudent\.name/);

@@ -1,3 +1,35 @@
+import { PROTECTED_LANGUAGE_PREFERENCES } from './protectedExamContract.js';
+
+const protectedLanguagePreferences = new Set(PROTECTED_LANGUAGE_PREFERENCES);
+
+export function buildWeakAreaPracticeRequest({
+  count,
+  domain,
+  examKey,
+  includePbqs,
+  language,
+  mixStrategy,
+  profileId,
+  questionCount,
+} = {}) {
+  const request = {
+    examKey,
+    profileId,
+    purpose: 'weak_area',
+    domain,
+    count: count ?? questionCount,
+    includePbqs,
+    mixStrategy,
+  };
+  if (examKey !== 'az204') return request;
+  if (!protectedLanguagePreferences.has(language)) {
+    throw Object.assign(new Error('Select a valid AZ-204 coding language before starting practice.'), {
+      code: 'invalid_language',
+    });
+  }
+  return { ...request, language };
+}
+
 export function resolvePracticeRequest({ assignmentId = '', practiceRequest }) {
   const request = { ...(practiceRequest ?? {}) };
   const explicitAssignmentId = String(assignmentId ?? '').trim();

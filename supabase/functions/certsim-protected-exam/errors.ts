@@ -9,9 +9,14 @@ export type StableCode =
   | "attempt_expired"
   | "attempt_conflict"
   | "attempt_limit_reached"
+  | "sandbox_discarded"
+  | "sandbox_not_recoverable"
+  | "active_sandbox_exists"
   | "practice_unavailable"
+  | "no_weak_areas"
   | "weak_domain_unavailable"
   | "scope_required"
+  | "not_visible"
   | "assignment_conflict"
   | "replacement_not_permitted"
   | "replacement_failed"
@@ -42,9 +47,14 @@ const ERROR_STATUS: Record<string, number> = {
   attempt_expired: 409,
   attempt_conflict: 409,
   attempt_limit_reached: 409,
+  sandbox_discarded: 409,
+  sandbox_not_recoverable: 409,
+  active_sandbox_exists: 409,
   practice_unavailable: 403,
+  no_weak_areas: 409,
   weak_domain_unavailable: 409,
   scope_required: 400,
+  not_visible: 404,
   assignment_conflict: 409,
   replacement_not_permitted: 403,
   replacement_failed: 409,

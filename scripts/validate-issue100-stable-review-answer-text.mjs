@@ -52,7 +52,8 @@ const partialScorer = fs.readFileSync(new URL('../supabase/tests/backend_exam_de
 
 assert.match(runner, /<ReleasedReviewAnswer presentation=\{item\.presentation\}/);
 assert.match(reviewAnswer, /<ul className="released-answer-list">/);
-assert.match(reviewAnswer, /resolveReleasedChoiceTexts\(presentation, value, \{ correct \}\)/);
+assert.match(reviewAnswer, /resolveReleasedChoiceTexts\(presentation, value, options\)/);
+assert.match(runner, /questionType=\{item\.questionType\}/);
 assert.doesNotMatch(runner, /<dt>Correct answer<\/dt><dd>\{formatReviewValue/);
 assert.match(runner, /reviewWithheld &&/);
 assert.match(edgeResponses, /assertPracticeFeedbackSafe/);

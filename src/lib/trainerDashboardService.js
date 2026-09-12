@@ -177,7 +177,7 @@ export async function listTrainerStudentResults({ cursor = null } = {}) {
     : studentsResult;
 }
 
-export async function getTrainerStudentResultDetail(attemptId) {
+export async function getTrainerStudentResultDetail(attemptId, { signal } = {}) {
   const authResult = await requireTrainerDashboardAccess();
 
   if (!authResult.ok) {
@@ -198,7 +198,7 @@ export async function getTrainerStudentResultDetail(attemptId) {
     const accessToken = sessionData?.session?.access_token;
     if (sessionError || !accessToken) return createErrorResult('not_signed_in', 'Sign in again to open this result.');
     try {
-      const summary = await createProtectedExamClient({ accessToken }).getPrintableSummary(normalizedAttemptId);
+      const summary = await createProtectedExamClient({ accessToken }).getPrintableSummary(normalizedAttemptId, { signal });
       return createOkResult(normalizeProtectedPrintSummary(summary));
     } catch (error) {
       return createErrorResult('request_failed', error?.message || 'Could not load the scoped result summary.');
@@ -465,7 +465,7 @@ async function readProtectedTrainerStudentResults(students = [], { cursor = null
   }
 }
 
-function normalizeProtectedTrainerResult(item = {}, students = []) {
+export function normalizeProtectedTrainerResult(item = {}, students = []) {
   const studentMatches = students.filter((student) => student.userId === item.learnerId);
   const primaryStudent = studentMatches[0] ?? {};
   const purpose = cleanText(item.purpose) || 'unclassified';

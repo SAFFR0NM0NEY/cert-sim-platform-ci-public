@@ -1,6 +1,8 @@
 export function getProtectedItemSection(item) {
-  if (item?.type === 'case-study-info' || /case/i.test(String(item?.section ?? ''))) return 'case-study';
+  if (item?.type === 'case-study-info') return 'case-study';
   if (String(item?.type ?? '').startsWith('pbq-')) return 'pbq';
+  if (typeof item?.caseStudyId === 'string' && item.caseStudyId.trim()) return 'case-study';
+  if (/case/i.test(String(item?.section ?? ''))) return 'case-study';
   return 'standard';
 }
 

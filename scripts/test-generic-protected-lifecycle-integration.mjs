@@ -10,7 +10,7 @@ sql(`insert into public.organisations(id,name,organisation_type,status) values (
 
 const payload={
   packageSchemaVersion:'certsim-protected-package-v2',validationContractVersion:'certsim-protected-multi-exam-validation-v1',
-  exam:{examKey:'sample-400',packageVersion:'1.0.0',capabilities:['single-choice','dropdown-code','case-study-context','pbq-config-panel'],domains:[{key:'d1',name:'Synthetic'}],groupedSelection:true},
+  exam:{examKey:'sample-400',packageVersion:'1.0.0',capabilities:['single-choice','multi-select','reorder','dropdown-code','case-study-context','pbq-config-panel'],domains:[{key:'d1',name:'Synthetic'}],groupedSelection:true},
   source:{sourceHash:'a'.repeat(64),validationHash:'b'.repeat(64)},
   runtime:{generatorVersion:'certsim-az400-case-workspace-generator-v1',scorerVersion:'certsim-az400-authoritative-scorer-v1',pbqRuntimeVersion:'certsim-protected-pbq-runtime-v1'},
   profiles:[
@@ -23,7 +23,9 @@ const payload={
     {id:'case-child',type:'single-choice',domainKey:'d1',sectionKey:'case',scored:true,group:{groupKey:'case-a',role:'question',order:1},presentation:{prompt:'Synthetic case item',options:[{id:'a',text:'A'},{id:'b',text:'B'}]},privateScoring:{correctAnswer:'a'},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}},
     {id:'standard',type:'single-choice',domainKey:'d1',sectionKey:'standard',scored:true,presentation:{prompt:'Synthetic item',options:[{id:'a',text:'A'},{id:'b',text:'B'}]},privateScoring:{correctAnswer:'a'},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}},
     {id:'dropdown',type:'dropdown-code',domainKey:'d1',sectionKey:'standard',scored:true,presentation:{prompt:'Synthetic dropdown',blanks:[{id:'first',options:['alpha','beta']},{id:'second',options:['alpha','beta']}]},privateScoring:{blanks:[{correctAnswer:'alpha'},{correctAnswer:'beta'}]},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}},
-    ...Array.from({length:36},(_,index)=>({id:`standard-${index+1}`,type:'single-choice',domainKey:'d1',sectionKey:'standard',scored:true,presentation:{prompt:`Synthetic item ${index+1}`,options:[{id:'a',text:'A'},{id:'b',text:'B'}]},privateScoring:{correctAnswer:'a'},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}})),
+    ...Array.from({length:36},(_,index)=>index%2===0
+      ? {id:`standard-${index+1}`,type:'multi-select',domainKey:'d1',sectionKey:'standard',scored:true,presentation:{prompt:`Synthetic multi-select ${index+1}`,options:[{id:'a',text:'A'},{id:'b',text:'B'},{id:'c',text:'C'}]},privateScoring:{correctAnswers:['a','b']},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}}
+      : {id:`standard-${index+1}`,type:'reorder',domainKey:'d1',sectionKey:'standard',scored:true,presentation:{prompt:`Synthetic reorder ${index+1}`,items:[{id:'a',text:'A'},{id:'b',text:'B'},{id:'c',text:'C'}]},privateScoring:{correctOrder:['a','b','c']},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}}),
     {id:'workspace',type:'pbq-config-panel',domainKey:'d1',sectionKey:'pbq',scored:true,group:{groupKey:'pbq-a',role:'atomic-pbq',order:0},presentation:{responseAllowlist:{targetIds:['x'],answerIdsByTarget:{x:['a']}}},privateScoring:{strategy:'per-component-map',expectedMap:{x:'a'},requiredCommandIds:[]},privateReview:{explanation:'Synthetic',remediation:'Synthetic'}},
   ],
 };
@@ -339,6 +341,15 @@ for(const config of [
     const saved=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:purposeId,p_item_id:item.itemId,p_response:responseFor(item),p_expected_revision:0,p_request_id:crypto.randomUUID()});
     if(saved.error||saved.data?.revision!==1) fail(`PRACTICE_${config.purpose.toUpperCase()}_SAVE_FAILED`);
   }
+  if(config.purpose==='study_sandbox'){
+    const harmlessDuplicate=await admin.rpc('certsim_protected_start_practice',{p_actor_id:learner.id,p_request:{...request,clientRequestId:crypto.randomUUID()}});
+    if(harmlessDuplicate.error||harmlessDuplicate.data?.attempt?.attemptId!==purposeId)
+      fail('ISSUE166_HARMLESS_DUPLICATE_REPLACED_SAVED_SANDBOX');
+    const restoredResponses=(harmlessDuplicate.data?.items??[]).filter((item)=>item.response!==null&&item.response!==undefined).length;
+    if(restoredResponses!==scoredPurposeItems.length)
+      fail('ISSUE166_HARMLESS_DUPLICATE_LOST_SAVED_SANDBOX_RESPONSES');
+    sql(`select 1/((count(*)=1 and count(*) filter(where status='in_progress')=1)::integer) from exam_delivery.attempts where owner_id='${learner.id}'::uuid and package_profile_id=(select id from exam_delivery.package_profiles where profile_key='sectioned' and package_version_id=(select id from exam_delivery.package_versions where exam_key='sample400' and package_version='1.0.0')) and purpose='study_sandbox'; select 1/((count(*)=${scoredPurposeItems.length})::integer) from exam_delivery.attempt_responses where attempt_id='${purposeId}'::uuid;`);
+  }
   if(config.check){
     const checked=await admin.rpc('certsim_protected_check_practice_item',{p_actor_id:learner.id,p_attempt_id:purposeId,p_item_id:scoredPurposeItems[0].itemId,p_expected_revision:1,p_request_id:crypto.randomUUID()});
     if(checked.error||checked.data?.ok!==true||!checked.data?.releasedAt) fail('PRACTICE_SANDBOX_CHECK_FAILED');
@@ -365,17 +376,24 @@ if(!attemptId) fail('ATOMIC_GENERATION_ATTEMPT_MISSING');
 if(!Array.isArray(items)||items.length!==11) fail('ATOMIC_GENERATION_ITEM_COUNT');
 if(items.filter((i)=>i.questionType==='case-study-context').length!==1) fail('ATOMIC_GENERATION_CASE_CONTEXT_COUNT');
 if(items.filter((i)=>i.questionType==='pbq-config-panel').length!==1) fail('ATOMIC_GENERATION_PBQ_COUNT');
+if(items.filter((i)=>i.questionType==='multi-select').length===0) fail('ARRAY_RESPONSE_MULTI_SELECT_FIXTURE_MISSING');
+if(items.filter((i)=>i.questionType==='reorder').length===0) fail('ARRAY_RESPONSE_REORDER_FIXTURE_MISSING');
 const discoveredAssessment=await admin.rpc('certsim_protected_discover_current_attempt',{p_actor_id:learner.id,p_exam_key:'sample-400',p_package_version:'1.0.0',p_profile_key:'sectioned',p_purpose:'assigned_assessment',p_language:'not_applicable'});
 if(discoveredAssessment.error||discoveredAssessment.data?.attempt?.attemptId!==attemptId) fail('ASSESSMENT_CURRENT_DISCOVERY_FAILED');
 for(const item of items.filter((i)=>i.questionType!=='case-study-context')){
-  const response=item.questionType==='pbq-config-panel'
-    ? {selectedAnswers:{x:'a'}}
-    : item.questionType==='dropdown-code'
-      ? {answer:{first:'alpha',second:'beta'}}
-      : {answer:'a'};
-  const saved=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:attemptId,p_item_id:item.itemId,p_response:response,p_expected_revision:0,p_request_id:crypto.randomUUID()});
+  const response=responseFor(item);
+  const saveRequest={p_actor_id:learner.id,p_attempt_id:attemptId,p_item_id:item.itemId,p_response:response,p_expected_revision:0,p_request_id:crypto.randomUUID()};
+  const saved=await admin.rpc('certsim_protected_save_response',saveRequest);
   if(saved.error||saved.data?.revision!==1) fail('GENERIC_RESPONSE_SAVE_FAILED');
+  const replayed=await admin.rpc('certsim_protected_save_response',saveRequest);
+  if(replayed.error||replayed.data?.revision!==1) fail('GENERIC_RESPONSE_REPLAY_FAILED');
 }
+for(const questionType of ['multi-select','reorder']){
+  const item=items.find((entry)=>entry.questionType===questionType);
+  const rejected=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:attemptId,p_item_id:item.itemId,p_response:{answer:['a','unknown']},p_expected_revision:1,p_request_id:crypto.randomUUID()});
+  if(rejected.error||rejected.data?.ok!==false||rejected.data?.code!=='invalid_response') fail(`ARRAY_RESPONSE_${questionType.toUpperCase().replace('-','_')}_INVALID_NOT_CONTROLLED`);
+}
+sql(`select 1/((count(distinct q.question_type)=2 and bool_and(r.revision=1))::integer) from exam_delivery.attempt_responses r join exam_delivery.attempt_items i on i.id=r.attempt_item_id join exam_delivery.package_questions q on q.id=i.package_question_id where r.attempt_id='${attemptId}'::uuid and q.question_type in ('multi-select','reorder');`);
 const submissionId=crypto.randomUUID();
 const submitted=await admin.rpc('certsim_protected_submit_attempt',{p_actor_id:learner.id,p_attempt_id:attemptId,p_submission_id:submissionId});
 if(submitted.error||submitted.data?.result?.questionCount!==10||submitted.data?.result?.maxScore!==10||submitted.data?.result?.reviewStatus!=='withheld') fail('GENERIC_SUBMISSION_FAILED');
@@ -438,7 +456,7 @@ function sqlValue(statement){const result=spawnSync('psql',[database,'-v','ON_ER
 async function createUser(label){const email=`generic-${label}-${crypto.randomUUID()}@example.invalid`,password=`T!${crypto.randomUUID()}g8`;const result=await admin.auth.admin.createUser({email,password,email_confirm:true});if(result.error)fail('AUTH_FIXTURE_FAILED');return{id:result.data.user.id,email,password}}
 async function signedIn(user){const result=client(anon);const auth=await result.auth.signInWithPassword({email:user.email,password:user.password});if(auth.error)fail('SIGN_IN_FAILED');return result}
 function expectReason(result,reason){if(result.error||(result.data?.reasonCode!==reason&&result.data?.code!==reason))fail(`EXPECTED_${reason.toUpperCase()}`)}
-function responseFor(item){return item.questionType==='pbq-config-panel'?{selectedAnswers:{x:'a'}}:item.questionType==='dropdown-code'?{answer:{first:'alpha',second:'beta'}}:{answer:'a'}}
+function responseFor(item){return item.questionType==='pbq-config-panel'?{selectedAnswers:{x:'a'}}:item.questionType==='dropdown-code'?{answer:{first:'alpha',second:'beta'}}:item.questionType==='multi-select'?{answer:['a','b']}:item.questionType==='reorder'?{answer:['a','b','c']}:{answer:'a'}}
 function safeCode(value){return String(value??'UNKNOWN').replace(/[^A-Za-z0-9_]/g,'_').toUpperCase()}
 function safeDatabaseIdentifier(value){
   const message=String(value??'');

@@ -49,7 +49,7 @@ assert.match(page, /loadAllProtectedHistory/);
 assert.match(page, /results\.filter\(isAssessmentResult\)/);
 assert.match(page, /purpose: 'weak_area'/);
 assert.match(page, /getPracticeAvailability/);
-assert.match(page, /No eligible completed assessments/);
+assert.match(page, /getProtectedReasonMessage\('no_weak_areas'\)/);
 assert.match(page, /role="alert"/);
 assert.match(page, /Review Missed First/);
 assert.match(page, /Balanced Mix/);

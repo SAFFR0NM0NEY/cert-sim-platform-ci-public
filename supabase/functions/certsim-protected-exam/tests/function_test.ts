@@ -10,7 +10,7 @@ import { corsHeaders } from "../cors.ts";
 import { SafeError, translateRpcFailure } from "../errors.ts";
 import { handleProtectedExam } from "../handler.ts";
 import { matchRoute } from "../routes.ts";
-import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapPracticeAvailability, mapPracticeCheck, mapQuestionIssue, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffScopeOptions } from "../responses.ts";
+import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapAttemptLifecycleSummary, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapPracticeAvailability, mapPracticeCheck, mapQuestionIssue, mapRecoverableStudySandboxes, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffLearnerDetail, mapStaffScopeOptions, mapStudySandboxRecovery, mapWeakAreaOptions } from "../responses.ts";
 import {
   MAX_BODY_BYTES,
   readJsonBody,
@@ -68,6 +68,32 @@ Deno.test("practice availability exposes only server-confirmed objective aggrega
   assertEquals(mapped.objectiveCounts, { manage: { detections: 24 } });
   assert(!("questionIds" in mapped));
   assert(!("correctAnswers" in mapped));
+});
+
+Deno.test("weak-area discovery exposes only bounded server-authoritative evidence", () => {
+  const mapped = mapWeakAreaOptions({
+    ok: true,
+    examKey: "az204",
+    packageVersion: "1.1.0",
+    profileKey: "standard-profile",
+    domains: [{
+      domainKey: "develop-solutions",
+      evidenceCount: 2,
+      lowestPercentage: 54.5,
+      questionIds: ["blocked"],
+      correctAnswers: ["blocked"],
+    }],
+    protectedPayload: "blocked",
+  });
+  assertEquals(mapped, {
+    examKey: "az204",
+    packageVersion: "1.1.0",
+    profileKey: "standard-profile",
+    domains: [{ domainKey: "develop-solutions", evidenceCount: 2, lowestPercentage: 54.5 }],
+  });
+  assertThrows(() => mapWeakAreaOptions({ examKey: "az204", packageVersion: "1.1.0", profileKey: "p", domains: [{ domainKey: "x", evidenceCount: 0, lowestPercentage: 50 }] }), SafeError);
+  assertThrows(() => mapWeakAreaOptions({ examKey: "az204", packageVersion: "1.1.0", profileKey: "p", domains: [{ domainKey: "x", evidenceCount: 1, lowestPercentage: 70 }] }), SafeError);
+  assertThrows(() => mapWeakAreaOptions({ examKey: "az204", packageVersion: "1.1.0", profileKey: "p", domains: [{ domainKey: "x", evidenceCount: 1, lowestPercentage: 50 }, { domainKey: "x", evidenceCount: 1, lowestPercentage: 40 }] }), SafeError);
 });
 
 Deno.test("result mapper explicitly retains only the strict authority marker", () => {
@@ -219,6 +245,105 @@ Deno.test("staff filter options and bounded query DTOs stay minimal and fail clo
   assertThrows(() => mapStaffDashboardQuery({ role: "trainer", workflow: "results", selection: {}, assignmentPage: { items: [], nextCursor: 7, complete: true, returnedCount: 0, totalCount: 0 }, learnerIds: [], history: { items: [], totalCount: 0, completedCount: 0, returnedCount: 0, nextCursor: null } }), SafeError);
   assertThrows(() => mapStaffScopeOptions({ role: "trainer", organisations: [], campuses: [], groups: [], assignments: [], exams: [{ id: "", name: "bad" }] }), SafeError);
 });
+Deno.test("staff learner detail mapper keeps one exact membership and bounded safe summaries", () => {
+  const mapped = mapStaffLearnerDetail(staffLearnerDetailFixture());
+  const learner = mapped.learner as Record<string, unknown>;
+  const learnerPage = mapped.learnerPage as Record<string, unknown>;
+  const history = mapped.history as Record<string, unknown>;
+  assertEquals(learner.membershipId, ATTEMPT);
+  assertEquals(learner.protectedPayload, undefined);
+  assertEquals((learnerPage.items as Array<Record<string, unknown>>).length, 1);
+  assertEquals((history.items as Array<Record<string, unknown>>)[0].learnerId, ACTOR);
+  assertEquals((history.items as Array<Record<string, unknown>>)[0].analyticsEligible, true);
+  assertEquals((history.items as Array<Record<string, unknown>>)[0].correctAnswer, undefined);
+  assertNoProtectedPreReview(mapped);
+  assertThrows(() => mapStaffLearnerDetail({
+    ...staffLearnerDetailFixture(),
+    history: { ...staffLearnerDetailFixture().history, returnedCount: 26,
+      items: Array.from({ length: 26 }, () => staffLearnerDetailFixture().history.items[0]) },
+  }), SafeError);
+  assertThrows(() => mapStaffLearnerDetail({
+    ...staffLearnerDetailFixture(),
+    history: { ...staffLearnerDetailFixture().history,
+      items: [{ ...staffLearnerDetailFixture().history.items[0], learnerId: REQUEST }] },
+  }), SafeError);
+  assertThrows(() => mapStaffLearnerDetail({
+    ...staffLearnerDetailFixture(),
+    history: { ...staffLearnerDetailFixture().history,
+      items: [{ ...staffLearnerDetailFixture().history.items[0], analyticsEligible: false }] },
+  }), SafeError);
+});
+
+Deno.test("staff learner detail route derives actor from session and validates a strict bounded query", async () => {
+  const query = `membershipId=${ATTEMPT}&organisationId=${ACTOR}&campusId=${REQUEST}&groupId=${ITEM}&examKey=az204&pageSize=25`;
+  const d = deps(staffLearnerDetailFixture());
+  const response = await handleProtectedExam(request(`/staff/learner-detail?${query}`), d.value);
+  assertEquals(response.status, 200);
+  assertEquals(d.calls.length, 1);
+  assertEquals(d.calls[0].name, "certsim_protected_staff_learner_detail");
+  assertEquals(d.calls[0].args.p_actor_id, ACTOR);
+  assertEquals(d.calls[0].args.p_request, Object.fromEntries(new URLSearchParams(query)));
+  assertEquals(matchRoute(request(`/staff/learner-detail?membershipId=${ATTEMPT}`)).id, "staffLearnerDetail");
+
+  for (const invalid of [
+    "", "membershipId=not-a-uuid", `membershipId=${ATTEMPT}&pageSize=0`,
+    `membershipId=${ATTEMPT}&pageSize=26`, `membershipId=${ATTEMPT}&actorId=${ACTOR}`,
+    `membershipId=${ATTEMPT}&examKey=%20`, `membershipId=${ATTEMPT}&resultStatus=unknown`,
+  ]) {
+    const invalidDeps = deps();
+    const invalidResponse = await handleProtectedExam(request(`/staff/learner-detail?${invalid}`), invalidDeps.value);
+    assertEquals(invalidResponse.status, 400, invalid);
+    assertEquals(invalidDeps.calls.length, 0, invalid);
+  }
+});
+
+Deno.test("staff learner detail returns a controlled not-visible response", async () => {
+  const d = deps({ ok: false, code: "not_visible", protectedPayload: "blocked" });
+  const response = await handleProtectedExam(request(`/staff/learner-detail?membershipId=${ATTEMPT}`), d.value);
+  assertEquals(response.status, 404);
+  assertEquals((await response.json()).error.code, "not_visible");
+});
+
+function staffLearnerDetailFixture() {
+  const analytics = {
+    learnerId: ACTOR, examKey: "az204", activityCount: 1, assessmentCount: 1,
+    historicalCount: 0, assessedLearnerCount: 1, needsReviewCount: 0, passedCount: 1,
+    latestActivity: "2026-09-01T00:00:00Z", latestAttemptId: REQUEST,
+    latestPercentage: 80, bestPercentage: 80, lowestPercentage: 80,
+    averagePercentage: 80, passRate: 100, domains: [], protectedPayload: "blocked",
+  };
+  return {
+    role: "trainer",
+    locks: { organisation: true, campus: false },
+    selection: { organisationId: ACTOR, campusId: REQUEST, groupId: ITEM, assignmentId: null },
+    learner: {
+      membershipId: ATTEMPT, learnerId: ACTOR, displayName: "Learner", email: "learner@example.invalid",
+      status: "active", organisationId: ACTOR, organisationName: "Org", campusId: REQUEST,
+      campusName: "Campus", groupId: ITEM, groupName: "Group", protectedPayload: "blocked",
+    },
+    assignmentPage: {
+      items: [{ id: REQUEST, name: "Assignment", organisationId: ACTOR, campusId: REQUEST,
+        groupId: ITEM, studentUserId: null, examKey: "az204", profileId: "full", status: "active",
+        dueAt: null, availableFrom: null, createdAt: "2026-09-01T00:00:00Z", protectedPayload: "blocked" }],
+      returnedCount: 1, totalCount: 1, pageSize: 50, complete: true,
+    },
+    learnerPage: { ...EMPTY_LEARNER_PAGE, returnedCount: 1, totalCount: 1, filteredCount: 1,
+      pageSize: 50, items: [{ membershipId: ATTEMPT, learnerId: ACTOR, displayName: "Learner",
+        email: "learner@example.invalid", groupId: ITEM, groupName: "Group", campusId: REQUEST,
+        campusName: "Campus", status: "active", examKey: "az204", readinessStatus: "insufficient-data",
+        analytics, assignmentSummaries: [{ assignmentId: REQUEST, assignmentAttemptCount: 1 }] }] },
+    assignmentAnalytics: [{ assignmentId: REQUEST, examKey: "az204", groupId: ITEM, dueAt: null,
+      totalStudents: 1, assessmentCount: 1, assessedLearnerCount: 1, submittedCount: 1,
+      readyCount: 0, needsReviewCount: 1, completedButNotReadyCount: 1, notStartedCount: 0,
+      dueSoonCount: 0, overdueCount: 0, averagePercentage: 80 }],
+    history: { items: [{ attemptId: REQUEST, learnerId: ACTOR, assignmentId: null, examKey: "az204", packageVersion: "1.1.0",
+      profileKey: "full", purpose: "self_directed_exam", actorClassification: "student",
+      analyticsEligible: true,
+      completedAt: "2026-09-01T00:00:00Z", score: 8, percentage: 80, passed: true,
+      domainSummary: {}, serverAuthoritative: true, reviewStatus: "withheld", source: "protected",
+      correctAnswer: "blocked" }], returnedCount: 1, totalCount: 1, remainingCount: 0, nextCursor: null },
+  };
+}
 function request(path: string, init: RequestInit = {}) {
   return new Request(
     `http://localhost/functions/v1/certsim-protected-exam${path}`,
@@ -295,6 +420,167 @@ Deno.test("matches normalized exact routes and rejects wrong methods", () => {
     assertEquals((e as SafeError).code, "method_not_allowed");
   }
 });
+
+Deno.test("Issue 167 lifecycle routes are exact and method-bound", () => {
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/lifecycle-summary`)).id, "lifecycleSummary");
+  assertEquals(matchRoute(request("/practice/recoverable-sandboxes?examKey=az204&profileId=standard-profile")).id, "recoverableSandboxes");
+  assertEquals(matchRoute(request(`/practice/sessions/${ATTEMPT}/recover`, { method: "POST", body: JSON.stringify({ requestId: REQUEST }) })).id, "practiceRecover");
+  for (const [path, method] of [
+    [`/attempts/${ATTEMPT}/lifecycle-summary`, "POST"],
+    ["/practice/recoverable-sandboxes", "POST"],
+    [`/practice/sessions/${ATTEMPT}/recover`, "GET"],
+  ]) {
+    assertThrows(() => matchRoute(request(path, { method })), SafeError, "method_not_allowed");
+  }
+});
+
+Deno.test("Issue 167 lifecycle summary derives its actor and returns only the safe DTO", async () => {
+  const d = deps({
+    ok: true,
+    attemptId: ATTEMPT,
+    purpose: "study_sandbox",
+    status: "in_progress",
+    savedResponseCount: 2,
+    response: { answer: "blocked" },
+    itemId: ITEM,
+  });
+  const response = await handleProtectedExam(request(`/attempts/${ATTEMPT}/lifecycle-summary`), d.value);
+  assertEquals(response.status, 200);
+  assertEquals(d.calls, [{
+    name: "certsim_protected_get_attempt_lifecycle_summary",
+    args: { p_actor_id: ACTOR, p_attempt_id: ATTEMPT },
+  }]);
+  assertEquals(await response.json(), {
+    attemptId: ATTEMPT,
+    purpose: "study_sandbox",
+    status: "in_progress",
+    savedResponseCount: 2,
+  });
+  const rejected = deps();
+  const rejectedResponse = await handleProtectedExam(request(`/attempts/${ATTEMPT}/lifecycle-summary?actorId=${ACTOR}`), rejected.value);
+  assertEquals(rejectedResponse.status, 400);
+  assertEquals(rejected.calls.length, 0);
+});
+
+Deno.test("Issue 167 recoverable discovery is bounded, filtered, actor-derived, and content-free", async () => {
+  const d = deps({
+    ok: true,
+    candidates: [{
+      attemptId: ATTEMPT,
+      examKey: "az204",
+      packageVersion: "1.1.0",
+      profileKey: "standard-profile",
+      profileName: "Standard",
+      purpose: "study_sandbox",
+      languagePreference: "python",
+      startedAt: "2026-09-01T00:00:00Z",
+      lastActivityAt: "2026-09-02T00:00:00Z",
+      itemCount: 50,
+      savedResponseCount: 2,
+      recoverable: true,
+      responsePayload: { answer: "blocked" },
+      questionId: ITEM,
+    }],
+  });
+  const response = await handleProtectedExam(request("/practice/recoverable-sandboxes?examKey=az204&profileId=standard-profile"), d.value);
+  assertEquals(response.status, 200);
+  assertEquals(d.calls, [{
+    name: "certsim_protected_list_recoverable_study_sandboxes",
+    args: { p_actor_id: ACTOR, p_exam_key: "az204", p_profile_key: "standard-profile", p_limit: 8 },
+  }]);
+  const body = await response.json();
+  assertEquals(body.candidates.length, 1);
+  assertEquals(body.candidates[0], {
+    attemptId: ATTEMPT,
+    examKey: "az204",
+    packageVersion: "1.1.0",
+    profileKey: "standard-profile",
+    profileName: "Standard",
+    purpose: "study_sandbox",
+    languagePreference: "python",
+    startedAt: "2026-09-01T00:00:00Z",
+    lastActivityAt: "2026-09-02T00:00:00Z",
+    itemCount: 50,
+    savedResponseCount: 2,
+    recoverable: true,
+  });
+  for (const query of [
+    "examKey=az204",
+    "examKey=az204&profileId=bad%20profile",
+    `examKey=az204&profileId=standard-profile&actorId=${ACTOR}`,
+    "examKey=az204&profileId=standard-profile&limit=100",
+  ]) {
+    const invalid = deps();
+    const rejected = await handleProtectedExam(request(`/practice/recoverable-sandboxes?${query}`), invalid.value);
+    assertEquals(rejected.status, 400, query);
+    assertEquals(invalid.calls.length, 0, query);
+  }
+});
+
+Deno.test("Issue 167 recovery accepts only requestId and returns no attempt content", async () => {
+  const d = deps({
+    ok: true,
+    attemptId: ATTEMPT,
+    status: "in_progress",
+    recoveredAt: "2026-09-02T00:00:00Z",
+    savedResponseCount: 2,
+    items: [{ itemId: ITEM, response: "blocked" }],
+  });
+  const response = await handleProtectedExam(request(`/practice/sessions/${ATTEMPT}/recover`, {
+    method: "POST",
+    body: JSON.stringify({ requestId: REQUEST }),
+  }), d.value);
+  assertEquals(response.status, 200);
+  assertEquals(d.calls, [{
+    name: "certsim_protected_recover_study_sandbox",
+    args: { p_actor_id: ACTOR, p_attempt_id: ATTEMPT, p_request_id: REQUEST },
+  }]);
+  assertEquals(await response.json(), {
+    attemptId: ATTEMPT,
+    status: "in_progress",
+    recoveredAt: "2026-09-02T00:00:00Z",
+    savedResponseCount: 2,
+  });
+  for (const [attemptId, body] of [
+    ["not-a-uuid", { requestId: REQUEST }],
+    [ATTEMPT, { requestId: "not-a-uuid" }],
+    [ATTEMPT, { requestId: REQUEST, actorId: ACTOR }],
+    [ATTEMPT, { requestId: REQUEST, purpose: "study_sandbox" }],
+  ] as const) {
+    const invalid = deps();
+    const rejected = await handleProtectedExam(request(`/practice/sessions/${attemptId}/recover`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }), invalid.value);
+    assertEquals(rejected.status, 400);
+    assertEquals(invalid.calls.length, 0);
+  }
+});
+
+Deno.test("Issue 167 lifecycle DTOs reject malformed enums, counts, dates, UUIDs, and list bounds", () => {
+  const summary = { attemptId: ATTEMPT, purpose: "study_sandbox", status: "in_progress", savedResponseCount: 1 };
+  assertEquals(mapAttemptLifecycleSummary({ ...summary, answer: "blocked" }), summary);
+  assertThrows(() => mapAttemptLifecycleSummary({ ...summary, purpose: "unknown" }), SafeError);
+  assertThrows(() => mapAttemptLifecycleSummary({ ...summary, savedResponseCount: -1 }), SafeError);
+  const candidate = { attemptId: ATTEMPT, examKey: "az204", packageVersion: "1.1.0", profileKey: "standard-profile", profileName: "Standard", purpose: "study_sandbox", languagePreference: "csharp", startedAt: "2026-09-01T00:00:00Z", lastActivityAt: "2026-09-02T00:00:00Z", itemCount: 10, savedResponseCount: 1, recoverable: true };
+  assertThrows(() => mapRecoverableStudySandboxes({ candidates: Array.from({ length: 9 }, () => candidate) }), SafeError);
+  assertThrows(() => mapRecoverableStudySandboxes({ candidates: [{ ...candidate, savedResponseCount: 11 }] }), SafeError);
+  assertThrows(() => mapRecoverableStudySandboxes({ candidates: [{ ...candidate, startedAt: "not-a-date" }] }), SafeError);
+  assertThrows(() => mapRecoverableStudySandboxes({ candidates: [{ ...candidate, languagePreference: "ruby" }] }), SafeError);
+  const recovery = { attemptId: ATTEMPT, status: "in_progress", recoveredAt: "2026-09-02T00:00:00Z", savedResponseCount: 1 };
+  assertEquals(mapStudySandboxRecovery({ ...recovery, responses: ["blocked"] }), recovery);
+  assertThrows(() => mapStudySandboxRecovery({ ...recovery, attemptId: "not-a-uuid" }), SafeError);
+  assertThrows(() => mapStudySandboxRecovery({ ...recovery, status: "abandoned" }), SafeError);
+});
+
+Deno.test("Issue 167 lifecycle errors translate to stable non-disclosing conflicts", () => {
+  for (const code of ["sandbox_discarded", "sandbox_not_recoverable", "active_sandbox_exists"] as const) {
+    const error = translateRpcFailure({ ok: false, code, detail: "blocked internal detail" });
+    assertEquals(error.code, code);
+    assertEquals(error.status, 409);
+    assertEquals(error.message, code);
+  }
+});
 Deno.test("current attempt derives identity and accepts no actor or attempt id", async () => {
   const d = deps({
     ok: true,
@@ -321,6 +607,54 @@ Deno.test("current attempt derives identity and accepts no actor or attempt id",
     d.value,
   );
   assertEquals(rejected.status, 400);
+});
+Deno.test("weak-area discovery is a fixed identity-derived read route", async () => {
+  const d = deps({
+    ok: true,
+    examKey: "az204",
+    packageVersion: "1.1.0",
+    profileKey: "standard-profile",
+    domains: [{ domainKey: "develop-solutions", evidenceCount: 1, lowestPercentage: 55 }],
+  });
+  const response = await handleProtectedExam(
+    request("/practice/weak-areas?examKey=az204&profileId=standard-profile"),
+    d.value,
+  );
+  assertEquals(response.status, 200);
+  assertEquals(d.calls, [{
+    name: "certsim_protected_weak_area_options",
+    args: {
+      p_actor_id: ACTOR,
+      p_exam_key: "az204",
+      p_profile_key: "standard-profile",
+    },
+  }]);
+  assertEquals((await response.json()).domains, [{ domainKey: "develop-solutions", evidenceCount: 1, lowestPercentage: 55 }]);
+
+  for (const query of [
+    "profileId=standard-profile",
+    "examKey=az204",
+    "examKey=%20&profileId=standard-profile",
+    "examKey=az204&profileId=%20",
+    `examKey=az204&profileId=standard-profile&actorId=${ACTOR}`,
+    "examKey=az204&profileId=standard-profile&unknown=true",
+  ]) {
+    const invalid = deps();
+    const rejected = await handleProtectedExam(request(`/practice/weak-areas?${query}`), invalid.value);
+    assertEquals(rejected.status, 400, query);
+    assertEquals(invalid.calls.length, 0, query);
+  }
+});
+Deno.test("weak-area discovery treats empty evidence as success and preserves stable no_weak_areas", async () => {
+  const empty = deps({ ok: true, examKey: "az204", packageVersion: "1.1.0", profileKey: "standard-profile", domains: [] });
+  const emptyResponse = await handleProtectedExam(request("/practice/weak-areas?examKey=az204&profileId=standard-profile"), empty.value);
+  assertEquals(emptyResponse.status, 200);
+  assertEquals((await emptyResponse.json()).domains, []);
+
+  const unavailable = deps({ ok: false, code: "no_weak_areas", internal: "blocked" });
+  const unavailableResponse = await handleProtectedExam(request("/practice/availability?examKey=az204&profileId=standard-profile&purpose=weak_area&domain=develop-solutions&count=20&includePbqs=true&mixStrategy=balanced&language=csharp"), unavailable.value);
+  assertEquals(unavailableResponse.status, 409);
+  assertEquals((await unavailableResponse.json()).error.code, "no_weak_areas");
 });
 Deno.test("current binding reconciliation is identity-derived, read-only, and safely mapped", async () => {
   const d = deps({ ok: true, candidates: [{ examKey: "az204", packageVersion: "1.1.0", profileKey: "standard-profile", profileName: "Standard", purpose: "self_directed_exam", languagePreference: "csharp", startedAt: "2026-09-02T00:00:00Z", expiresAt: "2026-09-02T02:00:00Z", timed: true, attemptId: ATTEMPT, selectedCount: 50, fixedProfileSize: true, profileComposition: { questionCount: 50 }, replacementPermitted: true }] });
@@ -702,6 +1036,204 @@ Deno.test("pre-review mapping fails closed on recursively protected content", ()
   });
   assertEquals((mapped.review as { items: unknown[] }).items.length, 1);
 });
+Deno.test("released PBQ review keeps responses and narrows correct answers to display semantics", () => {
+  const mapped = mapReview({
+    review: {
+      items: [{
+        itemId: ITEM,
+        questionType: "pbq-config-panel",
+        presentation: {
+          tasks: {
+            configurationTargets: [{
+              id: "target-a",
+              label: "Server A",
+              options: [{ id: "option-a", label: "Production" }],
+            }],
+          },
+        },
+        response: { selectedAnswers: { "target-a": "option-a" } },
+        correctAnswer: {
+          strategy: "per-component-map",
+          expectedMap: { "target-a": "option-a" },
+          requiredCommandIds: [],
+        },
+      }],
+    },
+  });
+  const item = (mapped.review as { items: Array<Record<string, unknown>> }).items[0];
+  assertEquals(item.response, { selectedAnswers: { "target-a": "option-a" } });
+  assertEquals(item.correctAnswer, {
+    expectedMap: { "target-a": "option-a" },
+    requiredCommandIds: [],
+  });
+  assertEquals("strategy" in (item.correctAnswer as Record<string, unknown>), false);
+});
+Deno.test("released terminal PBQ strips weighted rubric fields at the Edge boundary", () => {
+  const mapped = mapReview({
+    review: {
+      items: [{
+        itemId: ITEM,
+        questionType: "pbq-terminal",
+        presentation: { tasks: { answerOptions: [{ id: "allow", label: "Allow HTTPS" }] }, allowedCommands: ["inspect service"] },
+        response: { selectedAnswer: "allow", executedCommands: ["inspect service"] },
+        correctAnswer: {
+          strategy: "weighted-rule-evaluation",
+          expectedAnswer: "allow",
+          finalAnswerPoints: 1,
+          criteria: [{ commandIds: ["inspect service"], points: 1 }],
+          requiredCommandIds: ["inspect service"],
+        },
+      }],
+    },
+  });
+  const item = (mapped.review as { items: Array<Record<string, unknown>> }).items[0];
+  assertEquals(item.correctAnswer, {
+    expectedAnswer: "allow",
+    requiredCommandIds: ["inspect service"],
+  });
+  const serialized = JSON.stringify(item.correctAnswer);
+  assertEquals(serialized.includes("strategy"), false);
+  assertEquals(serialized.includes("criteria"), false);
+  assertEquals(serialized.includes("points"), false);
+});
+Deno.test("released exact-whole-state PBQ becomes content-free unavailable markers", () => {
+  const mapped = mapReview({
+    review: {
+      items: [{
+        itemId: ITEM,
+        questionId: "released-whole-state-question",
+        questionType: "pbq-config-panel",
+        domain: "Secure Azure solutions",
+        section: "State validation",
+        presentation: { stem: "Validate the released configuration state." },
+        response: { selectedAnswer: { ready: true } },
+        status: "correct",
+        earnedPoints: 1,
+        maxPoints: 1,
+        correctAnswer: {
+          strategy: "exact-whole-state",
+          expectedAnswer: { ready: true },
+        },
+        explanation: "The submitted state satisfied the task.",
+        remediation: "Review the state-validation workflow.",
+      }],
+    },
+  });
+  const item = (mapped.review as { items: Array<Record<string, unknown>> }).items[0];
+  assertEquals(item.response, { displayUnavailable: true });
+  assertEquals(item.correctAnswer, { displayUnavailable: true });
+  assertEquals(item.questionId, "released-whole-state-question");
+  assertEquals(item.questionType, "pbq-config-panel");
+  assertEquals(item.domain, "Secure Azure solutions");
+  assertEquals(item.section, "State validation");
+  assertEquals(item.status, "correct");
+  assertEquals(item.earnedPoints, 1);
+  assertEquals(item.maxPoints, 1);
+  assertEquals(item.explanation, "The submitted state satisfied the task.");
+  assertEquals(item.remediation, "Review the state-validation workflow.");
+  assertEquals(item.presentation, { stem: "Validate the released configuration state." });
+  const serialized = JSON.stringify(item);
+  assertEquals(serialized.includes("exact-whole-state"), false);
+  assertEquals(serialized.includes("ready"), false);
+});
+Deno.test("released exact-whole-state PBQ fails closed on malformed private payloads", () => {
+  const fixture = (correctAnswer: unknown, response: unknown = { selectedAnswer: { ready: true } }) => ({
+    review: {
+      items: [{
+        itemId: ITEM,
+        questionType: "pbq-config-panel",
+        presentation: { stem: "Validate state." },
+        response,
+        correctAnswer,
+      }],
+    },
+  });
+  assertThrows(() => mapReview(fixture({
+    strategy: "exact-whole-state",
+    expectedAnswer: { ready: true },
+    privateRubric: { points: 1 },
+  })), SafeError);
+  assertThrows(() => mapReview(fixture({
+    strategy: "exact-whole-state",
+    expectedAnswer: ["not-an-object"],
+  })), SafeError);
+  assertThrows(() => mapReview(fixture({
+    strategy: "exact-whole-state",
+    expectedAnswer: { ready: true },
+    expectedMap: { private: "payload" },
+  })), SafeError);
+  assertThrows(() => mapReview(fixture({
+    strategy: "future-private-strategy",
+    expectedAnswer: { ready: true },
+  })), SafeError);
+  assertThrows(() => mapReview(fixture({
+    strategy: "exact-whole-state",
+    expectedAnswer: { ready: true },
+  }, { selectedAnswer: ["not-an-object"] })), SafeError);
+});
+Deno.test("released PBQ review preserves positive-map and ordered strategy DTOs", () => {
+  const positive = mapReview({
+    review: { items: [{
+      itemId: ITEM,
+      questionType: "pbq-config-panel",
+      presentation: { tasks: { configurationTargets: [] } },
+      response: { selectedAnswers: { target: "selected" } },
+      correctAnswer: {
+        strategy: "per-component-positive",
+        expectedMap: { target: "selected" },
+      },
+    }] },
+  });
+  const positiveItem = (positive.review as { items: Array<Record<string, unknown>> }).items[0];
+  assertEquals(positiveItem.response, { selectedAnswers: { target: "selected" } });
+  assertEquals(positiveItem.correctAnswer, { expectedMap: { target: "selected" }, requiredCommandIds: [] });
+
+  const ordered = mapReview({
+    review: { items: [{
+      itemId: ITEM,
+      questionType: "pbq-ordering",
+      presentation: { tasks: { items: [] } },
+      response: { selectedOrder: ["first", "second"] },
+      correctAnswer: {
+        strategy: "exact-ordered-sequence",
+        expectedOrder: ["first", "second"],
+      },
+    }] },
+  });
+  const orderedItem = (ordered.review as { items: Array<Record<string, unknown>> }).items[0];
+  assertEquals(orderedItem.response, { selectedOrder: ["first", "second"] });
+  assertEquals(orderedItem.correctAnswer, { expectedOrder: ["first", "second"], requiredCommandIds: [] });
+});
+Deno.test("released PBQ review fails closed on malformed scoring snapshots", () => {
+  const fixture = (correctAnswer: unknown) => ({
+    review: {
+      items: [{
+        itemId: ITEM,
+        questionType: "pbq-config-panel",
+        presentation: { tasks: { configurationTargets: [] } },
+        response: {},
+        correctAnswer,
+      }],
+    },
+  });
+  assertThrows(() => mapReview(fixture({ strategy: "future-strategy", expectedMap: { a: "b" } })), SafeError);
+  assertThrows(() => mapReview(fixture({ strategy: "per-component-map", expectedMap: { a: 7 } })), SafeError);
+  assertThrows(() => mapReview(fixture({ strategy: "per-component-map", expectedMap: { a: "b" }, privateRubric: "blocked" })), SafeError);
+  const malformedResponse = fixture({ strategy: "per-component-map", expectedMap: { a: "b" } });
+  (malformedResponse.review.items[0] as Record<string, unknown>).response = { selectedAnswers: { a: "b" }, hiddenTranscript: "blocked" };
+  assertThrows(() => mapReview(malformedResponse), SafeError);
+  const unsupportedType = fixture({ strategy: "per-component-map", expectedMap: { a: "b" } });
+  (unsupportedType.review.items[0] as Record<string, unknown>).questionType = "pbq-future-private";
+  assertThrows(() => mapReview(unsupportedType), SafeError);
+});
+Deno.test("withheld PBQ review remains unavailable before response mapping", async () => {
+  const d = deps({ ok: false, code: "review_unavailable", protectedPayload: "blocked" });
+  const response = await handleProtectedExam(request(`/attempts/${ATTEMPT}/review`), d.value);
+  assertEquals(response.status, 403);
+  const payload = await response.json();
+  assertEquals(payload.error.code, "review_unavailable");
+  assertEquals(JSON.stringify(payload).includes("protectedPayload"), false);
+});
 Deno.test("known errors are stable and unknown errors fail closed", () => {
   assertEquals(
     translateRpcFailure({ code: "pilot_unavailable" }).code,
@@ -715,6 +1247,10 @@ Deno.test("known errors are stable and unknown errors fail closed", () => {
     translateRpcFailure({ code: "practice_unavailable" }).status,
     403,
   );
+  assertEquals(translateRpcFailure({ code: "no_weak_areas" }).code, "no_weak_areas");
+  assertEquals(translateRpcFailure({ code: "no_weak_areas" }).status, 409);
+  assertEquals(translateRpcFailure({ code: "weak_domain_unavailable" }).status, 409);
+  assertEquals(translateRpcFailure({ code: "invalid_request" }).status, 400);
   assertEquals(translateRpcFailure({ code: "scope_required" }).code, "scope_required");
   assertEquals(translateRpcFailure({ code: "scope_required" }).status, 400);
   assertEquals(
@@ -843,6 +1379,7 @@ Deno.test("sandbox feedback survives its dedicated handler boundary", async () =
 });
 
 Deno.test("practice and history routes are fixed and purpose-specific", () => {
+  assertEquals(matchRoute(request("/practice/weak-areas?examKey=az204&profileId=standard-profile")).id, "weakAreaOptions");
   assertEquals(matchRoute(request("/practice/availability?examKey=az204&profileId=p&purpose=study_sandbox&count=10&includePbqs=false&language=csharp")).id, "practiceAvailability");
   assertEquals(matchRoute(request("/practice/sessions", { method: "POST", body: "{}" })).id, "practiceStart");
   assertEquals(matchRoute(request(`/practice/sessions/${ATTEMPT}/items/${ITEM}/check`, { method: "POST", body: "{}" })).id, "practiceCheck");

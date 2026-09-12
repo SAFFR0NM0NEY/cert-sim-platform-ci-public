@@ -1,12 +1,6 @@
-import { useMemo } from 'react';
-
-import useAssignmentProgress from '../../hooks/useAssignmentProgress.js';
-import useTrainerDashboard from '../../hooks/useTrainerDashboard.js';
+import useTrainerStudentDetail from '../../hooks/useTrainerStudentDetail.js';
 import { hasScopedPerformanceDashboardAccess } from '../../lib/roleUtils.js';
-import {
-  getTrainerAnalyticsSnapshot,
-  READINESS_DISCLAIMER,
-} from '../../lib/trainerAnalyticsService.js';
+import { READINESS_DISCLAIMER } from '../../lib/trainerAnalyticsService.js';
 import {
   formatSavedRawPercentage,
   formatSavedResultDate,
@@ -23,82 +17,33 @@ export default function TrainerStudentDetailPage({
   onBackHome,
   onBackToDashboard,
   onBrowseExams,
+  scope = {},
   studentId = '',
 } = {}) {
-  const dashboard = useTrainerDashboard();
-  const progressState = useAssignmentProgress({
-    includeStudentProgress: false,
-    includeTrainerProgress: true,
-  });
   const {
+    assignmentReadiness,
     clearSelectedResult,
-    dashboardLoading,
     detailLoading,
     error,
-    groups,
+    examProgress,
+    history,
     isAuthenticated,
     isPlatformOwner,
     isSupabaseConfigured,
     loadResultDetail,
+    loading,
     memberships,
     results,
     selectedResult,
-    students,
-  } = dashboard;
-  const {
-    error: progressError,
-    progressLoading,
-    refreshProgress,
-    trainerAssignments,
-  } = progressState;
+    student,
+    assignments: studentAssignments,
+    refresh,
+  } = useTrainerStudentDetail({ membershipId: studentId, scope });
   const hasTrainerAccess = hasScopedPerformanceDashboardAccess({
     isPlatformOwner,
     memberships,
   });
-  const student = useMemo(
-    () =>
-      students.find(
-        (candidate) =>
-          candidate.userId === studentId || candidate.membershipId === studentId,
-      ) ?? null,
-    [studentId, students],
-  );
-  const studentResults = useMemo(
-    () =>
-      student
-        ? results
-            .filter((result) => result.userId === student.userId)
-            .sort((left, right) => getTime(right.submittedAt) - getTime(left.submittedAt))
-        : [],
-    [results, student],
-  );
-  const studentAssignments = useMemo(
-    () =>
-      student
-        ? trainerAssignments.filter((assignment) =>
-            assignmentTargetsStudent(assignment, student),
-          )
-        : [],
-    [student, trainerAssignments],
-  );
-  const studentAssessmentResults = useMemo(
-    () => studentResults.filter((result) => result.analyticsEligible !== false),
-    [studentResults],
-  );
-  const studentAnalytics = useMemo(
-    () =>
-      student
-        ? getTrainerAnalyticsSnapshot({
-            assignments: studentAssignments,
-            groups,
-            results: studentAssessmentResults,
-            students: [student],
-          })
-        : null,
-    [groups, student, studentAssignments, studentAssessmentResults],
-  );
-  const examProgress = studentAnalytics?.studentReadiness ?? [];
-  const assignmentReadiness = studentAnalytics?.assignmentReadiness ?? [];
+  const studentResults = results;
 
   if (!isSupabaseConfigured) {
     return (
@@ -130,7 +75,7 @@ export default function TrainerStudentDetailPage({
     );
   }
 
-  if ((dashboard.loading || dashboardLoading) && !hasTrainerAccess) {
+  if (loading && !hasTrainerAccess) {
     return (
       <TrainerStudentShell
         onBackHome={onBackHome}
@@ -167,16 +112,15 @@ export default function TrainerStudentDetailPage({
       onBrowseExams={onBrowseExams}
     >
       {error ? <p className="auth-panel-error">{error}</p> : null}
-      {progressError ? <p className="auth-panel-error">{progressError}</p> : null}
 
-      {!student && dashboardLoading ? (
+      {!student && loading ? (
         <StatePanel
           title="Loading student report..."
           note="CertSim is reading the trainer-scoped student list."
         />
       ) : null}
 
-      {!student && !dashboardLoading ? (
+      {!student && !loading ? (
         <StatePanel
           title="Student is not visible"
           note="This student was not found in your trainer scope, or the route no longer points to a visible membership."
@@ -204,11 +148,11 @@ export default function TrainerStudentDetailPage({
             <div className="button-row wrap no-print">
               <button
                 className="secondary-button compact-button"
-                disabled={dashboardLoading || progressLoading}
+                disabled={loading}
                 type="button"
                 onClick={handleRefresh}
               >
-                {dashboardLoading || progressLoading ? 'Refreshing...' : 'Refresh report'}
+                {loading ? 'Refreshing...' : 'Refresh report'}
               </button>
             </div>
           </section>
@@ -216,7 +160,7 @@ export default function TrainerStudentDetailPage({
           <p className="analytics-disclaimer">{READINESS_DISCLAIMER}</p>
 
           <section className="management-summary-grid" aria-label="Student report summary">
-            <SummaryTile label="Saved attempts" value={studentResults.length} />
+            <SummaryTile label="Saved attempts" value={history?.totalCount ?? studentResults.length} />
             <SummaryTile label="Assigned exams" value={studentAssignments.length} />
             <SummaryTile
               label="Exam rows"
@@ -254,7 +198,10 @@ export default function TrainerStudentDetailPage({
 
             <article className="analytics-card">
               <h4>Recent Results</h4>
-              <p>Open a result to inspect score, domains, weak areas, and saved summaries.</p>
+              <p>
+                Showing {studentResults.length} of {history?.totalCount ?? studentResults.length} recent results.
+                Open a result to inspect score, domains, weak areas, and saved summaries.
+              </p>
               <TrainerResultList
                 detailLoading={detailLoading}
                 results={studentResults}
@@ -275,7 +222,7 @@ export default function TrainerStudentDetailPage({
   );
 
   async function handleRefresh() {
-    await Promise.all([dashboard.refresh(), refreshProgress()]);
+    await refresh();
   }
 }
 
@@ -599,24 +546,6 @@ function StatePanel({ note, title }) {
   );
 }
 
-function assignmentTargetsStudent(assignment = {}, student = {}) {
-  if (!student.userId) {
-    return false;
-  }
-
-  if (assignment.studentUserId) {
-    return assignment.studentUserId === student.userId;
-  }
-
-  if (assignment.groupId && assignment.groupId === student.groupId) {
-    return true;
-  }
-
-  return (assignment.targetStudents ?? []).some(
-    (targetStudent) => targetStudent.userId === student.userId,
-  );
-}
-
 function formatDomainAverage(domain = {}) {
   const label =
     domain.domainLabel ||
@@ -692,14 +621,4 @@ function getInitials(name = '') {
     .join('');
 
   return initials || 'CS';
-}
-
-function getTime(value) {
-  if (!value) {
-    return 0;
-  }
-
-  const time = new Date(value).getTime();
-
-  return Number.isNaN(time) ? 0 : time;
 }

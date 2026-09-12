@@ -81,8 +81,15 @@ import {
 import {
   getProtectedExamKey,
   getProtectedProfileKey,
+  PROTECTED_LANGUAGE_PREFERENCES,
 } from './lib/protectedExamContract.js';
+import { buildWeakAreaPracticeRequest } from './lib/protectedPracticeRequest.js';
 import { requestProtectedNavigation } from './lib/protectedNavigationGuard.js';
+import {
+  buildTrainerDashboardPath,
+  buildTrainerStudentPath,
+  readTrainerStudentScope,
+} from './lib/trainerStudentRoute.js';
 
 const showDraftExamAccess =
   import.meta.env.DEV || import.meta.env.VITE_ENABLE_DRAFT_EXAMS === 'true';
@@ -207,6 +214,9 @@ export default function App() {
   const [trainerStudentId, setTrainerStudentId] = useState(
     initialRouteTarget.trainerStudentId ?? '',
   );
+  const [trainerStudentScope, setTrainerStudentScope] = useState(
+    initialRouteTarget.trainerStudentScope ?? {},
+  );
   const [trainerAssignmentId, setTrainerAssignmentId] = useState(
     initialRouteTarget.trainerAssignmentId ?? '',
   );
@@ -257,6 +267,10 @@ export default function App() {
     itDirectionClient?.displayName ?? '',
     savedResultAttemptId,
     trainerStudentId,
+    trainerStudentScope.organisationId ?? '',
+    trainerStudentScope.campusId ?? '',
+    trainerStudentScope.groupId ?? '',
+    trainerStudentScope.assignmentId ?? '',
     trainerAssignmentId,
     developerReportId,
     adminOrganisationId,
@@ -306,6 +320,7 @@ export default function App() {
       selectedProfile,
       savedResultAttemptId,
       trainerStudentId,
+      trainerStudentScope,
       trainerAssignmentId,
       trainerResultId,
       developerReportId,
@@ -324,6 +339,7 @@ export default function App() {
       selectedProfileId: selectedProfile?.id ?? null,
       savedResultAttemptId: savedResultAttemptId || null,
       trainerStudentId: trainerStudentId || null,
+      trainerStudentScope,
       trainerAssignmentId: trainerAssignmentId || null,
       trainerResultId: trainerResultId || null,
       developerReportId: developerReportId || null,
@@ -362,6 +378,7 @@ export default function App() {
     selectedProfile,
     savedResultAttemptId,
     trainerStudentId,
+    trainerStudentScope,
     trainerAssignmentId,
     trainerResultId,
     developerReportId,
@@ -393,6 +410,7 @@ export default function App() {
             selectedProfile,
             savedResultAttemptId,
             trainerStudentId,
+            trainerStudentScope,
             trainerAssignmentId,
             trainerResultId,
             developerReportId,
@@ -1031,6 +1049,7 @@ export default function App() {
     if (target.screen === 'trainer-student-detail') {
       setScreen('trainer-student-detail');
       setTrainerStudentId(target.trainerStudentId ?? '');
+      setTrainerStudentScope(target.trainerStudentScope ?? {});
       setActiveExam(null);
       setStudent(null);
       setResult(null);
@@ -1574,12 +1593,14 @@ export default function App() {
     setPbqPreviewLabs([]);
     setSavedResultAttemptId('');
     setTrainerStudentId('');
+    setTrainerStudentScope({});
     setTrainerAssignmentId('');
   }
 
-  function handleOpenTrainerDashboardSection(section = 'overview', resultId = '') {
+  function handleOpenTrainerDashboardSection(section = 'overview', resultId = '', scope = null) {
     const normalized = ['analytics', 'assignments', 'students', 'results', 'detail'].includes(section) ? section : 'overview';
     setTrainerResultId(resultId);
+    if (scope) setTrainerStudentScope({ ...scope, returnSection: normalized === 'detail' ? 'results' : normalized });
     setScreen(normalized === 'overview' ? 'trainer-dashboard' : `trainer-dashboard-${normalized}`);
   }
 
@@ -1650,14 +1671,15 @@ export default function App() {
     setAdminGroupId('');
   }
 
-  function handleOpenTrainerStudentReport(studentId) {
-    if (!studentId) {
+  function handleOpenTrainerStudentReport(membershipId, scope = {}) {
+    if (!membershipId) {
       handleOpenTrainerDashboard();
       return;
     }
 
     setScreen('trainer-student-detail');
-    setTrainerStudentId(studentId);
+    setTrainerStudentId(membershipId);
+    setTrainerStudentScope(scope);
     setActiveExam(null);
     setStudent(null);
     setResult(null);
@@ -1669,6 +1691,14 @@ export default function App() {
     setPbqPreviewLabs([]);
     setSavedResultAttemptId('');
     setTrainerAssignmentId('');
+  }
+
+  function handleBackFromTrainerStudentDetail() {
+    const section = ['analytics', 'assignments', 'students', 'results'].includes(trainerStudentScope.returnSection)
+      ? trainerStudentScope.returnSection
+      : 'overview';
+    setTrainerResultId('');
+    setScreen(section === 'overview' ? 'trainer-dashboard' : `trainer-dashboard-${section}`);
   }
 
   function handleOpenTrainerAssignment(assignmentId) {
@@ -1861,20 +1891,29 @@ export default function App() {
   }
 
   function handleStartWeakAreaPractice(plan) {
-    const examConfig = getExamConfigById(plan?.examKey);
+    let request;
+    try {
+      request = buildWeakAreaPracticeRequest({
+        examKey: plan?.examKey,
+        profileId: plan?.profileId,
+        domain: plan?.domain,
+        count: plan?.count ?? plan?.questionCount,
+        includePbqs: plan?.includePbqs,
+        mixStrategy: plan?.mixStrategy,
+        language: plan?.language,
+      });
+    } catch {
+      handleOpenSavedResults();
+      return;
+    }
+    const examConfig = getExamConfigById(request.examKey);
 
     if (!examConfig || !canUseSignedInStudentIdentity(currentIdentity)) {
       handleOpenSavedResults();
       return;
     }
     {
-      openProtectedPractice(examConfig, 'weak_area', {
-        count: plan?.questionCount,
-        includePbqs: plan?.includePbqs,
-        mixStrategy: plan?.mixStrategy,
-        domain: plan?.domain,
-        profileId: plan?.profileId,
-      });
+      openProtectedPractice(examConfig, 'weak_area', request);
       return;
     }
 
@@ -2054,9 +2093,11 @@ export default function App() {
       ? selectedProfile
       : examConfig.fullMockProfile ?? examConfig.strictBetaProfiles?.[0] ?? examConfig.profiles?.fullMock);
     if (!profile) { showLegacyPracticeUnavailable(examConfig); return; }
-    const language = examConfig.id === 'az204'
-      ? ({ csharp: 'csharp', python: 'python', mixed: 'mixed' }[getCodingLanguagePreferenceForExam(examConfig)] ?? 'mixed')
+    const requestedLanguage = overrides.language ?? getCodingLanguagePreferenceForExam(examConfig);
+    const language = examConfig.id === 'az204' && PROTECTED_LANGUAGE_PREFERENCES.includes(requestedLanguage)
+      ? requestedLanguage
       : null;
+    if (examConfig.id === 'az204' && !language) { showLegacyPracticeUnavailable(examConfig); return; }
     setSelectedExamConfig(examConfig); setSelectedProfile(profile); setLastSelectedExamConfig(examConfig);
     const count = purpose === 'weak_area' ? (overrides.count ?? 20) : overrides.count;
     setProtectedPracticeRequest({ purpose, ...(count == null ? {} : { count }), includePbqs: overrides.includePbqs ?? true, mixStrategy: overrides.mixStrategy ?? 'balanced', domain: overrides.domain ? String(overrides.domain).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : undefined, contentKind: overrides.contentKind, ...(language ? { language } : {}) });
@@ -2270,6 +2311,7 @@ export default function App() {
       {['saved-results', 'saved-result-detail'].includes(screen) && (
         <SavedResultsPage
           session={currentIdentity.session}
+          codingLanguagePreference={az204CodingLanguagePreference}
           attemptId={screen === 'saved-result-detail' ? savedResultAttemptId : ''}
           openWeakAreaPractice={openWeakAreaPractice}
           weakAreaPracticeExamId={weakAreaPracticeExamId}
@@ -2289,6 +2331,7 @@ export default function App() {
               : ''
           }
           onStartWeakAreaPractice={handleStartWeakAreaPractice}
+          onCodingLanguagePreferenceChange={handleAz204CodingLanguageChange}
         />
       )}
 
@@ -2360,8 +2403,9 @@ export default function App() {
       {screen === 'trainer-student-detail' && (
         <TrainerStudentDetailPage
           studentId={trainerStudentId}
+          scope={trainerStudentScope}
           onBackHome={handleRestart}
-          onBackToDashboard={handleOpenTrainerDashboard}
+          onBackToDashboard={handleBackFromTrainerStudentDetail}
           onBrowseExams={() => setScreen('browse-exams')}
         />
       )}
@@ -2914,6 +2958,7 @@ function getRouteTargetForPath(pathname, search = '') {
       ? {
           screen: 'trainer-student-detail',
           trainerStudentId,
+          trainerStudentScope: readTrainerStudentScope(search),
         }
       : createNotFoundRouteTarget(routePath);
   }
@@ -3149,6 +3194,7 @@ function getPathForCurrentState({
   trainerAssignmentId,
   trainerResultId,
   trainerStudentId,
+  trainerStudentScope,
 }) {
   if (screen === 'home') {
     return '/';
@@ -3236,15 +3282,15 @@ function getPathForCurrentState({
 
   if (screen.startsWith('trainer-dashboard')) {
     const section = screen.replace('trainer-dashboard-', '');
-    if (section === screen) return '/trainer/dashboard';
+    if (section === screen) return trainerStudentScope?.returnSection ? buildTrainerDashboardPath(trainerStudentScope) : '/trainer/dashboard';
     if (section === 'detail') return trainerResultId ? `/trainer/dashboard/results/${encodeURIComponent(trainerResultId)}` : '/trainer/dashboard/results';
-    return `/trainer/dashboard/${section}`;
+    return trainerStudentScope?.returnSection
+      ? buildTrainerDashboardPath({ ...trainerStudentScope, returnSection: section })
+      : `/trainer/dashboard/${section}`;
   }
 
   if (screen === 'trainer-student-detail') {
-    return trainerStudentId
-      ? `/trainer/students/${encodeURIComponent(trainerStudentId)}`
-      : '/trainer/dashboard';
+    return buildTrainerStudentPath(trainerStudentId, trainerStudentScope);
   }
 
   if (screen === 'trainer-assignment-detail') {

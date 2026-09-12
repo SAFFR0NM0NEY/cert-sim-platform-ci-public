@@ -116,6 +116,7 @@ export function applyAuthoritativeAnalytics(pageDerived, authoritative, students
       readiness.label = getReadinessLabel(row.serverReadinessStatus);
     }
     return {
+      membershipId: student.membershipId || '',
       userId: row.learnerId,
       displayName: student.displayName || 'Learner',
       email: student.email || '',

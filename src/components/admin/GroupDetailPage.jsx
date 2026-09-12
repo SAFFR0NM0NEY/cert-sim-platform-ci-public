@@ -251,7 +251,12 @@ export default function GroupDetailPage({
                       <button
                         className="secondary-button compact-button"
                         type="button"
-                        onClick={() => onOpenStudentReport(student.user_id)}
+                        onClick={() => onOpenStudentReport(student.id, {
+                          organisationId: group.organisation_id,
+                          campusId: group.campus_id,
+                          groupId: group.id,
+                          returnSection: 'students',
+                        })}
                       >
                         Open student report
                       </button>

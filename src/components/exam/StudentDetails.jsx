@@ -47,6 +47,7 @@ export default function StudentDetails({
       ? SECURITY_PLUS_BETA_FEEDBACK_NOTE
       : '';
   const isProtectedPractice = Boolean(practiceSession);
+  const isStudySandbox = practiceSession?.purpose === 'study_sandbox';
 
   function updateField(field, value) {
     setForm((currentForm) => ({
@@ -203,7 +204,9 @@ export default function StudentDetails({
               </p>
               <p>
                 {isProtectedPractice
-                  ? 'This practice is untimed. Refreshes and network interruptions can recover the same server-side session. Choosing Exit closes the practice session; no certification countdown applies.'
+                  ? isStudySandbox
+                    ? 'This practice is untimed. Work is saved as you progress. Save & exit preserves this same Study Sandbox for resume within its 30-day inactivity window. Discard saved sandbox is permanent, prevents resume, and creates no result.'
+                    : 'This practice is untimed. Refreshes and network interruptions can recover the same server-side session. Choosing End practice closes the practice session; no certification countdown applies.'
                   : protectedDelivery
                   ? 'Your answers are saved securely as you move through the attempt. Refreshes and technical interruptions recover the same attempt while its original server timer continues. Choosing End attempt forfeits it after confirmation.'
                   : isSecurityPlusProductionReady

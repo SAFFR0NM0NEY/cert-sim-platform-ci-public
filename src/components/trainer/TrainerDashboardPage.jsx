@@ -120,6 +120,10 @@ export default function TrainerDashboardPage({
   const [trainerFilters, setTrainerFilters] = useState(initialTrainerFilters);
   const [draftFilters, setDraftFilters] = useState(initialTrainerFilters);
   const activeTrainerSection = activeSection;
+  const studentReportScope = useMemo(
+    () => ({ ...trainerFilters, returnSection: activeTrainerSection }),
+    [activeTrainerSection, trainerFilters],
+  );
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams();
@@ -364,7 +368,7 @@ export default function TrainerDashboardPage({
           { id: 'students', label: 'Learner Progress' },
           { id: 'results', label: 'Saved Results' },
         ]}
-        onSelect={onNavigateSection}
+        onSelect={(section) => onNavigateSection?.(section, '', trainerFilters)}
       />
 
       {activeTrainerSection === 'overview' && (
@@ -554,6 +558,7 @@ export default function TrainerDashboardPage({
             rows={filteredStudentReadiness}
             onOpenResult={handleOpenResultDetail}
             onOpenStudentReport={onOpenStudentReport}
+            studentReportScope={studentReportScope}
           />
           <LearnerPageControls scope={scopedPerformance} />
         </AnalyticsCard>
@@ -844,7 +849,7 @@ export default function TrainerDashboardPage({
               </thead>
               <tbody>
                 {filteredStudents.map((student) => (
-                  <tr key={student.userId}>
+                  <tr key={student.membershipId}>
                     <td className="profile-cell">
                       <strong>{student.displayName}</strong>
                       <span className="table-subtext">
@@ -859,7 +864,7 @@ export default function TrainerDashboardPage({
                       <button
                         className="secondary-button compact-button"
                         type="button"
-                        onClick={() => onOpenStudentReport?.(student.userId)}
+                        onClick={() => onOpenStudentReport?.(student.membershipId, studentReportScope)}
                       >
                         Open Learner Progress
                       </button>
@@ -1251,6 +1256,7 @@ function StudentReadinessCards({
   onOpenResult,
   onOpenStudentReport,
   rows,
+  studentReportScope,
 }) {
   if (rows.length === 0) {
     return (
@@ -1319,7 +1325,7 @@ function StudentReadinessCards({
             <button
               className="secondary-button compact-button"
               type="button"
-              onClick={() => onOpenStudentReport?.(row.userId)}
+              onClick={() => onOpenStudentReport?.(row.membershipId, studentReportScope)}
             >
               Open student report
             </button>

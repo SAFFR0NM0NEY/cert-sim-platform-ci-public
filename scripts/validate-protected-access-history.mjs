@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
-const [migration, continuationMigration, eligibilityMigration, routes, handler, responses, client, trainerService, trainerPage, studentPage, savedResults, pilotRunner] = await Promise.all([
+const [migration, continuationMigration, eligibilityMigration, routes, handler, responses, client, trainerService, trainerPage, studentPage, studentDetailService, savedResults, pilotRunner] = await Promise.all([
   read('supabase/migrations/20260901102814_protected_access_history_staff_analytics.sql'),
   read('supabase/migrations/20260901122402_unify_attempt_continuation_authorization.sql'),
   read('supabase/migrations/20260901134555_bind_profile_eligibility_to_package_version.sql'),
@@ -13,6 +13,7 @@ const [migration, continuationMigration, eligibilityMigration, routes, handler, 
   read('src/lib/trainerDashboardService.js'),
   read('src/components/trainer/TrainerDashboardPage.jsx'),
   read('src/components/trainer/TrainerStudentDetailPage.jsx'),
+  read('src/lib/trainerStudentDetailService.js'),
   read('src/protected/ProtectedSavedResultsPage.jsx'),
   read('scripts/run-protected-practice-pilot.mjs'),
 ]);
@@ -79,7 +80,12 @@ for (const source of [routes, handler, responses, client]) assert.match(source, 
 assert.match(trainerService, /createProtectedExamClient/);
 assert.match(trainerService, /analyticsEligible/);
 assert.match(trainerPage, /result\.analyticsEligible !== false/);
-assert.match(studentPage, /result\.analyticsEligible !== false/);
+assert.match(studentDetailService, /applyAuthoritativeAnalytics/);
+assert.match(studentDetailService, /payload\.learnerPage/);
+assert.match(responses, /item\.learnerId !== learner\.learnerId/);
+assert.match(responses, /item\.analyticsEligible !== true/);
+assert.doesNotMatch(responses, /const analyticsEligible = \["assigned_assessment", "self_directed_exam"\]\.includes/);
+assert.doesNotMatch(studentPage, /getTrainerAnalyticsSnapshot/);
 assert.match(savedResults, /totalCount/);
 assert.match(savedResults, /nextCursor/);
 assert.match(savedResults, /loadProtectedHistoryPage/);

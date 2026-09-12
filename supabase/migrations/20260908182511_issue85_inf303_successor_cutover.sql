@@ -112,7 +112,7 @@ begin
     from exam_delivery.package_versions pv
     where exam_delivery.normalize_exam_key(pv.exam_key)='inf303' and pv.package_version='1.1.0'
       and pv.status='published'
-      and pv.package_hash='65838aa2aa7304e1ebc374c84fa69f20f3e80c019a2e75f6c939b492e382adb9'
+      and pv.package_hash='112f4798ae354bf232651e3b7188240d6f87a4cb9f30e5a37221f2625578ff67'
     for share;
   if v_successor.package_schema_version<>'certsim-protected-package-v2'
     or not exam_delivery.package_v2_runtime_supported(v_successor.generator_version,v_successor.scorer_version)

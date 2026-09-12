@@ -14,16 +14,21 @@ export type RouteId =
   | "submit"
   | "result"
   | "review"
+  | "weakAreaOptions"
   | "practiceAvailability"
   | "practiceStart"
   | "practiceReplace"
   | "practiceCheck"
+  | "recoverableSandboxes"
+  | "practiceRecover"
+  | "lifecycleSummary"
   | "history"
   | "staffHistory"
   | "staffAnalytics"
   | "staffDashboardScope"
   | "staffScopeOptions"
   | "staffDashboardQuery"
+  | "staffLearnerDetail"
   | "historySummary"
   | "printSummary";
 export interface Route {
@@ -47,16 +52,21 @@ const RPC: Record<RouteId, string> = {
   submit: "certsim_protected_submit_attempt",
   result: "certsim_protected_get_result",
   review: "certsim_protected_get_review",
+  weakAreaOptions: "certsim_protected_weak_area_options",
   practiceAvailability: "certsim_protected_practice_availability",
   practiceStart: "certsim_protected_start_practice",
   practiceReplace: "certsim_protected_replace_current_practice_attempt",
   practiceCheck: "certsim_protected_check_practice_item",
+  recoverableSandboxes: "certsim_protected_list_recoverable_study_sandboxes",
+  practiceRecover: "certsim_protected_recover_study_sandbox",
+  lifecycleSummary: "certsim_protected_get_attempt_lifecycle_summary",
   history: "certsim_protected_list_history",
   staffHistory: "certsim_protected_list_staff_history",
   staffAnalytics: "certsim_protected_staff_analytics",
   staffDashboardScope: "certsim_protected_staff_dashboard_scope",
   staffScopeOptions: "certsim_protected_staff_scope_options",
   staffDashboardQuery: "certsim_protected_staff_dashboard_query",
+  staffLearnerDetail: "certsim_protected_staff_learner_detail",
   historySummary: "certsim_protected_history_summary",
   printSummary: "certsim_protected_print_summary",
 };
@@ -70,9 +80,12 @@ export function matchRoute(request: Request): Route {
   path = `/${path.split("/").filter(Boolean).join("/")}`;
   if (path === "/") path = "/";
   const candidates: Array<[RouteId, string, RegExp, string[]]> = [
+    ["weakAreaOptions", "GET", /^\/practice\/weak-areas$/, []],
     ["practiceAvailability", "GET", /^\/practice\/availability$/, []],
     ["practiceStart", "POST", /^\/practice\/sessions$/, []],
     ["practiceReplace", "POST", /^\/practice\/sessions\/replace$/, []],
+    ["recoverableSandboxes", "GET", /^\/practice\/recoverable-sandboxes$/, []],
+    ["practiceRecover", "POST", /^\/practice\/sessions\/([^/]+)\/recover$/, ["attemptId"]],
     ["practiceCheck", "POST", /^\/practice\/sessions\/([^/]+)\/items\/([^/]+)\/check$/, ["attemptId", "itemId"]],
     ["historySummary", "GET", /^\/history\/summary$/, []],
     ["history", "GET", /^\/history$/, []],
@@ -81,7 +94,9 @@ export function matchRoute(request: Request): Route {
     ["staffDashboardScope", "GET", /^\/staff\/dashboard-scope$/, []],
     ["staffScopeOptions", "GET", /^\/staff\/scope-options$/, []],
     ["staffDashboardQuery", "GET", /^\/staff\/dashboard-query$/, []],
+    ["staffLearnerDetail", "GET", /^\/staff\/learner-detail$/, []],
     ["printSummary", "GET", /^\/attempts\/([^/]+)\/print-summary$/, ["attemptId"]],
+    ["lifecycleSummary", "GET", /^\/attempts\/([^/]+)\/lifecycle-summary$/, ["attemptId"]],
     ["eligibility", "GET", /^\/eligibility$/, []],
     ["current", "GET", /^\/attempts\/current$/, []],
     ["currentBindings", "GET", /^\/attempts\/current-bindings$/, []],

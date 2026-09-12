@@ -61,6 +61,36 @@ const BLOCKED_PRESENTATION_KEYS = new Set([
   'correctoptionidsbyblank', 'pointsbyblank', 'maximumrawpoints', 'modelsolution',
 ]);
 
+// Terminal replay state is intentionally ephemeral. Resume rebuilds an empty
+// terminal around the canonical scorer selections returned by the server.
+const PBQ_BROWSER_ONLY_KEYS = new Set([
+  'commandHistory',
+  'terminalTranscript',
+  'perHostCommandHistory',
+  'perHostTerminalTranscript',
+]);
+// Retain the Issue #166 contract name for source-level regression checks.
+const MULTI_HOST_BROWSER_ONLY_KEYS = PBQ_BROWSER_ONLY_KEYS;
+
+const DEFAULT_PBQ_SERIALIZATION_ERRORS = Object.freeze({
+  response: 'invalid_pbq_response',
+  allowlist: 'invalid_pbq_response_allowlist',
+  target: 'invalid_pbq_response_target',
+  value: 'invalid_pbq_response_value',
+  order: 'invalid_pbq_response_order',
+  answer: 'invalid_pbq_response_answer',
+  command: 'invalid_pbq_command_state',
+});
+
+const MULTI_HOST_SERIALIZATION_ERRORS = Object.freeze({
+  ...DEFAULT_PBQ_SERIALIZATION_ERRORS,
+  response: 'invalid_multi_host_response',
+  allowlist: 'invalid_multi_host_response_allowlist',
+  target: 'invalid_multi_host_response_target',
+  value: 'invalid_multi_host_response_value',
+  command: 'invalid_multi_host_command_state',
+});
+
 export function getProtectedExamKey(frontendExamId) {
   return EXAM_IDENTITIES[String(frontendExamId ?? '').trim()] ?? '';
 }
@@ -122,14 +152,11 @@ export function serializeProtectedResponse(question, answer) {
         : {},
     };
   }
-  if (Array.isArray(answer)) return { selectedOrder: [...answer] };
-  if (answer && typeof answer === 'object') {
-    const response = structuredClone(answer);
-    const allowedKeys = ['selectedAnswer', 'selectedAnswers', 'selectedOrder', 'executedCommands'];
-    const selected = Object.fromEntries(
-      Object.entries(response).filter(([key]) => allowedKeys.includes(key)),
-    );
-    return Object.keys(selected).length ? selected : { selectedAnswers: response };
+  if (type === 'pbq-multi-host-terminal') {
+    return serializeMultiHostTerminalResponse(question, answer);
+  }
+  if (type.startsWith('pbq-')) {
+    return serializeAllowlistedPBQResponse(question, answer);
   }
   return { selectedAnswer: answer ?? '' };
 }
@@ -150,7 +177,15 @@ export function deserializeProtectedResponse(question, response) {
     return Array.isArray(response.selectedOrder) ? [...response.selectedOrder] : [];
   }
   if (response.selectedAnswers && typeof response.selectedAnswers === 'object' && !Array.isArray(response.selectedAnswers)) {
-    return structuredClone(response.selectedAnswers);
+    if (response.executedCommands !== undefined && !Array.isArray(response.executedCommands)) {
+      throw new Error('invalid_protected_response');
+    }
+    return {
+      ...structuredClone(response.selectedAnswers),
+      ...(response.executedCommands === undefined
+        ? {}
+        : { executedCommands: [...response.executedCommands] }),
+    };
   }
   if (Array.isArray(response.executedCommands)) {
     return {
@@ -194,4 +229,178 @@ function assertObject(value, code) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(code);
   }
+}
+
+function serializeMultiHostTerminalResponse(question, answer) {
+  return serializeAllowlistedPBQResponse(question, answer, MULTI_HOST_SERIALIZATION_ERRORS);
+}
+
+function serializeAllowlistedPBQResponse(
+  question,
+  answer,
+  errors = DEFAULT_PBQ_SERIALIZATION_ERRORS,
+) {
+  const allowlist = question?.responseAllowlist ?? question?.presentation?.responseAllowlist;
+  const validatedAllowlist = validatePBQResponseAllowlist(allowlist, errors.allowlist);
+
+  if (Array.isArray(answer)) {
+    return { selectedOrder: validatePBQOrder(answer, validatedAllowlist.orderIds, errors.order) };
+  }
+  if (answer === null || answer === undefined || typeof answer !== 'object') {
+    if (answer === '') return {};
+    return {
+      selectedAnswer: validatePBQSelectedAnswer(answer, validatedAllowlist.answerIds, errors.answer),
+    };
+  }
+
+  assertPlainObject(answer, errors.response);
+  const selectedAnswers = {};
+  if (answer.selectedAnswers !== undefined) {
+    assertPlainObject(answer.selectedAnswers, errors.response);
+    for (const [targetId, selectedValue] of Object.entries(answer.selectedAnswers)) {
+      addAllowedPBQSelection(
+        selectedAnswers,
+        validatedAllowlist,
+        targetId,
+        selectedValue,
+        errors,
+      );
+    }
+  }
+
+  for (const [key, value] of Object.entries(answer)) {
+    if (MULTI_HOST_BROWSER_ONLY_KEYS.has(key) || key === 'selectedAnswers' || key === 'executedCommands') continue;
+    if (key === 'selectedAnswer' || key === 'selectedOrder') continue;
+    addAllowedPBQSelection(selectedAnswers, validatedAllowlist, key, value, errors);
+  }
+
+  const response = {};
+  if (answer.selectedAnswers !== undefined || validatedAllowlist.targetIds.size > 0) {
+    response.selectedAnswers = selectedAnswers;
+  }
+  if (answer.selectedAnswer !== undefined && answer.selectedAnswer !== '') {
+    response.selectedAnswer = validatePBQSelectedAnswer(
+      answer.selectedAnswer,
+      validatedAllowlist.answerIds,
+      errors.answer,
+    );
+  }
+  if (answer.selectedOrder !== undefined) {
+    response.selectedOrder = validatePBQOrder(
+      answer.selectedOrder,
+      validatedAllowlist.orderIds,
+      errors.order,
+    );
+  }
+  if (answer.executedCommands !== undefined) {
+    if (!Array.isArray(answer.executedCommands) || answer.executedCommands.length > 100) {
+      throw new Error(errors.command);
+    }
+    if (answer.executedCommands.some((commandId) => (
+      typeof commandId !== 'string' || commandId.length > 256 ||
+      !validatedAllowlist.commandIds.has(commandId)
+    ))) {
+      throw new Error(errors.command);
+    }
+    response.executedCommands = [...answer.executedCommands];
+  }
+  return response;
+}
+
+function addAllowedPBQSelection(selectedAnswers, allowlist, targetId, selectedValue, errors) {
+  if (!allowlist.targetIds.has(targetId)) throw new Error(errors.target);
+  if (selectedValue === '') return;
+  const allowedValues = allowlist.answerIdsByTarget.get(targetId);
+  if (typeof selectedValue !== 'string' || !allowedValues?.has(selectedValue)) {
+    throw new Error(errors.value);
+  }
+  if (Object.hasOwn(selectedAnswers, targetId) && selectedAnswers[targetId] !== selectedValue) {
+    throw new Error(errors.value);
+  }
+  selectedAnswers[targetId] = selectedValue;
+}
+
+function validatePBQResponseAllowlist(allowlist, errorCode) {
+  assertPlainObject(allowlist, errorCode);
+  const targetIds = validateOptionalUniqueStringArray(allowlist.targetIds, errorCode);
+  const answerIds = validateOptionalUniqueStringArray(allowlist.answerIds, errorCode);
+  const orderIds = validateOptionalUniqueStringArray(allowlist.orderIds, errorCode);
+  const commandIds = validateOptionalUniqueStringArray(allowlist.commandIds, errorCode);
+  const answerIdsByTarget = validateAnswerIdsByTarget(
+    allowlist.answerIdsByTarget,
+    targetIds,
+    errorCode,
+  );
+
+  return {
+    targetIds: new Set(targetIds),
+    answerIds: new Set(answerIds),
+    orderIds: new Set(orderIds),
+    commandIds: new Set(commandIds),
+    answerIdsByTarget,
+  };
+}
+
+function validateAnswerIdsByTarget(value, targetIds, errorCode) {
+  if (targetIds.length === 0) {
+    if (value === undefined) return new Map();
+    const isEmptyArray = Array.isArray(value) && value.length === 0;
+    const isEmptyObject = value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
+    if (isEmptyArray || isEmptyObject) return new Map();
+    throw new Error(errorCode);
+  }
+
+  const entries = Array.isArray(value)
+    ? value.map((entry) => {
+      assertPlainObject(entry, errorCode);
+      return [entry.targetId, entry.answerIds];
+    })
+    : value && typeof value === 'object'
+      ? Object.entries(value)
+      : null;
+  if (!entries || entries.length !== targetIds.length) throw new Error(errorCode);
+
+  const targetIdSet = new Set(targetIds);
+  const answerIdsByTarget = new Map();
+  for (const [targetId, answerIds] of entries) {
+    if (typeof targetId !== 'string' || !targetIdSet.has(targetId) || answerIdsByTarget.has(targetId)) {
+      throw new Error(errorCode);
+    }
+    const validatedAnswers = validateUniqueStringArray(answerIds, errorCode);
+    if (validatedAnswers.length === 0) throw new Error(errorCode);
+    answerIdsByTarget.set(targetId, new Set(validatedAnswers));
+  }
+  if (answerIdsByTarget.size !== targetIds.length) throw new Error(errorCode);
+  return answerIdsByTarget;
+}
+
+function validateUniqueStringArray(value, errorCode) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || !entry)) {
+    throw new Error(errorCode);
+  }
+  if (new Set(value).size !== value.length) throw new Error(errorCode);
+  return [...value];
+}
+
+function validateOptionalUniqueStringArray(value, errorCode) {
+  return value === undefined ? [] : validateUniqueStringArray(value, errorCode);
+}
+
+function assertPlainObject(value, code) {
+  assertObject(value, code);
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) throw new Error(code);
+}
+
+function validatePBQSelectedAnswer(value, allowedAnswers, errorCode) {
+  if (typeof value !== 'string' || !allowedAnswers.has(value)) throw new Error(errorCode);
+  return value;
+}
+
+function validatePBQOrder(value, allowedOrderIds, errorCode) {
+  if (!Array.isArray(value) || new Set(value).size !== value.length ||
+      value.some((entry) => typeof entry !== 'string' || !allowedOrderIds.has(entry))) {
+    throw new Error(errorCode);
+  }
+  return [...value];
 }

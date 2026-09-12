@@ -271,6 +271,14 @@ export default function TrainerAssignmentDetailPage({
               rows={studentRows}
               onOpenResult={handleOpenResult}
               onOpenStudentReport={onOpenStudentReport}
+              studentReportScope={{
+                organisationId: assignment?.organisationId || '',
+                campusId: assignment?.campusId || '',
+                groupId: assignment?.groupId || '',
+                assignmentId: assignment?.id || assignmentId,
+                examKey: assignment?.examKey || '',
+                returnSection: 'assignments',
+              }}
             />
           </section>
 
@@ -444,6 +452,7 @@ function StudentProgressList({
   onOpenStudentReport,
   resultLoading,
   rows,
+  studentReportScope,
 }) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return (
@@ -509,7 +518,7 @@ function StudentProgressList({
               <button
                 className="secondary-button compact-button"
                 type="button"
-                onClick={() => onOpenStudentReport?.(student.userId)}
+                onClick={() => onOpenStudentReport?.(student.membershipId, studentReportScope)}
               >
                 Open student report
               </button>

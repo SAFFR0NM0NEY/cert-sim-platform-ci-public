@@ -21,15 +21,20 @@ import {
   mapQuestionIssue,
   mapAbandonedAttempt,
   mapPracticeAvailability,
+  mapWeakAreaOptions,
   mapPracticeCheck,
   mapHistory,
   mapStaffHistory,
   mapStaffAnalytics,
   mapStaffDashboardScope,
   mapStaffDashboardQuery,
+  mapStaffLearnerDetail,
   mapStaffScopeOptions,
   mapHistorySummary,
   mapPrintSummary,
+  mapAttemptLifecycleSummary,
+  mapRecoverableStudySandboxes,
+  mapStudySandboxRecovery,
 } from "./responses.ts";
 import {
   assertUuid,
@@ -135,6 +140,19 @@ export async function handleProtectedExam(
         !Number.isSafeInteger(afterPosition) || afterPosition < 0 ||
         !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 50) throw new SafeError("invalid_request");
       args = { p_actor_id: actorId, p_attempt_id: assertUuid(matched.params.attemptId), p_after_position: afterPosition, p_page_size: pageSize };
+    } else if (matched.id === "weakAreaOptions") {
+      const u = new URL(request.url);
+      const examKey = u.searchParams.get("examKey");
+      const profileId = u.searchParams.get("profileId");
+      if (!isExamKey(examKey) || !isProfileId(profileId) ||
+        [...u.searchParams.keys()].some((key) => !["examKey", "profileId"].includes(key))) {
+        throw new SafeError("invalid_request");
+      }
+      args = {
+        p_actor_id: actorId,
+        p_exam_key: examKey,
+        p_profile_key: profileId,
+      };
     } else if (matched.id === "practiceAvailability") {
       const u = new URL(request.url);
       const permitted = ["examKey", "profileId", "purpose", "domain", "count", "includePbqs", "mixStrategy", "language", "contentKind", "assignmentId"];
@@ -149,6 +167,27 @@ export async function handleProtectedExam(
       body = validateObject(await readJsonBody(request), ["expectedRevision", "requestId"], ["expectedRevision", "requestId"]);
       if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 1) throw new SafeError("invalid_request");
       args = { p_actor_id: actorId, p_attempt_id: assertUuid(matched.params.attemptId), p_item_id: assertUuid(matched.params.itemId), p_expected_revision: body.expectedRevision, p_request_id: assertUuid(body.requestId) };
+    } else if (matched.id === "recoverableSandboxes") {
+      const u = new URL(request.url);
+      const examKey = u.searchParams.get("examKey");
+      const profileId = u.searchParams.get("profileId");
+      if (!isExamKey(examKey) || !isProfileId(profileId) ||
+        [...u.searchParams.keys()].some((key) => !["examKey", "profileId"].includes(key))) {
+        throw new SafeError("invalid_request");
+      }
+      args = {
+        p_actor_id: actorId,
+        p_exam_key: examKey,
+        p_profile_key: profileId,
+        p_limit: 8,
+      };
+    } else if (matched.id === "practiceRecover") {
+      body = validateObject(await readJsonBody(request), ["requestId"], ["requestId"]);
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_request_id: assertUuid(body.requestId),
+      };
     } else if (matched.id === "history" || matched.id === "staffHistory") {
       const u = new URL(request.url); const size = Number(u.searchParams.get("pageSize") ?? "20");
       const permitted = matched.id === "history" ? ["cursor", "pageSize", "examKey"] : ["cursor", "pageSize"];
@@ -156,6 +195,25 @@ export async function handleProtectedExam(
       args = matched.id === "history"
         ? { p_actor_id: actorId, p_exam_key: u.searchParams.get("examKey"), p_cursor: u.searchParams.get("cursor"), p_page_size: size }
         : { p_actor_id: actorId, p_cursor: u.searchParams.get("cursor"), p_page_size: size };
+    } else if (matched.id === "staffLearnerDetail") {
+      const u = new URL(request.url);
+      const permitted = ["membershipId", "organisationId", "campusId", "groupId", "assignmentId", "examKey", "resultStatus", "cursor", "pageSize"];
+      if ([...u.searchParams.keys()].some((key) => !permitted.includes(key))) throw new SafeError("invalid_request");
+      const membershipId = u.searchParams.get("membershipId");
+      const pageSize = Number(u.searchParams.get("pageSize") ?? "25");
+      const cursor = u.searchParams.get("cursor") ?? "";
+      const examKey = u.searchParams.get("examKey");
+      const resultStatus = u.searchParams.get("resultStatus");
+      if (!membershipId || !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > 25 ||
+        cursor.length > 500 || (examKey !== null && !isExamKey(examKey)) ||
+        (resultStatus !== null && !["passed", "needs-review", "not-recorded"].includes(resultStatus))) {
+        throw new SafeError("invalid_request");
+      }
+      for (const key of ["membershipId", "organisationId", "campusId", "groupId", "assignmentId"]) {
+        const value = u.searchParams.get(key);
+        if (value !== null) assertUuid(value);
+      }
+      args = { p_actor_id: actorId, p_request: Object.fromEntries([...u.searchParams.entries()].filter(([, value]) => value !== "")) };
     } else if (matched.id === "staffDashboardScope" || matched.id === "staffScopeOptions" || matched.id === "staffDashboardQuery") {
       const u = new URL(request.url);
       const permitted = matched.id === "staffScopeOptions"
@@ -184,7 +242,9 @@ export async function handleProtectedExam(
       const u = new URL(request.url); const examKey = u.searchParams.get("examKey");
       if (!isExamKey(examKey) || [...u.searchParams.keys()].some((key) => key !== "examKey")) throw new SafeError("invalid_request");
       args = { p_actor_id: actorId, p_exam_key: examKey };
-    } else if (matched.id === "printSummary") {
+    } else if (matched.id === "printSummary" || matched.id === "lifecycleSummary") {
+      const u = new URL(request.url);
+      if ([...u.searchParams.keys()].length > 0) throw new SafeError("invalid_request");
       args = { p_actor_id: actorId, p_attempt_id: assertUuid(matched.params.attemptId) };
     } else if (matched.id === "start") {
       body = validateObject(await readJsonBody(request), [
@@ -271,6 +331,7 @@ export async function handleProtectedExam(
     if (matched.id === "eligibility") mapped = mapEligibility(rpcData);
     else if (matched.id === "itemPage") mapped = mapAttemptItemPage(rpcData);
     else if (matched.id === "currentBindings") mapped = mapCurrentAttemptBindings(rpcData);
+    else if (matched.id === "weakAreaOptions") mapped = mapWeakAreaOptions(rpcData);
     else if (matched.id === "practiceAvailability") mapped = mapPracticeAvailability(rpcData);
     else if (matched.id === "practiceCheck") mapped = mapPracticeCheck(rpcData);
     else if (matched.id === "history") mapped = mapHistory(rpcData);
@@ -279,8 +340,12 @@ export async function handleProtectedExam(
     else if (matched.id === "staffDashboardScope") mapped = mapStaffDashboardScope(rpcData);
     else if (matched.id === "staffScopeOptions") mapped = mapStaffScopeOptions(rpcData);
     else if (matched.id === "staffDashboardQuery") mapped = mapStaffDashboardQuery(rpcData);
+    else if (matched.id === "staffLearnerDetail") mapped = mapStaffLearnerDetail(rpcData);
     else if (matched.id === "historySummary") mapped = mapHistorySummary(rpcData);
     else if (matched.id === "printSummary") mapped = mapPrintSummary(rpcData);
+    else if (matched.id === "lifecycleSummary") mapped = mapAttemptLifecycleSummary(rpcData);
+    else if (matched.id === "recoverableSandboxes") mapped = mapRecoverableStudySandboxes(rpcData);
+    else if (matched.id === "practiceRecover") mapped = mapStudySandboxRecovery(rpcData);
     else if (matched.id === "start" || matched.id === "practiceStart" || matched.id === "practiceReplace" || matched.id === "resume" || matched.id === "current") {
       mapped = mapAttempt(rpcData);
     } else if (matched.id === "save") mapped = mapSavedResponse(rpcData);

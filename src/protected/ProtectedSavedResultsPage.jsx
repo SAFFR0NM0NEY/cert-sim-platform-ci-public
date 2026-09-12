@@ -1,25 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { examRegistry, liveVisibleExamConfigs } from '../exams/examRegistry.js';
 import { getAttemptHistory } from '../utils/attemptHistory.js';
-import { createProtectedExamClient } from '../lib/protectedExamClient.js';
+import { createProtectedExamClient, getProtectedReasonMessage } from '../lib/protectedExamClient.js';
 import { appendUniqueHistory } from '../lib/historyPagination.js';
 import { getAttemptKindLabel, isAssessmentResult } from '../lib/attemptPurpose.js';
 import { loadAllProtectedHistory, loadProtectedHistoryPage } from '../lib/protectedHistory.js';
-import { aggregateWeakDomains } from '../lib/learnerAnalytics.js';
 import { selectCurrentWeakAreaProfile } from '../lib/weakAreaProfileSelection.js';
 import {
   getSavedResultExamFilterOptions,
   getSavedResultExamLabel,
 } from '../lib/savedResultExamIdentity.js';
 import { downloadProtectedResultSummaryPdf } from '../lib/savedResultReportExport.js';
+import { buildWeakAreaPracticeRequest } from '../lib/protectedPracticeRequest.js';
+import { PROTECTED_LANGUAGE_PREFERENCES } from '../lib/protectedExamContract.js';
+import { CODING_LANGUAGE_OPTIONS } from '../utils/codingLanguage.js';
 
-export default function ProtectedSavedResultsPage({ attemptId, onBackHome, onOpenAccount, onOpenDetail, onReturnHome, onReturnToList, session, openWeakAreaPractice = false, weakAreaPracticeExamId = '', onStartWeakAreaPractice }) {
+export default function ProtectedSavedResultsPage({ attemptId, codingLanguagePreference, onBackHome, onCodingLanguagePreferenceChange, onOpenAccount, onOpenDetail, onReturnHome, onReturnToList, session, openWeakAreaPractice = false, weakAreaPracticeExamId = '', onStartWeakAreaPractice }) {
   const client = useMemo(() => session?.access_token ? createProtectedExamClient({ accessToken: session.access_token }) : null, [session?.access_token]);
   if (attemptId) return <ProtectedResultDetail attemptId={attemptId} client={client} onBack={onReturnToList} />;
-  return <ProtectedResultList client={client} onBack={onReturnHome ?? onBackHome} onOpenAccount={onOpenAccount} onOpenDetail={onOpenDetail} openWeakAreaPractice={openWeakAreaPractice} weakAreaPracticeExamId={weakAreaPracticeExamId} onStartWeakAreaPractice={onStartWeakAreaPractice} />;
+  return <ProtectedResultList client={client} codingLanguagePreference={codingLanguagePreference} onBack={onReturnHome ?? onBackHome} onCodingLanguagePreferenceChange={onCodingLanguagePreferenceChange} onOpenAccount={onOpenAccount} onOpenDetail={onOpenDetail} openWeakAreaPractice={openWeakAreaPractice} weakAreaPracticeExamId={weakAreaPracticeExamId} onStartWeakAreaPractice={onStartWeakAreaPractice} />;
 }
 
-function ProtectedResultList({ client, onBack, onOpenAccount, onOpenDetail, openWeakAreaPractice, weakAreaPracticeExamId, onStartWeakAreaPractice }) {
+function ProtectedResultList({ client, codingLanguagePreference, onBack, onCodingLanguagePreferenceChange, onOpenAccount, onOpenDetail, openWeakAreaPractice, weakAreaPracticeExamId, onStartWeakAreaPractice }) {
   const historical = useMemo(() => examRegistry.flatMap((exam) => getAttemptHistory(exam.id).records.map((record) => ({ ...record, registryExamId: exam.id }))), []);
   const examFilterOptions = useMemo(() => getSavedResultExamFilterOptions(liveVisibleExamConfigs), []);
   const [remote, setRemote] = useState({ state: 'loading', items: [], message: '', nextCursor: null, totalCount: null });
@@ -69,7 +71,7 @@ function ProtectedResultList({ client, onBack, onOpenAccount, onOpenDetail, open
     <p>Assessments and practice are labelled separately. Older activity whose purpose cannot be confirmed remains visible and does not affect readiness.</p>
     <section className="saved-focus-practice">
       <div className="saved-results-header"><div><p className="eyebrow">Focus Practice</p><h3>Weak Area Practice</h3><p>Practise an automatically identified weak domain from completed assessments.</p></div><button className="secondary-button compact-button" type="button" aria-expanded={focusOpen} onClick={() => setFocusOpen((value) => !value)}>{focusOpen ? 'Hide configuration' : 'Configure practice'}</button></div>
-      {focusOpen ? <ProtectedWeakAreaPractice client={client} initialExamId={weakAreaPracticeExamId} results={practiceResults} loading={practiceLoading} onStart={onStartWeakAreaPractice} /> : null}
+      {focusOpen ? <ProtectedWeakAreaPractice client={client} codingLanguagePreference={codingLanguagePreference} initialExamId={weakAreaPracticeExamId} results={practiceResults} loading={practiceLoading} onCodingLanguagePreferenceChange={onCodingLanguagePreferenceChange} onStart={onStartWeakAreaPractice} /> : null}
     </section>
     <h3>Account results</h3>
     <div className="saved-attempt-toolbar no-print"><label><span>Range</span><select value={range} onChange={(event) => setRange(event.target.value)}><option value="recent">Recent results</option><option value="all">All Time</option></select></label><label><span>Exam</span><select value={examFilter} onChange={(event) => setExamFilter(event.target.value)}><option value="">All exams</option>{examFilterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><strong>{range === 'all' ? 'All Time' : 'Recent results · latest 10'}{Number.isInteger(remote.totalCount) ? ` · ${remote.items.length} of ${remote.totalCount} loaded` : ''}</strong></div>
@@ -83,7 +85,7 @@ function ProtectedResultList({ client, onBack, onOpenAccount, onOpenDetail, open
   </section>;
 }
 
-function ProtectedWeakAreaPractice({ client, initialExamId, loading, onStart, results }) {
+function ProtectedWeakAreaPractice({ client, codingLanguagePreference, initialExamId, loading, onCodingLanguagePreferenceChange, onStart, results }) {
   const assessments = useMemo(() => results.filter(isAssessmentResult), [results]);
   const exams = useMemo(() => examRegistry.filter((exam) => assessments.some((item) => normalizeExamKey(item.examKey) === normalizeExamKey(exam.id))), [assessments]);
   const [examId, setExamId] = useState(initialExamId);
@@ -92,45 +94,79 @@ function ProtectedWeakAreaPractice({ client, initialExamId, loading, onStart, re
   const [count, setCount] = useState(20);
   const [mixStrategy, setMixStrategy] = useState('balanced');
   const [includePbqs, setIncludePbqs] = useState(true);
+  const [weakAreaOptions, setWeakAreaOptions] = useState({ state: 'idle', key: '', domains: [], message: '' });
   const [availability, setAvailability] = useState({ state: 'idle', value: null, message: '' });
   useEffect(() => { if (!exams.some((exam) => exam.id === examId)) setExamId(exams.find((exam) => exam.id === initialExamId)?.id ?? exams[0]?.id ?? ''); }, [examId, exams, initialExamId]);
   const examResults = useMemo(() => assessments.filter((item) => normalizeExamKey(item.examKey) === normalizeExamKey(examId)), [assessments, examId]);
   const currentExam = useMemo(() => exams.find((exam) => exam.id === examId) ?? null, [examId, exams]);
   const currentProfiles = currentExam?.strictBetaProfiles ?? [];
-  const weakDomains = useMemo(() => aggregateWeakDomains(examResults), [examResults]);
-  useEffect(() => { if (!weakDomains.some((item) => item.id === domain)) setDomain(weakDomains[0]?.id ?? ''); }, [domain, weakDomains]);
   const latest = examResults[0];
   useEffect(() => {
     if (!currentProfiles.some((profile) => profile.id === profileId)) {
       setProfileId(selectCurrentWeakAreaProfile(currentProfiles, latest?.profileKey));
     }
   }, [currentProfiles, latest?.profileKey, profileId]);
+  const discoveryKey = examId && profileId ? `${examId}|${profileId}` : '';
   useEffect(() => {
     const controller = new AbortController();
-    if (!client || !profileId || !domain) { setAvailability({ state: 'idle', value: null, message: '' }); return () => controller.abort(); }
+    if (!client || !discoveryKey) {
+      setWeakAreaOptions({ state: 'idle', key: '', domains: [], message: '' });
+      return () => controller.abort();
+    }
+    setWeakAreaOptions({ state: 'loading', key: discoveryKey, domains: [], message: '' });
+    client.getWeakAreaOptions(examId, profileId, { signal: controller.signal })
+      .then((value) => {
+        if (!controller.signal.aborted) setWeakAreaOptions({ state: 'ready', key: discoveryKey, domains: value.domains, message: '' });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setWeakAreaOptions({ state: 'error', key: discoveryKey, domains: [], message: error.message || 'Weak Area Practice is not available.' });
+      });
+    return () => controller.abort();
+  }, [client, discoveryKey, examId, profileId]);
+  const weakDomains = weakAreaOptions.key === discoveryKey && weakAreaOptions.state === 'ready'
+    ? weakAreaOptions.domains
+    : [];
+  useEffect(() => {
+    if (!weakDomains.some((item) => item.domainKey === domain)) setDomain(weakDomains[0]?.domainKey ?? '');
+  }, [domain, weakDomains]);
+  const practiceConfiguration = useMemo(() => {
+    if (!weakDomains.some((item) => item.domainKey === domain)) return { value: null, error: null };
+    try {
+      return { value: buildWeakAreaPracticeRequest({ examKey: examId, profileId, domain, questionCount: count, purpose: 'weak_area', includePbqs, mixStrategy, language: codingLanguagePreference }), error: null };
+    } catch (error) {
+      return { value: null, error };
+    }
+  }, [codingLanguagePreference, count, domain, examId, includePbqs, mixStrategy, profileId, weakDomains]);
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!client || !profileId || !domain || weakAreaOptions.state !== 'ready' || weakAreaOptions.key !== discoveryKey) { setAvailability({ state: 'idle', value: null, message: '' }); return () => controller.abort(); }
+    if (practiceConfiguration.error) { setAvailability({ state: 'error', value: null, message: practiceConfiguration.error.message }); return () => controller.abort(); }
     setAvailability({ state: 'loading', value: null, message: '' });
-    client.getPracticeAvailability({ examKey: examId, profileId, purpose: 'weak_area', domain, count, includePbqs, mixStrategy }, { signal: controller.signal })
+    client.getPracticeAvailability(practiceConfiguration.value, { signal: controller.signal })
       .then((value) => setAvailability({ state: 'ready', value, message: '' }))
       .catch((error) => { if (!controller.signal.aborted) setAvailability({ state: 'error', value: null, message: error.message || 'Weak Area Practice is not available.' }); });
     return () => controller.abort();
-  }, [client, count, domain, examId, includePbqs, mixStrategy, profileId]);
+  }, [client, discoveryKey, domain, practiceConfiguration, profileId, weakAreaOptions.key, weakAreaOptions.state]);
   if (loading) return <p role="status">Reading completed assessment evidence…</p>;
-  if (!exams.length) return <p>No eligible completed assessments are available yet. Practice and unclassified historical activity do not create readiness evidence.</p>;
-  if (!weakDomains.length) return <p>No domain is currently below the 70% weak-area threshold for the selected exam.</p>;
+  if (!exams.length) return <p role="status">{getProtectedReasonMessage('no_weak_areas')}</p>;
   return <div className="weak-area-practice-panel">
     <div className="weak-area-configuration-grid">
       <label><span>Exam</span><select value={examId} onChange={(event) => setExamId(event.target.value)}>{exams.map((exam) => <option key={exam.id} value={exam.id}>{exam.shortName}</option>)}</select></label>
       <label><span>Practice profile</span><select value={profileId} onChange={(event) => setProfileId(event.target.value)}>{currentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label>
-      <label><span>Weak domain</span><select value={domain} onChange={(event) => setDomain(event.target.value)}>{weakDomains.map((item) => <option key={item.id} value={item.id}>{item.label} · {Math.round(item.percentage)}%</option>)}</select></label>
-      <label><span>Question count</span><select value={count} onChange={(event) => setCount(Number(event.target.value))}>{[10,20,30,40].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-      <label><span>Question mix</span><select value={mixStrategy} onChange={(event) => setMixStrategy(event.target.value)}><option value="missed-heavy">Review Missed First</option><option value="balanced">Balanced Mix</option><option value="new-heavy">New Questions First</option></select></label>
-      <label className="weak-area-pbq-control"><input type="checkbox" checked={includePbqs} onChange={(event) => setIncludePbqs(event.target.checked)} /><span className="weak-area-toggle-track" aria-hidden="true" /><span className="weak-area-toggle-copy"><strong>Include PBQs</strong><small>when eligible</small></span></label>
+      {weakDomains.length ? <label><span>Weak domain</span><select value={domain} onChange={(event) => setDomain(event.target.value)}>{weakDomains.map((item) => <option key={item.domainKey} value={item.domainKey}>{item.domainKey} · {Math.round(item.lowestPercentage)}%</option>)}</select></label> : null}
+      {weakDomains.length ? <label><span>Question count</span><select value={count} onChange={(event) => setCount(Number(event.target.value))}>{[10,20,30,40].map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : null}
+      {weakDomains.length ? <label><span>Question mix</span><select value={mixStrategy} onChange={(event) => setMixStrategy(event.target.value)}><option value="missed-heavy">Review Missed First</option><option value="balanced">Balanced Mix</option><option value="new-heavy">New Questions First</option></select></label> : null}
+      {currentExam?.id === 'az204' ? <label><span>Language</span><select value={PROTECTED_LANGUAGE_PREFERENCES.includes(codingLanguagePreference) ? codingLanguagePreference : ''} onChange={(event) => onCodingLanguagePreferenceChange?.(event.target.value)}><option value="" disabled>Select a language</option>{CODING_LANGUAGE_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label> : null}
+      {weakDomains.length ? <label className="weak-area-pbq-control"><input type="checkbox" checked={includePbqs} onChange={(event) => setIncludePbqs(event.target.checked)} /><span className="weak-area-toggle-track" aria-hidden="true" /><span className="weak-area-toggle-copy"><strong>Include PBQs</strong><small>when eligible</small></span></label> : null}
     </div>
     <p>Weak domains use earned points divided by available points from completed assigned or self-directed assessments. “First” controls priority; the backend may adjust the mix when eligible content is limited.</p>
+    {weakAreaOptions.state === 'loading' ? <p role="status">Checking eligible weak areas…</p> : null}
+    {weakAreaOptions.state === 'ready' && !weakDomains.length ? <p role="status">{getProtectedReasonMessage('no_weak_areas')}</p> : null}
+    {weakAreaOptions.state === 'error' ? <p role="alert">{weakAreaOptions.message}</p> : null}
     {availability.state === 'loading' ? <p role="status">Checking eligible practice content…</p> : null}
     {availability.message ? <p role="alert">{availability.message}</p> : null}
     {availability.value ? <p>{availability.value.selectedCount} question{availability.value.selectedCount === 1 ? '' : 's'} selected from {availability.value.available} eligible items{availability.value.adjustedCount ? ' after a safe availability adjustment' : ''}. Completing this practice does not affect formal readiness or exam-attempt totals.</p> : null}
-    <button className="primary-button" type="button" disabled={!availability.value?.selectedCount} onClick={() => onStart?.({ examKey: examId, profileId, domain, questionCount: count, includePbqs, mixStrategy })}>Start Weak Area Practice</button>
+    <button className="primary-button" type="button" disabled={!availability.value?.selectedCount || !practiceConfiguration.value} onClick={() => onStart?.(practiceConfiguration.value)}>Start Weak Area Practice</button>
   </div>;
 }
 

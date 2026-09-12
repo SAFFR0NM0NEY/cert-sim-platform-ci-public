@@ -79,6 +79,11 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260908155215_issue85_inf303_release_configuration.sql',
   '20260908182505_issue85_inf303_compact_mode_parity.sql',
   '20260908182511_issue85_inf303_successor_cutover.sql',
+  '20260909072811_issue124_protected_array_response_validator_fix.sql',
+  '20260910133143_issue147_weak_area_options.sql',
+  '20260910172710_issue160_platform_owner_weak_area.sql',
+  '20260911093103_issue150_training_dashboard_learner_detail.sql',
+  '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -156,7 +161,12 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260908151342_issue85_python_standard_form_materialization.sql': '1c7c450932a0f7a42a5716a991f01bdcf42136d5ef5bfd71e16a927d2938d0aa',
   '20260908155215_issue85_inf303_release_configuration.sql': '3d0c8bf303871ae8d7621f71518b5dbec85fb687d7cb386f1fa7d03d19c57928',
   '20260908182505_issue85_inf303_compact_mode_parity.sql': '51c0afe1656469ba5742fc174845e0686167cf7e4e748facec370cebba0eb6a4',
-  '20260908182511_issue85_inf303_successor_cutover.sql': '13c853ed3c93a83945c6a9f46370df24827c5760b087d1a6a7d3db42f46a71d7',
+  '20260908182511_issue85_inf303_successor_cutover.sql': 'fd8e4fa8f6181eff551363d1a77a078859eaeacf0da93e2d84bedebfecb97bf4',
+  '20260909072811_issue124_protected_array_response_validator_fix.sql': 'aa46d84e2ebeaf8fdbb49317f1457c8c4498a0caad57fd002875ba96269f9fc0',
+  '20260910133143_issue147_weak_area_options.sql': '28220674b2aff7054a3f68bf4f9f853507141d018f3fde15108ddc35df144485',
+  '20260910172710_issue160_platform_owner_weak_area.sql': '904f65798fb564880f3f8895ab2db722f10a34cc95acf94c06a5e9998fec70d5',
+  '20260911093103_issue150_training_dashboard_learner_detail.sql': '78d9e2cbb2e62ba36257af954ada909ab0318c8da36a831c6d874a714cccaa60',
+  '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql': '5ce820c7c6fe9f72d742a748f81e27c279ff8ac7de16a512a78d0d7713883518',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
