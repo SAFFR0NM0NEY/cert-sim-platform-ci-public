@@ -84,6 +84,7 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260910172710_issue160_platform_owner_weak_area.sql',
   '20260911093103_issue150_training_dashboard_learner_detail.sql',
   '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql',
+  '20260912144534_issue167_resume_rpc_volatility_fix.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -167,6 +168,7 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260910172710_issue160_platform_owner_weak_area.sql': '904f65798fb564880f3f8895ab2db722f10a34cc95acf94c06a5e9998fec70d5',
   '20260911093103_issue150_training_dashboard_learner_detail.sql': '78d9e2cbb2e62ba36257af954ada909ab0318c8da36a831c6d874a714cccaa60',
   '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql': '5ce820c7c6fe9f72d742a748f81e27c279ff8ac7de16a512a78d0d7713883518',
+  '20260912144534_issue167_resume_rpc_volatility_fix.sql': 'a4afd13f8ef4aebfe25523bb7eb0cc34cd5a5aeb1ae5ef3b8fcbe9b8138adf84',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

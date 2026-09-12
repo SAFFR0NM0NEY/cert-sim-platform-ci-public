@@ -1,5 +1,5 @@
 begin;
-select plan(56);
+select plan(79);
 
 select has_table('exam_delivery', 'attempt_abandonment_events', 'abandonment evidence table exists');
 select has_table('exam_delivery', 'attempt_recovery_events', 'recovery evidence table exists');
@@ -25,6 +25,33 @@ select has_function('public', 'certsim_protected_abandon_attempt', array['uuid',
 select has_function('public', 'certsim_protected_recover_study_sandbox', array['uuid','uuid','uuid']);
 select has_function('public', 'certsim_protected_list_recoverable_study_sandboxes', array['uuid','text','text','integer']);
 select has_function('public', 'certsim_protected_get_attempt_lifecycle_summary', array['uuid','uuid']);
+select has_function('public', 'certsim_protected_resume_attempt', array['uuid','uuid']);
+
+select is((select provolatile::text from pg_proc where oid='public.certsim_protected_resume_attempt(uuid,uuid)'::regprocedure), 'v', 'protected resume wrapper is volatile for PostgREST read-write transactions');
+select ok((select not prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='public.certsim_protected_resume_attempt(uuid,uuid)'::regprocedure), 'protected resume wrapper retains its fixed invoker boundary');
+select is((select pg_get_userbyid(proowner) from pg_proc where oid='public.certsim_protected_resume_attempt(uuid,uuid)'::regprocedure), 'postgres', 'protected resume wrapper remains postgres-owned');
+select ok(not has_function_privilege('public', 'public.certsim_protected_resume_attempt(uuid,uuid)', 'EXECUTE'), 'PUBLIC cannot invoke protected resume wrapper');
+select ok(not has_function_privilege('anon', 'public.certsim_protected_resume_attempt(uuid,uuid)', 'EXECUTE'), 'anonymous cannot invoke protected resume wrapper');
+select ok(not has_function_privilege('authenticated', 'public.certsim_protected_resume_attempt(uuid,uuid)', 'EXECUTE'), 'browser cannot invoke protected resume wrapper');
+select ok(has_function_privilege('service_role', 'public.certsim_protected_resume_attempt(uuid,uuid)', 'EXECUTE'), 'protected service can invoke protected resume wrapper');
+
+select is((select provolatile::text from pg_proc where oid='exam_delivery.resume_attempt(uuid,uuid)'::regprocedure), 'v', 'private resume implementation remains volatile');
+select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=10s'] from pg_proc where oid='exam_delivery.resume_attempt(uuid,uuid)'::regprocedure), 'private resume retains its bounded definer boundary');
+select is((select pg_get_userbyid(proowner) from pg_proc where oid='exam_delivery.resume_attempt(uuid,uuid)'::regprocedure), 'postgres', 'private resume remains postgres-owned');
+select ok(has_function_privilege('service_role', 'exam_delivery.resume_attempt(uuid,uuid)', 'EXECUTE'), 'protected service retains private resume execution');
+
+select is((select provolatile::text from pg_proc where oid='exam_delivery.resume_current_attempt(uuid,text,text)'::regprocedure), 'v', 'private current-attempt resume is volatile');
+select ok((select prosecdef and proconfig @> array['search_path=""','statement_timeout=5s'] from pg_proc where oid='exam_delivery.resume_current_attempt(uuid,text,text)'::regprocedure), 'private current-attempt resume retains its bounded definer boundary');
+select is((select pg_get_userbyid(proowner) from pg_proc where oid='exam_delivery.resume_current_attempt(uuid,text,text)'::regprocedure), 'postgres', 'private current-attempt resume remains postgres-owned');
+select ok(has_function_privilege('service_role', 'exam_delivery.resume_current_attempt(uuid,text,text)', 'EXECUTE'), 'protected service retains private current-attempt resume execution');
+
+select is((select provolatile::text from pg_proc where oid='public.certsim_protected_resume_current_attempt(uuid,text,text)'::regprocedure), 'v', 'protected current-attempt resume wrapper is volatile');
+select ok((select not prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid='public.certsim_protected_resume_current_attempt(uuid,text,text)'::regprocedure), 'protected current-attempt resume wrapper retains its fixed invoker boundary');
+select is((select pg_get_userbyid(proowner) from pg_proc where oid='public.certsim_protected_resume_current_attempt(uuid,text,text)'::regprocedure), 'postgres', 'protected current-attempt resume wrapper remains postgres-owned');
+select ok(not has_function_privilege('public', 'public.certsim_protected_resume_current_attempt(uuid,text,text)', 'EXECUTE'), 'PUBLIC cannot invoke protected current-attempt resume wrapper');
+select ok(not has_function_privilege('anon', 'public.certsim_protected_resume_current_attempt(uuid,text,text)', 'EXECUTE'), 'anonymous cannot invoke protected current-attempt resume wrapper');
+select ok(not has_function_privilege('authenticated', 'public.certsim_protected_resume_current_attempt(uuid,text,text)', 'EXECUTE'), 'browser cannot invoke protected current-attempt resume wrapper');
+select ok(has_function_privilege('service_role', 'public.certsim_protected_resume_current_attempt(uuid,text,text)', 'EXECUTE'), 'protected service can invoke protected current-attempt resume wrapper');
 
 select is((select pg_get_userbyid(proowner) from pg_proc where oid='exam_delivery.abandon_attempt(uuid,uuid,uuid)'::regprocedure), 'postgres', 'abandon is postgres-owned');
 select is((select pg_get_userbyid(proowner) from pg_proc where oid='exam_delivery.recover_study_sandbox(uuid,uuid,uuid)'::regprocedure), 'postgres', 'recovery is postgres-owned');

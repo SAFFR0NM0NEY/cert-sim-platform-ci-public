@@ -6,13 +6,30 @@ import { getProtectedExitContract } from '../src/lib/protectedLifecycle.js';
 const migrationDirectory = new URL('../supabase/migrations/', import.meta.url);
 const migrationNames = (await readdir(migrationDirectory)).filter((name) => name.endsWith('.sql')).sort();
 const issue167Migrations = migrationNames.filter((name) => name.endsWith('_issue167_study_sandbox_lifecycle_recovery.sql'));
+const issue167HotfixMigrations = migrationNames.filter((name) => name.endsWith('_issue167_resume_rpc_volatility_fix.sql'));
 
-assert.equal(migrationNames.length, 80, 'Issue #167 must move the checked-in migration count from 79 to 80');
+assert.equal(migrationNames.length, 81, 'Issue #167 B4A must move the checked-in migration count from 80 to 81');
 assert.equal(issue167Migrations.length, 1, 'Issue #167 must contain exactly one lifecycle migration');
+assert.equal(issue167HotfixMigrations.length, 1, 'Issue #167 B4A must contain exactly one resume volatility hotfix migration');
 
 const source = await readFile(new URL(`../supabase/migrations/${issue167Migrations[0]}`, import.meta.url), 'utf8');
 const lower = source.toLowerCase();
-assert.equal(createHash('sha256').update(source).digest('hex'), '5ce820c7c6fe9f72d742a748f81e27c279ff8ac7de16a512a78d0d7713883518');
+assert.equal(canonicalSha256(source), '5ce820c7c6fe9f72d742a748f81e27c279ff8ac7de16a512a78d0d7713883518');
+const hotfixSource = await readFile(new URL(`../supabase/migrations/${issue167HotfixMigrations[0]}`, import.meta.url), 'utf8');
+const hotfixLower = hotfixSource.toLowerCase();
+assert.equal(canonicalSha256(hotfixSource), 'a4afd13f8ef4aebfe25523bb7eb0cc34cd5a5aeb1ae5ef3b8fcbe9b8138adf84');
+assert.deepEqual(
+  [...hotfixLower.matchAll(/^alter function ([^(]+\([^;]+\)) volatile;$/gm)].map((match) => match[1]),
+  [
+    'public.certsim_protected_resume_attempt(uuid, uuid)',
+    'exam_delivery.resume_current_attempt(uuid, text, text)',
+    'public.certsim_protected_resume_current_attempt(uuid, text, text)',
+  ],
+  'B4A must alter only the three audited resume-chain declarations',
+);
+assert.equal((hotfixLower.match(/^alter function\b/gm) ?? []).length, 3);
+assert.match(hotfixLower, /notify pgrst, 'reload schema';/);
+assert.doesNotMatch(hotfixLower, /\b(?:create|replace|drop|grant|revoke|insert|update|delete|truncate|merge)\b/);
 
 for (const object of [
   'exam_delivery.attempt_abandonment_events',
@@ -81,7 +98,7 @@ for (const table of ['attempt_abandonment_events', 'attempt_recovery_events']) {
   assert.match(inserts[0][0], /\) values \(/i, `${table} insert must be row-scoped, not a historical SELECT backfill`);
 }
 
-const [routes, handler, responses, client, runner, presentation, details] = await Promise.all([
+const [routes, handler, responses, client, runner, presentation, details, postgrestIntegration, workflow] = await Promise.all([
   readFile(new URL('../supabase/functions/certsim-protected-exam/routes.ts', import.meta.url), 'utf8'),
   readFile(new URL('../supabase/functions/certsim-protected-exam/handler.ts', import.meta.url), 'utf8'),
   readFile(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8'),
@@ -89,6 +106,8 @@ const [routes, handler, responses, client, runner, presentation, details] = awai
   readFile(new URL('../src/components/exam/ProtectedExamRunner.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/exam/ExamWorkspacePresentation.jsx', import.meta.url), 'utf8'),
   readFile(new URL('../src/components/exam/StudentDetails.jsx', import.meta.url), 'utf8'),
+  readFile(new URL('./test-issue167-resume-postgrest-integration.mjs', import.meta.url), 'utf8'),
+  readFile(new URL('../.github/workflows/backend-exam-delivery-db-validation.yml', import.meta.url), 'utf8'),
 ]);
 
 for (const route of [
@@ -121,6 +140,15 @@ assert.match(presentation, /fieldset className="protected-interaction-fieldset" 
 assert.match(runner, /recoveryRequest\.current\.requestId/);
 assert.match(runner, /listCurrentAttemptBindings[\s\S]*listRecoverableStudySandboxes/);
 assert.match(details, /Save & exit preserves this same Study Sandbox[\s\S]*30-day inactivity window[\s\S]*Discard saved sandbox is permanent/);
+assert.match(postgrestIntegration, /ISSUE167_DISPOSABLE_LOCAL_(?:DATABASE|POSTGREST)_REQUIRED/g);
+assert.match(postgrestIntegration, /\/rest\/v1\/rpc\/certsim_protected_resume_attempt/);
+assert.match(postgrestIntegration, /method:\s*'POST'/);
+assert.match(postgrestIntegration, /POSTGREST_RESUME_SQLSTATE_25006/);
+assert.match(postgrestIntegration, /practice_last_activity_at/);
+assert.match(postgrestIntegration, /saved-response-167-b4a/);
+assert.match(postgrestIntegration, /attempt_results|review_snapshots/);
+assert.match(workflow, /SUPABASE_URL="\$API_URL" SUPABASE_SERVICE_ROLE_KEY="\$SERVICE_ROLE_KEY" SUPABASE_DB_URL="\$DB_URL" node scripts\/test-issue167-resume-postgrest-integration\.mjs/);
+assert.doesNotMatch(postgrestIntegration, /supabase\.co|certsimplatform\.com|qngnoctsdhzcpagesvxz/i);
 
 assert.deepEqual(Object.fromEntries([
   'assigned_assessment',
@@ -138,4 +166,8 @@ assert.deepEqual(Object.fromEntries([
   pbq_practice: 'End practice',
 });
 
-console.log(`Issue #167 audited Study Sandbox lifecycle backend and B2.1 ambiguous-discard frontend contract validated in ${issue167Migrations[0]}.`);
+console.log(`Issue #167 lifecycle contract and B4A resume volatility hotfix validated in ${issue167Migrations[0]} and ${issue167HotfixMigrations[0]}.`);
+
+function canonicalSha256(value) {
+  return createHash('sha256').update(value.replaceAll('\r\n', '\n')).digest('hex');
+}
