@@ -56,6 +56,10 @@ const edgeRuntime = listFiles(resolve(root, 'supabase/functions'))
   .filter((path) => /\.(?:js|jsx|mjs|ts|tsx|json)$/.test(path))
   .map((path) => read(`supabase/functions/${path}`))
   .join('\n');
+const browserRuntime = listFiles(resolve(root, 'src'))
+  .filter((path) => /\.(?:js|jsx|mjs|ts|tsx)$/.test(path))
+  .map((path) => read(`src/${path}`))
+  .join('\n');
 const launcher = read('services/python-executor-modal/src/launcher.py');
 const docs = read('docs/PYTHON_MODAL_INTEGRATION.md');
 const modalApp = read('services/python-executor-modal/modal_app.py');
@@ -107,8 +111,30 @@ assert.match(modalApp, /@modal\.web_server\(8000, startup_timeout=30\.0, require
 assert.match(modalApp, /min_containers=0/);
 assert.match(modalApp, /max_containers=5/);
 assert.match(modalApp, /Secret\.from_local_environ/);
-assert.doesNotMatch(modalApp, /CERTSIM_PYTHON_GRADING_ENABLED|CERTSIM_GRADING_SIGNING_SECRET/);
+const secretDefinition = modalApp.match(/bridge_secrets\s*=\s*modal\.Secret\.from_local_environ\(\s*\[([\s\S]*?)\]\s*\)/)?.[1] ?? '';
+assert.deepEqual(
+  [...secretDefinition.matchAll(/["']([^"']+)["']/g)].map((match) => match[1]),
+  [
+    'CERTSIM_MODAL_API_TOKEN_ID',
+    'CERTSIM_MODAL_API_TOKEN_SECRET',
+    'CERTSIM_EXECUTION_SIGNING_SECRET',
+    'CERTSIM_GRADING_SIGNING_SECRET',
+  ],
+);
+const deploymentEnvironment = modalApp.match(/@app\.function\([\s\S]*?env=\{([\s\S]*?)\},\s*cpu=/)?.[1] ?? '';
+assert.deepEqual(
+  Object.fromEntries([...deploymentEnvironment.matchAll(/["']([^"']+)["']\s*:\s*["']([^"']+)["']/g)]
+    .map((match) => [match[1], match[2]])),
+  {
+    CERTSIM_PYTHON_EXECUTION_ENABLED: 'YES',
+    CERTSIM_PYTHON_GRADING_ENABLED: 'YES',
+    CERTSIM_MODAL_SAFE_DIAGNOSTICS: 'YES',
+    PORT: '8000',
+  },
+);
+assert.match(modalApp, /node_environment\s*=\s*os\.environ\.copy\(\)/);
 assert.doesNotMatch(modalApp, /(?:ak|as|wk|ws)-[A-Za-z0-9_-]{8,}/);
+assert.doesNotMatch(browserRuntime, /CERTSIM_(?:EXECUTION|GRADING)_SIGNING_SECRET/);
 assert.match(docs, /DEVELOPMENT ACCEPTED — PRODUCTION DISABLED/);
 assert.match(docs, /Deno 2\.1\.14/);
 assert.match(docs, /Node 22\+/);
@@ -131,10 +157,14 @@ assert.equal(
 console.log(JSON.stringify({
   ok: true,
   issue: 86,
-  phase: 'integration-completion',
+  phase: 'production-enablement-wiring',
   topology: 'modal-web-server-node22',
   sdk: 'modal@0.10.1',
   featureEnabledByDefault: false,
+  deploymentExecutionEnabled: true,
+  deploymentGradingEnabled: true,
+  learnerSandboxSecrets: 0,
+  browserSigningSecrets: 0,
   edgeImports: 1,
   productionDeployments: 0,
 }));

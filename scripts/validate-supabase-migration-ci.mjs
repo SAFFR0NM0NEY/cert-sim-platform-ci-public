@@ -19,7 +19,7 @@ const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'certsim-supabase-mig
 
 try {
   assert.deepEqual(await discoverSourceMigrations(), SOURCE_MIGRATIONS);
-  assert.equal(Object.keys(SOURCE_MIGRATION_HASHES).length, 84);
+  assert.equal(Object.keys(SOURCE_MIGRATION_HASHES).length, 85);
   assert.throws(
     () => validateMigrationNames(['0001_certsim_identity_foundation.sql']),
     /Legacy four-digit migration filenames/,
@@ -59,7 +59,7 @@ try {
   assert.equal(operations.files.length, 14);
   assert.equal(publication.files.length, 15);
   assert.equal(issue59Preflight.files.length, 53);
-  assert.equal(assignment.files.length, 84);
+  assert.equal(assignment.files.length, 85);
   assert.deepEqual(baseline.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS.slice(0, 12));
   assert.deepEqual(foundation.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS.slice(0, 13));
   assert.deepEqual(operations.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS.slice(0, 14));
@@ -68,37 +68,38 @@ try {
   assert.deepEqual(assignment.files.map(({ fileName }) => fileName), SOURCE_MIGRATIONS);
   assert.ok(!baseline.files.some(({ fileName }) => fileName.startsWith('20260101000013_')));
   assert.ok(foundation.files.some(({ fileName }) => fileName.startsWith('20260101000013_')));
-  assert.equal(SOURCE_MIGRATIONS.at(-31), '20260903120000_issue59_function_definition_line_ending_preflight.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-30), '20260903161929_issue_59_functional_recovery.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-29), '20260904161938_issue65_full_untimed_practice_sessions.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-28), '20260905090355_issue65_live_acceptance_lifecycle_fix.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-27), '20260905153716_ai901_canonical_form_rotation.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-26), '20260905192938_cross_version_package_compatibility.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-25), '20260906104745_register_sc200_runtime_contract.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-24), '20260906115046_selected_response_partial_scorer.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-23), '20260906134050_live_assignment_v2.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-22), '20260906143802_issue83_staged_exam_release.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-21), '20260907072022_issue83_sc200_mode_parity.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-20), '20260907101759_issue83_sc200_successor_cutover.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-19), '20260907152537_issue101_authoritative_trainer_analytics.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-18), '20260907175904_issue101_bounded_training_dashboard_learners.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-17), '20260907202755_issue101_staff_dashboard_summary_alias_fix.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-16), '20260908074922_issue101_learner_domain_parity.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-15), '20260908120351_issue85_python_standard_interaction_scoring.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-14), '20260908134811_issue85_python_standard_publication_contract.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-13), '20260908151342_issue85_python_standard_form_materialization.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-12), '20260908155215_issue85_inf303_release_configuration.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-11), '20260908182505_issue85_inf303_compact_mode_parity.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-10), '20260908182511_issue85_inf303_successor_cutover.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-9), '20260909072811_issue124_protected_array_response_validator_fix.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-8), '20260910133143_issue147_weak_area_options.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-7), '20260910172710_issue160_platform_owner_weak_area.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-6), '20260911093103_issue150_training_dashboard_learner_detail.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-5), '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-4), '20260912144534_issue167_resume_rpc_volatility_fix.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-3), '20260914120212_issue86_python_lab_orchestration.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-2), '20260915063933_issue86_modal_execution_completion.sql');
-  assert.equal(SOURCE_MIGRATIONS.at(-1), '20260916103000_issue86_trusted_grading_completion.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-32), '20260903120000_issue59_function_definition_line_ending_preflight.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-31), '20260903161929_issue_59_functional_recovery.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-30), '20260904161938_issue65_full_untimed_practice_sessions.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-29), '20260905090355_issue65_live_acceptance_lifecycle_fix.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-28), '20260905153716_ai901_canonical_form_rotation.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-27), '20260905192938_cross_version_package_compatibility.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-26), '20260906104745_register_sc200_runtime_contract.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-25), '20260906115046_selected_response_partial_scorer.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-24), '20260906134050_live_assignment_v2.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-23), '20260906143802_issue83_staged_exam_release.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-22), '20260907072022_issue83_sc200_mode_parity.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-21), '20260907101759_issue83_sc200_successor_cutover.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-20), '20260907152537_issue101_authoritative_trainer_analytics.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-19), '20260907175904_issue101_bounded_training_dashboard_learners.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-18), '20260907202755_issue101_staff_dashboard_summary_alias_fix.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-17), '20260908074922_issue101_learner_domain_parity.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-16), '20260908120351_issue85_python_standard_interaction_scoring.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-15), '20260908134811_issue85_python_standard_publication_contract.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-14), '20260908151342_issue85_python_standard_form_materialization.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-13), '20260908155215_issue85_inf303_release_configuration.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-12), '20260908182505_issue85_inf303_compact_mode_parity.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-11), '20260908182511_issue85_inf303_successor_cutover.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-10), '20260909072811_issue124_protected_array_response_validator_fix.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-9), '20260910133143_issue147_weak_area_options.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-8), '20260910172710_issue160_platform_owner_weak_area.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-7), '20260911093103_issue150_training_dashboard_learner_detail.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-6), '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-5), '20260912144534_issue167_resume_rpc_volatility_fix.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-4), '20260914120212_issue86_python_lab_orchestration.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-3), '20260915063933_issue86_modal_execution_completion.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-2), '20260916103000_issue86_trusted_grading_completion.sql');
+  assert.equal(SOURCE_MIGRATIONS.at(-1), '20260916155319_issue86_python_next_generation_release_prep.sql');
   assert.ok(Number(SOURCE_MIGRATIONS.at(-1).slice(0, 14)) > 20260101000013);
   assert.ok(SOURCE_MIGRATIONS.every((name) => !/^\d{4}_/.test(name)));
 

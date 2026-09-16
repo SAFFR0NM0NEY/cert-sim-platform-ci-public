@@ -20,6 +20,7 @@
     "validate:issue153": "node scripts/validate-issue153-az204-attempt-inventory.mjs",
     "validate:issue86": "node scripts/validate-issue86-python-executor.mjs && npm --prefix services/python-executor test && npm --prefix services/python-grading test && npm run test:issue86-frontend",
     "test:issue86-db": "node scripts/test-issue86-python-orchestration-integration.mjs",
+    "test:issue86-release": "node scripts/test-issue86-release-configuration-integration.mjs",
     "test:issue86-frontend": "node --test scripts/test-issue86-python-lab-frontend.mjs",
     "test:issue86-browser": "playwright test tests/r3g/issue86-python-lab.spec.js --workers=1",
     "test:issue86-modal-integration": "npm --prefix services/python-executor-modal ci --ignore-scripts && node scripts/validate-issue86-modal-integration.mjs && npm --prefix services/python-executor-modal test",

@@ -15,7 +15,8 @@ const forbiddenNames = [
   'sy0701questionbank', 'az400pbqdemolabs', 'az400casestudyblocks',
   'feedbackhelpers',
   'reviewhelpers', 'scoreexam', 'private vault', 'cert-sim-protected-content',
-  'service_role',
+  'service_role', 'CERTSIM_EXECUTION_SIGNING_SECRET',
+  'CERTSIM_GRADING_SIGNING_SECRET',
 ];
 const sentinelIds = [
   'sy0701-operations-expansion-012',

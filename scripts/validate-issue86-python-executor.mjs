@@ -340,16 +340,18 @@ assert.deepEqual(
     '20260914120212_issue86_python_lab_orchestration.sql',
     '20260915063933_issue86_modal_execution_completion.sql',
     '20260916103000_issue86_trusted_grading_completion.sql',
+    '20260916155319_issue86_python_next_generation_release_prep.sql',
   ],
-  'Issue #86 must retain R5/R8 and add one current-tail trusted-grading migration',
+  'Issue #86 must retain R5/R8/trusted grading and add one current-tail release-preparation migration',
 );
 const allMigrationNames = (await readdir(path.join(repositoryRoot, 'supabase', 'migrations')))
   .filter((name) => name.endsWith('.sql'))
   .sort();
-assert.equal(allMigrationNames.at(-1), migrationNames[2], 'Issue #86 trusted-grading migration must be the current migration tail');
+assert.equal(allMigrationNames.at(-1), migrationNames[3], 'Issue #86 release-preparation migration must be the current migration tail');
 const orchestrationMigration = await read(`supabase/migrations/${migrationNames[0]}`);
 const completionMigration = await read(`supabase/migrations/${migrationNames[1]}`);
 const trustedCompletionMigration = await read(`supabase/migrations/${migrationNames[2]}`);
+const releasePreparationMigration = await read(`supabase/migrations/${migrationNames[3]}`);
 for (const table of [
   'python_lab_workspaces',
   'python_lab_workspace_revisions',
@@ -466,6 +468,36 @@ assert.match(trustedCompletionMigration, /alter table exam_delivery\.python_subm
 assert.match(trustedCompletionMigration, /question_type='executable-python-lab-v1' then '\{\}'::jsonb else jsonb_build_object\(/);
 assert.match(trustedCompletionMigration, /from public,anon,authenticated,service_role/);
 assert.doesNotMatch(trustedCompletionMigration, /insert into exam_delivery\.(?:practice_policies|exam_profile_activations)/i);
+assert.match(releasePreparationMigration, /insert into exam_delivery\.exam_release_candidates\s*\(/i);
+assert.match(
+  releasePreparationMigration,
+  /on conflict \(canonical_exam_key, package_version, profile_key\)\s*do update set/i,
+);
+for (const required of [
+  "'pythonnextgeneration'",
+  "'1.0.0'",
+  "'standard_active_exam_v1'",
+  "'Python Next Generation'",
+  "'Certiport'",
+  "'certification'",
+  "'official_source'",
+]) assert.ok(releasePreparationMigration.includes(required), `missing release-preparation value: ${required}`);
+assert.equal((releasePreparationMigration.match(/'pythonnextgeneration-no-lab'/g) ?? []).length, 1);
+assert.equal((releasePreparationMigration.match(/'pythonnextgeneration-lab'/g) ?? []).length, 1);
+assert.doesNotMatch(
+  releasePreparationMigration,
+  /insert into (?:exam_delivery\.(?:practice_policies|package_profile_defaults|exam_profile_activations)|public\.exam_catalog)/i,
+);
+const releaseIntegration = await read('scripts/test-issue86-release-configuration-integration.mjs');
+assert.match(releaseIntegration, /exam_delivery\.configure_exam_release_stage/);
+assert.match(releaseIntegration, /'noLabAcceptance'/);
+assert.match(releaseIntegration, /'labAcceptance'/);
+assert.match(releaseIntegration, /'noLabActive'/);
+assert.match(releaseIntegration, /'labActive'/);
+assert.match(releaseIntegration, /maximum_completed_attempts is not null/);
+assert.match(releaseIntegration, /purpose='pbq_practice'/);
+assert.match(releaseIntegration, /declared_review_release_policy='after_submission'/);
+assert.match(releaseIntegration, /rollback;/);
 
 const edgeFiles = {
   routes: await read('supabase/functions/certsim-protected-exam/routes.ts'),
@@ -595,7 +627,7 @@ console.log(JSON.stringify({
   edgeServiceImports: 1,
   learnerWorkspaceIntegrated: true,
   frontendFocusedTests: 15,
-  migration: migrationNames[2],
+  migration: migrationNames[3],
   orchestrationTables: 7,
   protectedOperations: 5,
   trustedSubmissionOperations: 3,
