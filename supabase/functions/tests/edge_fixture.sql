@@ -20,10 +20,16 @@ insert into exam_delivery.package_question_protected_content(question_id,package
 update exam_delivery.package_versions set status='published',published_at=now() where id in ('13000000-0000-4000-8000-000000000001','13000000-0000-4000-8000-000000000086');
 insert into exam_delivery.exam_profile_activations(package_version_id,package_profile_id,enabled,activation_kind,enabled_at,created_by)
 values('13000000-0000-4000-8000-000000000001','13000000-0000-4000-8000-000000000002',true,'production',now(),:'actor_id'::uuid);
+insert into exam_delivery.exam_profile_activations(package_version_id,package_profile_id,enabled,activation_kind,enabled_at,created_by)
+values('13000000-0000-4000-8000-000000000086','13000000-0000-4000-8000-000000000087',true,'production',now(),:'actor_id'::uuid);
 insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy)
 values('ai901','1.0.0','ai901-controlled-beta-compact','study_sandbox','open_authenticated',true,10,true,'immediate_study_feedback','immediate_study_feedback');
+insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy)
+values('issue86edgefixture','1.0.0','issue86-python','study_sandbox','open_authenticated',true,1,true,'immediate_study_feedback','immediate_study_feedback');
 insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,group_id,enabled,valid_from,reason_code,created_by,entitlement_source)
 values('13000000-0000-4000-8000-000000000001','13000000-0000-4000-8000-000000000002','group','12000000-0000-4000-8000-000000000003',true,now()-interval '1 hour','issue86_fixture',:'actor_id'::uuid,'assignment');
+insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,group_id,enabled,valid_from,reason_code,created_by,entitlement_source)
+values('13000000-0000-4000-8000-000000000086','13000000-0000-4000-8000-000000000087','group','12000000-0000-4000-8000-000000000003',true,now()-interval '1 hour','issue86_fixture',:'actor_id'::uuid,'assignment');
 update exam_delivery.pilot_gates set enabled=true,enabled_at=now(),disabled_at=null where exam_key='ai-901';
 insert into exam_delivery.pilot_access(user_id,exam_key,enabled,access_starts_at,access_ends_at) values(:'actor_id'::uuid,'ai-901',true,now()-interval '1 hour',now()+interval '1 day');
 insert into exam_delivery.protected_assignments(
