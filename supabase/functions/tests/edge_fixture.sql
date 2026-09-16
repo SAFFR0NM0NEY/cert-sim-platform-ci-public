@@ -25,7 +25,7 @@ values('13000000-0000-4000-8000-000000000086','13000000-0000-4000-8000-000000000
 insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy)
 values('ai901','1.0.0','ai901-controlled-beta-compact','study_sandbox','open_authenticated',true,10,true,'immediate_study_feedback','immediate_study_feedback');
 insert into exam_delivery.practice_policies(canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy)
-values('issue86edgefixture','1.0.0','issue86-python','study_sandbox','open_authenticated',true,1,true,'immediate_study_feedback','immediate_study_feedback');
+values('issue86edgefixture','1.0.0','issue86-python','study_sandbox','open_authenticated',true,10,true,'immediate_study_feedback','immediate_study_feedback');
 insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,group_id,enabled,valid_from,reason_code,created_by,entitlement_source)
 values('13000000-0000-4000-8000-000000000001','13000000-0000-4000-8000-000000000002','group','12000000-0000-4000-8000-000000000003',true,now()-interval '1 hour','issue86_fixture',:'actor_id'::uuid,'assignment');
 insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,group_id,enabled,valid_from,reason_code,created_by,entitlement_source)
