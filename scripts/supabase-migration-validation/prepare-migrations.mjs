@@ -85,6 +85,9 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260911093103_issue150_training_dashboard_learner_detail.sql',
   '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql',
   '20260912144534_issue167_resume_rpc_volatility_fix.sql',
+  '20260914120212_issue86_python_lab_orchestration.sql',
+  '20260915063933_issue86_modal_execution_completion.sql',
+  '20260916103000_issue86_trusted_grading_completion.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -169,6 +172,9 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260911093103_issue150_training_dashboard_learner_detail.sql': '78d9e2cbb2e62ba36257af954ada909ab0318c8da36a831c6d874a714cccaa60',
   '20260911215509_issue167_study_sandbox_lifecycle_recovery.sql': '5ce820c7c6fe9f72d742a748f81e27c279ff8ac7de16a512a78d0d7713883518',
   '20260912144534_issue167_resume_rpc_volatility_fix.sql': 'a4afd13f8ef4aebfe25523bb7eb0cc34cd5a5aeb1ae5ef3b8fcbe9b8138adf84',
+  '20260914120212_issue86_python_lab_orchestration.sql': 'f692460f8d61b02b06054b4cc3774e0e298bd82f94fb0cfbd1c41bd39a1c3d5d',
+  '20260915063933_issue86_modal_execution_completion.sql': '4ffab647ee09877c3a961bf514ff75a014957fe9c2841cfe1236f6e8c8cd90c0',
+  '20260916103000_issue86_trusted_grading_completion.sql': '16fdb6dfb78888731d64c68746b5294f95cc0099fc02992cfb70b7f524fcab55',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

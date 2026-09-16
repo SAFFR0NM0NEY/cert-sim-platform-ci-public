@@ -1,6 +1,7 @@
 import { SafeError } from "./errors.ts";
 
 export const MAX_BODY_BYTES = 64 * 1024;
+export const PYTHON_WORKSPACE_BODY_BYTES = 300 * 1024;
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const IDENTITY_FIELDS = new Set([
@@ -35,8 +36,41 @@ export function validateObject(
   ) throw new SafeError("invalid_request");
   return object;
 }
+
+const PYTHON_PATH = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*\.py$/;
+const utf8Length = (value: string): number => new TextEncoder().encode(value).byteLength;
+
+export function validatePythonWorkspacePayload(value: unknown): Record<string, unknown> {
+  const workspace = validateObject(value, ["entryPoint", "files"], ["entryPoint", "files"]);
+  if (typeof workspace.entryPoint !== "string" ||
+    utf8Length(workspace.entryPoint) < 1 || utf8Length(workspace.entryPoint) > 240 ||
+    !PYTHON_PATH.test(workspace.entryPoint) || /(^|\/)\.{1,2}(\/|$)/.test(workspace.entryPoint) ||
+    !Array.isArray(workspace.files) || workspace.files.length < 1 || workspace.files.length > 16) {
+    throw new SafeError("invalid_request");
+  }
+  const portablePaths = new Set<string>();
+  let totalBytes = 0;
+  const files = workspace.files.map((entry) => {
+    const file = validateObject(entry, ["path", "content"], ["path", "content"]);
+    if (typeof file.path !== "string" || typeof file.content !== "string" ||
+      utf8Length(file.path) < 1 || utf8Length(file.path) > 240 ||
+      !PYTHON_PATH.test(file.path) || /(^|\/)\.{1,2}(\/|$)/.test(file.path) ||
+      utf8Length(file.content) > 64 * 1024) throw new SafeError("invalid_request");
+    const portablePath = file.path.toLowerCase();
+    if (portablePaths.has(portablePath)) throw new SafeError("invalid_request");
+    portablePaths.add(portablePath);
+    totalBytes += utf8Length(file.content);
+    if (totalBytes > 256 * 1024) throw new SafeError("invalid_request");
+    return { path: file.path, content: file.content };
+  }).sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+  if (!files.some((file) => file.path === workspace.entryPoint)) {
+    throw new SafeError("invalid_request");
+  }
+  return { entryPoint: workspace.entryPoint, files };
+}
 export async function readJsonBody(
   request: Request,
+  maximumBytes = MAX_BODY_BYTES,
 ): Promise<Record<string, unknown>> {
   if (
     !(request.headers.get("content-type") ?? "").toLowerCase().startsWith(
@@ -45,10 +79,10 @@ export async function readJsonBody(
   ) throw new SafeError("unsupported_media_type");
   const declared = request.headers.get("content-length");
   if (
-    declared && (!/^\d+$/.test(declared) || Number(declared) > MAX_BODY_BYTES)
+    declared && (!/^\d+$/.test(declared) || Number(declared) > maximumBytes)
   ) throw new SafeError("payload_too_large");
   const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength > MAX_BODY_BYTES) {
+  if (bytes.byteLength > maximumBytes) {
     throw new SafeError("payload_too_large");
   }
   try {

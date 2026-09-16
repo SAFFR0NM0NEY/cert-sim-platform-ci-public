@@ -63,7 +63,7 @@ test('Saved Results shows canonical exam identities and filters with canonical v
   await expect(page.getByText('Certification exam', { exact: true })).toHaveCount(0);
   await expect(page.getByText('securityplussy0701', { exact: false })).toHaveCount(0);
 
-  await page.getByLabel('Exam').selectOption('security-plus-sy0-701');
+  await page.locator('select:has(option[value="security-plus-sy0-701"])').selectOption('security-plus-sy0-701');
   await expect(page.getByRole('button', { name: /^SY0-701 — Security\+/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /^AI-901 — Azure AI Fundamentals/ })).toHaveCount(0);
   expect(filters).toContain('security-plus-sy0-701');

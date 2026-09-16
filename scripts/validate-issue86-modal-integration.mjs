@@ -1,0 +1,140 @@
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const root = process.cwd();
+const serviceRoot = resolve(root, 'services/python-executor-modal');
+const read = (path) => readFileSync(resolve(root, path), 'utf8');
+const packageJson = JSON.parse(read('services/python-executor-modal/package.json'));
+const packageLock = JSON.parse(read('services/python-executor-modal/package-lock.json'));
+
+function listFiles(directory, prefix = '') {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name === 'node_modules') return [];
+    const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+    return entry.isDirectory()
+      ? listFiles(resolve(directory, entry.name), relative)
+      : [relative];
+  });
+}
+
+const expectedFiles = [
+  'modal_app.py',
+  'package-lock.json',
+  'package.json',
+  'src/config.mjs',
+  'src/index.mjs',
+  'src/isolation.mjs',
+  'src/launcher.py',
+  'src/output.mjs',
+  'src/provider.mjs',
+  'src/server.mjs',
+  'src/service.mjs',
+  'src/terminal-execution.mjs',
+  'src/trusted-grading-flow.mjs',
+  'tests/config.test.mjs',
+  'tests/output.test.mjs',
+  'tests/provider.test.mjs',
+  'tests/sdk.test.mjs',
+  'tests/terminal-service.test.mjs',
+  'tests/trusted-grading-flow.test.mjs',
+];
+assert.deepEqual(listFiles(serviceRoot).sort(), expectedFiles.sort());
+assert.equal(packageJson.private, true);
+assert.equal(packageJson.type, 'module');
+assert.equal(packageJson.engines.node, '>=22');
+assert.deepEqual(packageJson.dependencies, { modal: '0.10.1' });
+assert.deepEqual(packageJson.devDependencies, {});
+assert.equal(packageLock.packages[''].dependencies.modal, '0.10.1');
+assert.equal(packageLock.packages['node_modules/modal'].version, '0.10.1');
+
+const runtime = expectedFiles
+  .filter((path) => path.startsWith('src/'))
+  .map((path) => read(`services/python-executor-modal/${path}`))
+  .join('\n');
+const edgeRuntime = listFiles(resolve(root, 'supabase/functions'))
+  .filter((path) => /\.(?:js|jsx|mjs|ts|tsx|json)$/.test(path))
+  .map((path) => read(`supabase/functions/${path}`))
+  .join('\n');
+const launcher = read('services/python-executor-modal/src/launcher.py');
+const docs = read('docs/PYTHON_MODAL_INTEGRATION.md');
+const modalApp = read('services/python-executor-modal/modal_app.py');
+const workflow = read('.github/workflows/frontend-feature-validation.yml');
+const rootPackage = JSON.parse(read('package.json'));
+
+assert.doesNotMatch(edgeRuntime, /from\s+['"]modal['"]|import\(['"]modal['"]\)|python-executor-modal/);
+assert.match(runtime, /await import\('modal'\)/);
+assert.match(runtime, /CERTSIM_PYTHON_EXECUTION_ENABLED/);
+assert.match(runtime, /MODAL_FEATURE_ENABLED_VALUE = 'YES'/);
+assert.match(runtime, /new DisabledPythonExecutionProvider\(\)/);
+assert.match(runtime, /blockNetwork:\s*true/);
+assert.match(runtime, /includeOidcIdentityToken:\s*false/);
+assert.match(runtime, /secrets:\s*\[\]/);
+assert.match(runtime, /volumes:\s*\{\}/);
+assert.match(runtime, /cloudBucketMounts:\s*\{\}/);
+assert.match(runtime, /cpuLimit:\s*MODAL_PROVIDER_LIMITS\.cpuLimit/);
+assert.match(runtime, /normalizeExecutionRequest/);
+assert.match(runtime, /normalizeExecutionResult/);
+assert.match(runtime, /verifySignedExecutionEnvelope/);
+assert.match(runtime, /createServerExecutionRequest/);
+assert.match(runtime, /assertAuthenticatedGradingEvidenceForExecution/);
+assert.match(runtime, /createTrustedPythonGradeCallback/);
+assert.match(runtime, /executeTrustedPythonGradingRequest/);
+assert.match(runtime, /normalizeTrustedGradingMaterial/);
+assert.match(runtime, /CERTSIM_PYTHON_GRADING_ENABLED/);
+assert.match(runtime, /CERTSIM_GRADING_SIGNING_SECRET/);
+assert.match(runtime, /grading === execution/);
+assert.match(runtime, /persistVerifiedEvidence/);
+assert.match(runtime, /applyGenericScore/);
+assert.match(runtime, /executeSignedRequestToTerminal/);
+assert.match(runtime, /\/v1\/execute/);
+assert.match(runtime, /\/v1\/grade/);
+assert.doesNotMatch(runtime, /console\.(?:log|error)|process\.(?:stdout|stderr)\.write/);
+assert.doesNotMatch(runtime, /(?:ak|as|oc|ov)-[A-Za-z0-9_-]{16,}/);
+
+assert.match(launcher, /CLONE_NEWUSER \| CLONE_NEWNS \| CLONE_NEWPID/);
+assert.match(launcher, /WORKSPACE_BYTES = 16 \* 1024 \* 1024/);
+assert.match(launcher, /RLIMIT_NPROC, \(MAX_PROCESSES, MAX_PROCESSES\)/);
+assert.match(launcher, /MS_NOSUID \| MS_NODEV \| MS_NOEXEC/);
+assert.match(launcher, /os\.setgid\(LEARNER_GID\)[\s\S]+os\.setuid\(LEARNER_UID\)/);
+assert.match(launcher, /PR_SET_NO_NEW_PRIVS/);
+assert.match(launcher, /PR_SET_SECCOMP/);
+assert.match(launcher, /os\.environ\.clear\(\)/);
+assert.match(launcher, /os\.chroot\(mountpoint\)/);
+
+assert.match(modalApp, /node:22-bookworm-slim/);
+assert.match(modalApp, /@modal\.web_server\(8000, startup_timeout=30\.0, requires_proxy_auth=True\)/);
+assert.match(modalApp, /min_containers=0/);
+assert.match(modalApp, /max_containers=5/);
+assert.match(modalApp, /Secret\.from_local_environ/);
+assert.doesNotMatch(modalApp, /CERTSIM_PYTHON_GRADING_ENABLED|CERTSIM_GRADING_SIGNING_SECRET/);
+assert.doesNotMatch(modalApp, /(?:ak|as|wk|ws)-[A-Za-z0-9_-]{8,}/);
+assert.match(docs, /DEVELOPMENT ACCEPTED — PRODUCTION DISABLED/);
+assert.match(docs, /Deno 2\.1\.14/);
+assert.match(docs, /Node 22\+/);
+assert.match(docs, /generic CertSim scorer/);
+assert.match(docs, /all 423 rules exactly/);
+assert.match(docs, /two corrected TOKEN rules/);
+assert.match(docs, /`POST \/v1\/grade`/);
+assert.match(docs, /exactly five[\s\S]*6\.729 seconds[\s\S]*billed\/metered delta was zero/);
+assert.match(workflow, /services\/python-executor-modal\/\*\*/);
+assert.match(workflow, /run: npm run test:issue86-modal-integration/);
+assert.equal(
+  rootPackage.scripts?.['test:issue86-modal-integration'],
+  'npm --prefix services/python-executor-modal ci --ignore-scripts && node scripts/validate-issue86-modal-integration.mjs && npm --prefix services/python-executor-modal test',
+);
+assert.equal(
+  rootPackage.scripts?.['test:issue86-modal-live'],
+  'node scripts/test-issue86-modal-live-acceptance.mjs',
+);
+
+console.log(JSON.stringify({
+  ok: true,
+  issue: 86,
+  phase: 'integration-completion',
+  topology: 'modal-web-server-node22',
+  sdk: 'modal@0.10.1',
+  featureEnabledByDefault: false,
+  edgeImports: 1,
+  productionDeployments: 0,
+}));

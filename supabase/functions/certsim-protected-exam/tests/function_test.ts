@@ -10,11 +10,12 @@ import { corsHeaders } from "../cors.ts";
 import { SafeError, translateRpcFailure } from "../errors.ts";
 import { handleProtectedExam } from "../handler.ts";
 import { matchRoute } from "../routes.ts";
-import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapAttemptLifecycleSummary, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapPracticeAvailability, mapPracticeCheck, mapQuestionIssue, mapRecoverableStudySandboxes, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffLearnerDetail, mapStaffScopeOptions, mapStudySandboxRecovery, mapWeakAreaOptions } from "../responses.ts";
+import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapAttemptLifecycleSummary, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapPracticeAvailability, mapPracticeCheck, mapPythonRun, mapPythonWorkspace, mapPythonWorkspaceSave, mapQuestionIssue, mapRecoverableStudySandboxes, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffLearnerDetail, mapStaffScopeOptions, mapStudySandboxRecovery, mapWeakAreaOptions } from "../responses.ts";
 import {
   MAX_BODY_BYTES,
   readJsonBody,
   validateObject,
+  validatePythonWorkspacePayload,
   validateResponsePayload,
 } from "../validation.ts";
 
@@ -432,6 +433,132 @@ Deno.test("Issue 167 lifecycle routes are exact and method-bound", () => {
   ]) {
     assertThrows(() => matchRoute(request(path, { method })), SafeError, "method_not_allowed");
   }
+});
+
+Deno.test("Issue 86 Python orchestration routes are exact and method-bound", () => {
+  const runId = "15000000-0000-4000-8000-000000000001";
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`)).id, "pythonWorkspaceGet");
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`, { method: "PUT", body: "{}" })).id, "pythonWorkspaceSave");
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs`, { method: "POST", body: "{}" })).id, "pythonRunRequest");
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}`)).id, "pythonRunStatus");
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}/cancel`, { method: "POST", body: "{}" })).id, "pythonRunCancel");
+  for (const [path, method] of [
+    [`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`, "POST"],
+    [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs`, "GET"],
+    [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}`, "PUT"],
+    [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}/cancel`, "GET"],
+  ]) assertThrows(() => matchRoute(request(path, { method })), SafeError);
+});
+
+Deno.test("Issue 86 workspace payload is canonical, bounded, and source-only", () => {
+  const normalized = validatePythonWorkspacePayload({
+    files: [
+      { path: "support/helper.py", content: "value = 7\n" },
+      { path: "main.py", content: "print('synthetic')\n" },
+    ],
+    entryPoint: "main.py",
+  });
+  assertEquals(normalized, {
+    entryPoint: "main.py",
+    files: [
+      { path: "main.py", content: "print('synthetic')\n" },
+      { path: "support/helper.py", content: "value = 7\n" },
+    ],
+  });
+  for (const invalid of [
+    { entryPoint: "main.py", files: [{ path: "main.py", content: "", hiddenTests: [] }] },
+    { entryPoint: "../main.py", files: [{ path: "../main.py", content: "" }] },
+    { entryPoint: "main.py", files: [{ path: "Main.py", content: "" }, { path: "main.py", content: "" }] },
+    { entryPoint: "missing.py", files: [{ path: "main.py", content: "" }] },
+    { entryPoint: "main.txt", files: [{ path: "main.txt", content: "" }] },
+  ]) assertThrows(() => validatePythonWorkspacePayload(invalid), SafeError);
+});
+
+Deno.test("Issue 86 workspace HTTP contracts inject actor authority and bound DTOs", async () => {
+  const hash = "a".repeat(64);
+  const readDeps = deps({ ok: true, itemId: ITEM, exists: false, revision: 0, workspaceHash: null, workspace: null, updatedAt: null });
+  const readResponse = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`), readDeps.value);
+  assertEquals(readResponse.status, 200);
+  assertEquals(readDeps.calls[0], {
+    name: "certsim_protected_get_python_workspace",
+    args: { p_actor_id: ACTOR, p_attempt_id: ATTEMPT, p_item_id: ITEM },
+  });
+  assertEquals(await readResponse.json(), { itemId: ITEM, exists: false, revision: 0, workspaceHash: null, workspace: null, updatedAt: null });
+
+  const saveDeps = deps({ ok: true, itemId: ITEM, revision: 1, workspaceHash: hash, updatedAt: "2026-09-14T12:00:00Z" });
+  const saveResponse = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`, {
+    method: "PUT",
+    body: JSON.stringify({
+      workspace: { entryPoint: "main.py", files: [{ path: "main.py", content: "print('synthetic')\n" }] },
+      expectedRevision: 0,
+      requestId: REQUEST,
+    }),
+  }), saveDeps.value);
+  assertEquals(saveResponse.status, 200);
+  assertEquals(saveDeps.calls[0].name, "certsim_protected_save_python_workspace");
+  assertEquals(saveDeps.calls[0].args.p_actor_id, ACTOR);
+  assertEquals(saveDeps.calls[0].args.p_workspace, { entryPoint: "main.py", files: [{ path: "main.py", content: "print('synthetic')\n" }] });
+  assertEquals(await saveResponse.json(), { itemId: ITEM, revision: 1, workspaceHash: hash, updatedAt: "2026-09-14T12:00:00Z" });
+});
+
+Deno.test("Issue 86 run request remains server-disabled without configuration", async () => {
+  const d = deps();
+  const response = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs`, {
+    method: "POST",
+    body: JSON.stringify({ expectedRevision: 1, requestId: REQUEST }),
+  }), {
+    ...d.value,
+    executePythonRun: async () => { throw new SafeError("executor_disabled"); },
+  });
+  assertEquals(response.status, 503);
+  assertEquals((await response.json()).error.code, "executor_disabled");
+  assertEquals(d.calls, []);
+  assertEquals(d.created, 1);
+});
+
+Deno.test("Issue 86 run status and cancellation DTOs exclude provider and grading data", async () => {
+  const runId = "15000000-0000-4000-8000-000000000001";
+  const value = {
+    ok: true,
+    runId,
+    state: "cancel_requested",
+    terminalOutcome: null,
+    stdout: "",
+    stderr: "",
+    exitCode: null,
+    cancellationRequestedAt: "2026-09-14T12:00:01Z",
+    disposalState: "pending",
+    createdAt: "2026-09-14T12:00:00Z",
+    updatedAt: "2026-09-14T12:00:01Z",
+  };
+  const statusDeps = deps(value);
+  const statusResponse = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}`), statusDeps.value);
+  assertEquals(statusResponse.status, 200);
+  const { ok: _ok, ...safeValue } = value;
+  assertEquals(await statusResponse.json(), safeValue);
+  const cancelDeps = deps(value);
+  let cancelInput: Record<string, unknown> = {};
+  const cancelResponse = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}/cancel`, {
+    method: "POST", body: JSON.stringify({ requestId: REQUEST }),
+  }), {
+    ...cancelDeps.value,
+    cancelPythonRun: async (input) => { cancelInput = input; return value; },
+  });
+  assertEquals(cancelResponse.status, 200);
+  assertEquals(cancelInput, {
+    actorId: ACTOR, admin: cancelInput.admin, attemptId: ATTEMPT,
+    cancelRequestId: REQUEST, itemId: ITEM, runId,
+  });
+  assertThrows(() => mapPythonRun({ ...value, providerExecutionId: "blocked" }), SafeError);
+  assertThrows(() => mapPythonWorkspace({ ok: true, itemId: ITEM, exists: false, revision: 0, workspaceHash: null, workspace: null, updatedAt: null, gradingMaterial: "blocked" }), SafeError);
+  assertThrows(() => mapPythonWorkspaceSave({ ok: true, itemId: ITEM, revision: 1, workspaceHash: "a".repeat(64), updatedAt: "now", ownerId: ACTOR }), SafeError);
+});
+
+Deno.test("Issue 86 cross-owner denials retain anti-enumerating HTTP status", async () => {
+  const d = deps({ ok: false, code: "attempt_not_found" });
+  const response = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`), d.value);
+  assertEquals(response.status, 404);
+  assertEquals((await response.json()).error.code, "attempt_not_found");
 });
 
 Deno.test("Issue 167 lifecycle summary derives its actor and returns only the safe DTO", async () => {
@@ -1497,7 +1624,10 @@ Deno.test("public PBQ scoring labels pass while protected scoring fields fail cl
   assertNoProtectedPreReview({
     items: [{ presentation: { decisions: [{ scoringLabel: "Synthetic public label" }] } }],
   });
-  for (const key of ["scoring", "scoringRules", "correctAnswer", "packageHash"]) {
+  for (const key of [
+    "scoring", "scoringRules", "correctAnswer", "packageHash",
+    "hiddenTests", "expectedOutput", "gradingKey", "protectedMaterialDigest", "correctCode",
+  ]) {
     assertRejects(
       async () => assertNoProtectedPreReview({ presentation: { [key]: "blocked" } }),
       SafeError,

@@ -42,7 +42,7 @@ const SAFE_PRESENTATION_TYPES = new Set([
   'single-choice', 'multi-select', 'reorder', 'drag-drop-match',
   'dropdown-code', 'dropdown-command', 'case-study-context', 'informational',
   'true-false-single-v1', 'true-false-composite-v1', 'matching-v1',
-  'code-dropdown-completion-v1',
+  'code-dropdown-completion-v1', 'executable-python-lab-v1',
   'pbq-terminal', 'pbq-multi-host-terminal', 'pbq-firewall', 'pbq-siem',
   'pbq-network-diagram', 'pbq-config-panel', 'pbq-hotspot',
   'pbq-drag-drop-match', 'pbq-ordering', 'pbq-workspace',
@@ -59,6 +59,9 @@ const BLOCKED_PRESENTATION_KEYS = new Set([
   'publicationrequestid', 'internaluuid',
   'correctvalue', 'correctvaluesbystatement', 'correcttargetidsbysource',
   'correctoptionidsbyblank', 'pointsbyblank', 'maximumrawpoints', 'modelsolution',
+  'correctcode', 'expectedoutput', 'expectedoutputs', 'gradingkey', 'gradingkeys',
+  'gradingrule', 'gradingrules', 'hiddentest', 'hiddentests', 'materialdigest',
+  'protectedmaterialdigest',
 ]);
 
 // Terminal replay state is intentionally ephemeral. Resume rebuilds an empty

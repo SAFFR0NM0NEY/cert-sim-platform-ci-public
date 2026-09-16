@@ -4,6 +4,10 @@ const base = Deno.env.get("CERTSIM_EDGE_URL")!,
   anon = Deno.env.get("CERTSIM_ANON_KEY")!,
   db = Deno.env.get("CERTSIM_DB_URL")!,
   actorId = Deno.env.get("CERTSIM_ACTOR_ID")!;
+const pythonAttemptId = "15000000-0000-4000-8000-000000000086";
+const pythonItemId = "15000000-0000-4000-8000-000000000088";
+const outsiderAttemptId = "15000000-0000-4000-8000-000000000091";
+const outsiderItemId = "15000000-0000-4000-8000-000000000093";
 const headers = {
   authorization: `Bearer ${token}`,
   apikey: anon,
@@ -27,6 +31,7 @@ function noProtected(value: unknown) {
       "explanation",
       "remediation",
       "scoring",
+      "grading",
       "rubric",
       "protected",
       "packagehash",
@@ -43,6 +48,105 @@ async function sql(statement: string) {
   const result = await command.output();
   if (!result.success) throw new Error("disposable SQL command failed");
 }
+
+async function scalar(statement: string) {
+  const command = new Deno.Command("psql", {
+    args: [db, "-v", "ON_ERROR_STOP=1", "-qAt", "-c", statement],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const result = await command.output();
+  if (!result.success) throw new Error("disposable SQL query failed");
+  return new TextDecoder().decode(result.stdout).trim();
+}
+
+Deno.test("Issue 86 disposable authenticated workspace and disabled-run HTTP lifecycle", async () => {
+  const empty = await call(`/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`);
+  assertEquals(empty.response.status, 200);
+  assertEquals(empty.data, {
+    itemId: pythonItemId,
+    exists: false,
+    revision: 0,
+    workspaceHash: null,
+    workspace: null,
+    updatedAt: null,
+  });
+  noProtected(empty.data);
+
+  const requestId = crypto.randomUUID();
+  const saveBody = {
+    workspace: {
+      entryPoint: "main.py",
+      files: [
+        { path: "util.py", content: "VALUE = 42\n" },
+        { path: "main.py", content: "print(42)\n" },
+      ],
+    },
+    expectedRevision: 0,
+    requestId,
+  };
+  const saved = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
+    "PUT",
+    saveBody,
+  );
+  assertEquals(saved.response.status, 200);
+  assertEquals(saved.data.itemId, pythonItemId);
+  assertEquals(saved.data.revision, 1);
+  assert(/^[0-9a-f]{64}$/.test(saved.data.workspaceHash));
+  noProtected(saved.data);
+
+  const replay = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
+    "PUT",
+    saveBody,
+  );
+  assertEquals(replay.response.status, 200);
+  assertEquals(replay.data, saved.data);
+
+  const loaded = await call(`/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`);
+  assertEquals(loaded.response.status, 200);
+  assertEquals(loaded.data.revision, 1);
+  assertEquals(loaded.data.workspace.files.map((file: { path: string }) => file.path), ["main.py", "util.py"]);
+  noProtected(loaded.data);
+
+  const stale = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
+    "PUT",
+    { ...saveBody, requestId: crypto.randomUUID() },
+  );
+  assertEquals(stale.response.status, 409);
+  assertEquals(stale.data.error.code, "revision_conflict");
+
+  const invalid = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
+    "PUT",
+    {
+      workspace: { entryPoint: "../main.py", files: [{ path: "../main.py", content: "print(1)" }] },
+      expectedRevision: 1,
+      requestId: crypto.randomUUID(),
+    },
+  );
+  assertEquals(invalid.response.status, 400);
+  assertEquals(invalid.data.error.code, "invalid_request");
+
+  const denied = await call(`/attempts/${outsiderAttemptId}/items/${outsiderItemId}/python/workspace`);
+  assertEquals(denied.response.status, 404);
+  assertEquals(denied.data.error.code, "attempt_not_found");
+
+  const run = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/runs`,
+    "POST",
+    { expectedRevision: 1, requestId: crypto.randomUUID() },
+  );
+  assertEquals(run.response.status, 503);
+  assertEquals(run.data.error.code, "executor_disabled");
+  noProtected(run.data);
+  assertEquals(
+    await scalar(`select count(*) from exam_delivery.python_execution_runs where attempt_id='${pythonAttemptId}'`),
+    "0",
+  );
+});
 
 Deno.test("disposable authenticated HTTP lifecycle", async () => {
   let unauth: Response | undefined;

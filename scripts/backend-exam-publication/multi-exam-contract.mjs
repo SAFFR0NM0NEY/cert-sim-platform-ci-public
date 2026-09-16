@@ -27,6 +27,7 @@ export const MULTI_EXAM_QUESTION_CAPABILITIES = Object.freeze([
   'pbq-drag-drop-match',
   'pbq-ordering',
   'pbq-workspace',
+  'executable-python-lab-v1',
 ]);
 
 export const ACCESS_POLICY_MODES = Object.freeze([
@@ -203,6 +204,37 @@ function validateVersionedInteraction(record) {
     validateExactMap(privateScoring.correctOptionIdsByBlank, presentation.blanks, (value, blank) => blank.options.some(({ id }) => id === value), 'DROPDOWN_SCORING_INVALID');
     const maximum = presentation.blanks.reduce((sum, blank) => sum + Number(privateScoring.pointsByBlank?.[blank.id] ?? 0), 0);
     if (maximum <= 0 || maximum !== privateScoring.maximumRawPoints) fail('DROPDOWN_RAW_MAXIMUM_INVALID');
+  } else if (record.type === 'executable-python-lab-v1') {
+    validateExecutablePythonScoring(record);
+  }
+}
+
+function validateExecutablePythonScoring(record) {
+  const { presentation, privateScoring } = record;
+  if (presentation.interactionVersion !== record.type || presentation.language !== 'python' ||
+      typeof presentation.starterCode !== 'string' || !presentation.starterCode ||
+      !Array.isArray(presentation.editableFiles) || !presentation.editableFiles.length ||
+      !privateScoring || Object.keys(privateScoring).sort().join(',') !== 'maximumRawPoints,trustedGrading' ||
+      !Number.isSafeInteger(privateScoring.maximumRawPoints) || privateScoring.maximumRawPoints < 1) {
+    fail('EXECUTABLE_PYTHON_SCORING_INVALID');
+  }
+  const trusted = privateScoring.trustedGrading;
+  if (!trusted || typeof trusted !== 'object' || Array.isArray(trusted) ||
+      Object.keys(trusted).sort().join(',') !== 'gradingMaterial,materialDigest,status' ||
+      trusted.status !== 'compiled' || !HASH_PATTERN.test(trusted.materialDigest)) {
+    fail('EXECUTABLE_PYTHON_SCORING_INVALID');
+  }
+  const material = trusted.gradingMaterial;
+  if (!material || typeof material !== 'object' || Array.isArray(material) ||
+      Object.keys(material).sort().join(',') !== 'contractVersion,maximumRawPoints,rules,taskId' ||
+      material.contractVersion !== 'certsim-python-trusted-grading-v1' ||
+      material.maximumRawPoints !== privateScoring.maximumRawPoints ||
+      typeof material.taskId !== 'string' || !material.taskId ||
+      !Array.isArray(material.rules) || material.rules.length < 1 || material.rules.length > 128) {
+    fail('EXECUTABLE_PYTHON_SCORING_INVALID');
+  }
+  if (sha256Canonical(material) !== trusted.materialDigest) {
+    fail('EXECUTABLE_PYTHON_SCORING_INVALID');
   }
 }
 

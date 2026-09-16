@@ -3,6 +3,11 @@ import { createPrivilegedClient } from "./client.ts";
 import { corsHeaders } from "./cors.ts";
 import { SafeError, translateRpcFailure } from "./errors.ts";
 import { logSafe } from "./logging.ts";
+import {
+  cancelProtectedPythonRun,
+  executeProtectedPythonRun,
+} from "./python-execution.ts";
+import { submitProtectedAttemptWithPythonGrading } from "./python-grading.ts";
 import { matchRoute } from "./routes.ts";
 import {
   assertNoProtectedPreReview,
@@ -35,12 +40,17 @@ import {
   mapAttemptLifecycleSummary,
   mapRecoverableStudySandboxes,
   mapStudySandboxRecovery,
+  mapPythonWorkspace,
+  mapPythonWorkspaceSave,
+  mapPythonRun,
 } from "./responses.ts";
 import {
   assertUuid,
   readJsonBody,
   validateObject,
   validateResponsePayload,
+  validatePythonWorkspacePayload,
+  PYTHON_WORKSPACE_BODY_BYTES,
 } from "./validation.ts";
 type UserClient = {
   auth: {
@@ -57,6 +67,9 @@ type Deps = {
   createAdmin?: () => SupabaseClient;
   origins?: Set<string>;
   log?: (line: string) => void;
+  executePythonRun?: typeof executeProtectedPythonRun;
+  cancelPythonRun?: typeof cancelProtectedPythonRun;
+  submitPythonAttempt?: typeof submitProtectedAttemptWithPythonGrading;
 };
 export async function handleProtectedExam(
   request: Request,
@@ -246,6 +259,53 @@ export async function handleProtectedExam(
       const u = new URL(request.url);
       if ([...u.searchParams.keys()].length > 0) throw new SafeError("invalid_request");
       args = { p_actor_id: actorId, p_attempt_id: assertUuid(matched.params.attemptId) };
+    } else if (matched.id === "pythonWorkspaceGet") {
+      const u = new URL(request.url);
+      if ([...u.searchParams.keys()].length > 0) throw new SafeError("invalid_request");
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_item_id: assertUuid(matched.params.itemId),
+      };
+    } else if (matched.id === "pythonWorkspaceSave") {
+      body = validateObject(await readJsonBody(request, PYTHON_WORKSPACE_BODY_BYTES), ["workspace", "expectedRevision", "requestId"], ["workspace", "expectedRevision", "requestId"]);
+      if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 0) throw new SafeError("invalid_request");
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_item_id: assertUuid(matched.params.itemId),
+        p_workspace: validatePythonWorkspacePayload(body.workspace),
+        p_expected_revision: body.expectedRevision,
+        p_request_id: assertUuid(body.requestId),
+      };
+    } else if (matched.id === "pythonRunRequest") {
+      body = validateObject(await readJsonBody(request), ["expectedRevision", "requestId"], ["expectedRevision", "requestId"]);
+      if (!Number.isSafeInteger(body.expectedRevision) || Number(body.expectedRevision) < 1) throw new SafeError("invalid_request");
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_item_id: assertUuid(matched.params.itemId),
+        p_expected_revision: body.expectedRevision,
+        p_request_id: assertUuid(body.requestId),
+      };
+    } else if (matched.id === "pythonRunStatus") {
+      const u = new URL(request.url);
+      if ([...u.searchParams.keys()].length > 0) throw new SafeError("invalid_request");
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_item_id: assertUuid(matched.params.itemId),
+        p_run_id: assertUuid(matched.params.runId),
+      };
+    } else if (matched.id === "pythonRunCancel") {
+      body = validateObject(await readJsonBody(request), ["requestId"], ["requestId"]);
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_item_id: assertUuid(matched.params.itemId),
+        p_run_id: assertUuid(matched.params.runId),
+        p_request_id: assertUuid(body.requestId),
+      };
     } else if (matched.id === "start") {
       body = validateObject(await readJsonBody(request), [
         "examKey",
@@ -309,10 +369,38 @@ export async function handleProtectedExam(
         p_attempt_id: assertUuid(matched.params.attemptId),
       };}
     const admin = (deps.createAdmin ?? createPrivilegedClient)();
-    const { data: rpcData, error: rpcError } = await admin.rpc(
-      matched.rpc,
-      args,
-    );
+    let rpcData: unknown;
+    let rpcError: unknown = null;
+    if (matched.id === "pythonRunRequest") {
+      rpcData = await (deps.executePythonRun ?? executeProtectedPythonRun)({
+        actorId,
+        admin,
+        attemptId: String(args.p_attempt_id),
+        clientRequestId: String(args.p_request_id),
+        expectedRevision: Number(args.p_expected_revision),
+        itemId: String(args.p_item_id),
+      });
+    } else if (matched.id === "pythonRunCancel") {
+      rpcData = await (deps.cancelPythonRun ?? cancelProtectedPythonRun)({
+        actorId,
+        admin,
+        attemptId: String(args.p_attempt_id),
+        cancelRequestId: String(args.p_request_id),
+        itemId: String(args.p_item_id),
+        runId: String(args.p_run_id),
+      });
+    } else if (matched.id === "submit") {
+      rpcData = await (deps.submitPythonAttempt ?? submitProtectedAttemptWithPythonGrading)({
+        actorId,
+        admin,
+        attemptId: String(args.p_attempt_id),
+        submissionId: String(args.p_submission_id),
+      });
+    } else {
+      const rpcResponse = await admin.rpc(matched.rpc, args);
+      rpcData = rpcResponse.data;
+      rpcError = rpcResponse.error;
+    }
     if (rpcError) {
       const safeRateLimit = rpcError as { status?: number; code?: string };
       if (
@@ -346,6 +434,9 @@ export async function handleProtectedExam(
     else if (matched.id === "lifecycleSummary") mapped = mapAttemptLifecycleSummary(rpcData);
     else if (matched.id === "recoverableSandboxes") mapped = mapRecoverableStudySandboxes(rpcData);
     else if (matched.id === "practiceRecover") mapped = mapStudySandboxRecovery(rpcData);
+    else if (matched.id === "pythonWorkspaceGet") mapped = mapPythonWorkspace(rpcData);
+    else if (matched.id === "pythonWorkspaceSave") mapped = mapPythonWorkspaceSave(rpcData);
+    else if (matched.id === "pythonRunRequest" || matched.id === "pythonRunStatus" || matched.id === "pythonRunCancel") mapped = mapPythonRun(rpcData);
     else if (matched.id === "start" || matched.id === "practiceStart" || matched.id === "practiceReplace" || matched.id === "resume" || matched.id === "current") {
       mapped = mapAttempt(rpcData);
     } else if (matched.id === "save") mapped = mapSavedResponse(rpcData);

@@ -8912,3 +8912,173 @@ button:focus-visible {
     color: #334155 !important;
   }
 }
+.python-lab-workspace {
+  display: grid;
+  gap: 1rem;
+}
+
+.python-lab-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.python-save-state {
+  background: var(--surface-muted, #eef4f7);
+  border-radius: 999px;
+  color: var(--text-muted, #425466);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.7rem;
+  white-space: nowrap;
+}
+
+.python-save-state.unsaved {
+  background: #fff3cd;
+  color: #684f00;
+}
+
+.python-lab-instructions ol {
+  margin-bottom: 0;
+}
+
+.python-editor-layout {
+  border: 1px solid var(--border-color, #cbd5df);
+  border-radius: 0.75rem;
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.25fr) minmax(0, 1fr);
+  min-height: 29rem;
+  overflow: hidden;
+}
+
+.python-file-list {
+  background: var(--surface-muted, #f4f7f9);
+  border-right: 1px solid var(--border-color, #cbd5df);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.8rem;
+}
+
+.python-file-list p {
+  margin: 0 0 0.35rem;
+}
+
+.python-file {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  overflow-wrap: anywhere;
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.python-file:hover,
+.python-file:focus-visible,
+.python-file.active {
+  background: var(--surface, #fff);
+  border-color: var(--border-color, #9fb0be);
+}
+
+.python-editor-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.python-editor-pane label {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.python-editor-pane textarea {
+  background: #101820;
+  border: 1px solid #334454;
+  border-radius: 0.5rem;
+  color: #eef6fc;
+  flex: 1;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  min-height: 22rem;
+  padding: 0.85rem;
+  resize: vertical;
+  tab-size: 4;
+  width: 100%;
+}
+
+.python-revision-conflict,
+.python-run-status {
+  border: 1px solid var(--border-color, #cbd5df);
+  border-radius: 0.65rem;
+  padding: 0.9rem;
+}
+
+.python-revision-conflict {
+  background: #fff8e1;
+  border-color: #d6a900;
+}
+
+.python-run-status h4,
+.python-revision-conflict h4 {
+  margin-top: 0;
+}
+
+.python-console {
+  margin-top: 1rem;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 10px;
+  background: #111827;
+  color: #e5e7eb;
+}
+
+.python-console h5,
+.python-console-label {
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+}
+
+.python-console-label {
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  color: #93c5fd;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.python-console pre {
+  max-height: 18rem;
+  margin: 0;
+  overflow: auto;
+  padding: 0.75rem 0.8rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.python-console .python-console-stderr {
+  color: #fecaca;
+}
+
+@media (max-width: 760px) {
+  .python-lab-heading {
+    display: grid;
+  }
+
+  .python-save-state {
+    justify-self: start;
+  }
+
+  .python-editor-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .python-file-list {
+    border-bottom: 1px solid var(--border-color, #cbd5df);
+    border-right: 0;
+  }
+}

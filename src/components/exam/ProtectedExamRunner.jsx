@@ -25,6 +25,7 @@ import ReleasedReviewAnswer from './ReleasedReviewAnswer.jsx';
 import { downloadProtectedResultSummaryPdf } from '../../lib/savedResultReportExport.js';
 import { getStructuredResponseState } from '../../lib/structuredResponse.js';
 import { getProtectedExitContract } from '../../lib/protectedLifecycle.js';
+import { isExecutablePythonLab } from '../../lib/pythonLabWorkspace.js';
 
 export default function ProtectedExamRunner({
   assignmentId = '',
@@ -100,6 +101,8 @@ export default function ProtectedExamRunner({
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueMessage, setIssueMessage] = useState('');
   const [issueStatus, setIssueStatus] = useState('');
+  const [pythonLabBusy, setPythonLabBusy] = useState(false);
+  const [pythonWorkspaceProgress, setPythonWorkspaceProgress] = useState({});
   const requestEpoch = useRef(0);
   const initializationEpoch = useRef(0);
   const configuredLanguageRef = useRef(configuredLanguage);
@@ -112,6 +115,7 @@ export default function ProtectedExamRunner({
   const loadingPage = useRef(false);
   const operationController = useRef(new AbortController());
   const navigationSave = useRef(null);
+  const pythonWorkspaceSave = useRef(null);
   const lifecycleLock = useRef(false);
   const discardRequest = useRef({ attemptId: '', requestId: '' });
   const recoveryRequest = useRef({ attemptId: '', requestId: '' });
@@ -143,6 +147,8 @@ export default function ProtectedExamRunner({
     ]).filter(([, value]) => value !== undefined)));
     setRevisions(Object.fromEntries(rawItems.map((item) => [item.itemId, item.revision ?? 0])));
     setDirtyIds(new Set());
+    setPythonWorkspaceProgress({});
+    pythonWorkspaceSave.current = null;
     setRecoverableSandboxes([]);
     setRecoveryRetryAttemptId('');
     recoveryRequest.current = { attemptId: '', requestId: '' };
@@ -500,12 +506,45 @@ export default function ProtectedExamRunner({
     setSaveErrors((current) => ({ ...current, [itemId]: '' }));
   }
 
+  const registerPythonWorkspaceSave = useCallback((itemId, save) => {
+    if (typeof save === 'function') {
+      pythonWorkspaceSave.current = { itemId, save };
+    } else if (pythonWorkspaceSave.current?.itemId === itemId) {
+      pythonWorkspaceSave.current = null;
+    }
+  }, []);
+
+  const updatePythonWorkspaceProgress = useCallback((itemId, progress) => {
+    setPythonWorkspaceProgress((current) => {
+      const previous = current[itemId];
+      if (
+        previous?.dirty === progress.dirty &&
+        previous?.persisted === progress.persisted &&
+        previous?.revision === progress.revision
+      ) return current;
+      return { ...current, [itemId]: progress };
+    });
+  }, []);
+
   async function saveItem(itemId) {
+    const question = items.find((item) => item.id === itemId);
+    if (isExecutablePythonLab(question)) {
+      const registered = pythonWorkspaceSave.current;
+      if (registered?.itemId !== itemId) {
+        setSaveErrors((current) => ({
+          ...current,
+          [itemId]: 'The Python workspace is not ready. Wait for it to finish loading and try again.',
+        }));
+        return false;
+      }
+      const saved = await registered.save({ signal: operationController.current.signal });
+      if (saved) setSaveErrors((current) => ({ ...current, [itemId]: '' }));
+      return saved;
+    }
     if (!dirtyIds.has(itemId)) return true;
     const epoch = ++requestEpoch.current;
     setState('saving');
     try {
-      const question = items.find((item) => item.id === itemId);
       const saved = await client.saveResponse(
         attempt.attemptId,
         itemId,
@@ -734,6 +773,12 @@ export default function ProtectedExamRunner({
     if (submitting.current) return;
     submitting.current = true;
     setState('submitting');
+    const currentItemId = items[currentIndex]?.id;
+    if (isExecutablePythonLab(items[currentIndex]) && !(await saveItem(currentItemId))) {
+      submitting.current = false;
+      setState('save-failed');
+      return;
+    }
     for (const itemId of [...dirtyIds]) {
       if (!(await saveItem(itemId))) {
         submitting.current = false;
@@ -994,9 +1039,12 @@ export default function ProtectedExamRunner({
     ? items.filter((item) => getProtectedSection(item) === 'normal')
     : items.filter((item) => item.type !== 'case-study-info');
   const pbqQuestions = isSectionedExam ? items.filter((item) => String(item.type).startsWith('pbq-')) : [];
-  const answeredCount = items.filter((item) => getProtectedQuestionState(item, answers) === 'answered').length;
+  const answeredCount = items.filter((item) => getProtectedQuestionState(item, answers, pythonWorkspaceProgress) === 'answered').length;
+  const pythonQuestionStateById = Object.fromEntries(items
+    .filter(isExecutablePythonLab)
+    .map((item) => [item.id, getProtectedQuestionState(item, answers, pythonWorkspaceProgress)]));
   const exitContract = getProtectedExitContract(attempt?.purpose);
-  const interactionLocked = Boolean(lifecycleOperation) || Boolean(discardSummary) || state === 'saving' || state === 'submitting';
+  const interactionLocked = Boolean(lifecycleOperation) || Boolean(discardSummary) || pythonLabBusy || state === 'saving' || state === 'submitting';
   const approvedExam = {
     ...examConfig,
     code: examConfig.code ?? examConfig.shortName,
@@ -1020,7 +1068,7 @@ export default function ProtectedExamRunner({
     <div className="exam-actions">
       <button className={flaggedQuestionIds.includes(current.id) ? 'flag-button active' : 'flag-button'} type="button" disabled={interactionLocked} onClick={() => toggleFlag(current.id)}>{flaggedQuestionIds.includes(current.id) ? 'Remove flag' : 'Flag for review'}</button>
       <button className="secondary-button" disabled={interactionLocked} type="button" onClick={() => { setIssueStatus(''); setIssueOpen(true); }}>Report question issue</button>
-      {attempt?.purpose === 'study_sandbox' && <button className="secondary-button" type="button" disabled={interactionLocked} onClick={() => checkPracticeItem(current.id)}>Check saved answer</button>}
+      {attempt?.purpose === 'study_sandbox' && !isExecutablePythonLab(current) && <button className="secondary-button" type="button" disabled={interactionLocked} onClick={() => checkPracticeItem(current.id)}>Check saved answer</button>}
       <button className="secondary-button" type="button" disabled={currentIndex === 0 || interactionLocked} onClick={() => navigate(currentIndex - 1)}>Previous</button>
       {currentIndex < items.length - 1 || itemPage.hasMore
         ? <button className="secondary-button" type="button" disabled={interactionLocked} onClick={() => navigate(currentIndex + 1)}>{state === 'saving' ? 'Saving...' : 'Next'}</button>
@@ -1028,7 +1076,7 @@ export default function ProtectedExamRunner({
     </div>
   </>;
   const overlays = <>
-    {showFinalSubmitReview && <ProtectedFinalSubmitReview answers={answers} exam={approvedExam} flaggedQuestionIds={flaggedQuestionIds} onNavigateToItem={(index) => { setShowFinalSubmitReview(false); setCurrentIndex(index); }} onReturnToExam={() => setShowFinalSubmitReview(false)} onSubmitFinal={submitAttempt} questions={items} remainingSeconds={remainingSeconds} />}
+    {showFinalSubmitReview && <ProtectedFinalSubmitReview answers={answers} exam={approvedExam} flaggedQuestionIds={flaggedQuestionIds} onNavigateToItem={(index) => { setShowFinalSubmitReview(false); navigate(index); }} onReturnToExam={() => setShowFinalSubmitReview(false)} onSubmitFinal={submitAttempt} questionStateById={pythonQuestionStateById} questions={items} remainingSeconds={remainingSeconds} />}
     {issueOpen && <div className="modal-backdrop" role="presentation"><form className="modal" role="dialog" aria-modal="true" aria-labelledby="protected-issue-heading" onSubmit={submitIssue}><h2 id="protected-issue-heading">Report a question issue</h2><p>Question {current.questionNumber ?? currentIndex + 1}. Do not include passwords or personal information.</p><label htmlFor="protected-issue-message">What appears to be wrong?</label><textarea id="protected-issue-message" maxLength={2000} required rows={5} value={issueMessage} onChange={(event) => setIssueMessage(event.target.value)} /><div className="modal-actions"><button className="secondary-button" type="button" onClick={() => setIssueOpen(false)}>Cancel</button><button className="primary-button" type="submit">Send report</button></div></form></div>}
     {discardSummary && <div className="modal-backdrop" role="presentation"><section className="modal" role="dialog" aria-modal="true" aria-labelledby="sandbox-discard-heading" aria-describedby="sandbox-discard-description"><h2 id="sandbox-discard-heading">Permanently discard this Study Sandbox?</h2><p id="sandbox-discard-description">It contains <strong>{discardSummary.savedResponseCount} saved {discardSummary.savedResponseCount === 1 ? 'response' : 'responses'}</strong>.</p><p>The responses will remain retained for audit, but this sandbox will no longer be resumable and no result will be created.</p>{discardError ? <p className="error-note" role="alert">{discardError}</p> : null}<div className="modal-actions"><button className="secondary-button" disabled={lifecycleOperation === 'discarding' || discardOutcomeAmbiguous} type="button" onClick={cancelSandboxDiscard}>Cancel</button><button className="secondary-button danger-lite" disabled={lifecycleOperation === 'discarding'} type="button" onClick={confirmSandboxDiscard}>{lifecycleOperation === 'discarding' ? 'Discarding...' : discardOutcomeAmbiguous ? 'Retry discard' : 'Permanently discard'}</button></div></section></div>}
   </>;
@@ -1065,6 +1113,14 @@ export default function ProtectedExamRunner({
         timed: attempt.timed !== false,
         totalCount: itemPage.totalCount,
       })}
+      pythonLab={{
+        attemptId: attempt.attemptId,
+        client,
+        onBusyChange: setPythonLabBusy,
+        onRegisterSave: registerPythonWorkspaceSave,
+        onWorkspaceStateChange: updatePythonWorkspaceProgress,
+      }}
+      questionStateById={pythonQuestionStateById}
       scoredAnswerSummary={attempt.timed === false
         ? `${answeredCount} answered · ${itemPage.totalCount || items.length} practice items total${itemPage.hasMore ? ' · more load as you continue' : ''}`
         : `${answeredCount} of ${items.filter((item) => item.type !== 'case-study-info').length} scored questions answered`}
@@ -1080,8 +1136,13 @@ export default function ProtectedExamRunner({
     />;
 }
 
-function getProtectedQuestionState(question, answers) {
+function getProtectedQuestionState(question, answers, pythonWorkspaceProgress = {}) {
   if (question.type === 'case-study-info') return 'info';
+  if (isExecutablePythonLab(question)) {
+    const progress = pythonWorkspaceProgress[question.id];
+    if (progress?.dirty) return 'incomplete';
+    return progress?.persisted ? 'answered' : 'unanswered';
+  }
   const value = answers[question.id];
   const structuredState = getStructuredResponseState(question, value);
   if (structuredState) return structuredState;

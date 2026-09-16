@@ -22,6 +22,19 @@ export type StableCode =
   | "replacement_failed"
   | "invalid_lifecycle_transition"
   | "stale_response"
+  | "revision_conflict"
+  | "workspace_request_conflict"
+  | "executor_disabled"
+  | "run_not_found"
+  | "run_request_conflict"
+  | "run_in_progress"
+  | "submission_in_progress"
+  | "python_workspace_required"
+  | "grading_material_invalid"
+  | "grading_incomplete"
+  | "grading_binding_mismatch"
+  | "grading_failed"
+  | "grading_reconciliation_required"
   | "already_submitted"
   | "review_unavailable"
   | "invalid_request"
@@ -63,6 +76,19 @@ const ERROR_STATUS: Record<string, number> = {
   submission_conflict: 409,
   invalid_lifecycle_transition: 409,
   stale_response: 409,
+  revision_conflict: 409,
+  workspace_request_conflict: 409,
+  executor_disabled: 503,
+  run_not_found: 404,
+  run_request_conflict: 409,
+  run_in_progress: 409,
+  submission_in_progress: 409,
+  python_workspace_required: 409,
+  grading_material_invalid: 409,
+  grading_incomplete: 409,
+  grading_binding_mismatch: 409,
+  grading_failed: 503,
+  grading_reconciliation_required: 409,
   already_submitted: 409,
   review_unavailable: 403,
   invalid_request: 400,

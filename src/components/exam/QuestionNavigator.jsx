@@ -8,6 +8,7 @@ export default function QuestionNavigator({
   answers,
   flaggedQuestionIds,
   currentIndex,
+  questionStateById = {},
   section,
   onNavigate,
 }) {
@@ -21,6 +22,7 @@ export default function QuestionNavigator({
           currentIndex={currentIndex}
           flaggedQuestionIds={flaggedQuestionIds}
           onNavigate={onNavigate}
+          questionStateById={questionStateById}
           questions={questions}
         />
 
@@ -38,6 +40,7 @@ export default function QuestionNavigator({
                   key={question.id}
                   onClick={() => onNavigate(index)}
                   question={question}
+                  questionState={questionStateById[question.id]}
                 />
               );
             })}
@@ -61,6 +64,7 @@ export default function QuestionNavigator({
                     label={`Lab ${questionIndex + 1}`}
                     onClick={() => onNavigate(index)}
                     question={question}
+                    questionState={questionStateById[question.id]}
                   />
                 );
               })}
@@ -91,6 +95,7 @@ export default function QuestionNavigator({
                 key={question.id}
                 onClick={() => onNavigate(index)}
                 question={question}
+                questionState={questionStateById[question.id]}
               />
             );
           })}
@@ -110,6 +115,7 @@ export default function QuestionNavigator({
             flaggedQuestionIds={flaggedQuestionIds}
             locked={section === 'normal'}
             onNavigate={onNavigate}
+            questionStateById={questionStateById}
             questions={questions}
           />
           {section === 'normal' && (
@@ -147,6 +153,7 @@ function CaseStudyNavigationSection({
   currentIndex,
   flaggedQuestionIds,
   onNavigate,
+  questionStateById,
   questions,
 }) {
   if (caseStudyBlocks.length === 0) {
@@ -161,6 +168,7 @@ function CaseStudyNavigationSection({
         currentIndex={currentIndex}
         flaggedQuestionIds={flaggedQuestionIds}
         onNavigate={onNavigate}
+        questionStateById={questionStateById}
         questions={questions}
       />
     </NavigationSection>
@@ -175,6 +183,7 @@ function CaseStudyNavigationBlocks({
   flaggedQuestionIds,
   locked = false,
   onNavigate,
+  questionStateById,
   questions,
 }) {
   return caseStudyBlocks.map((block) => (
@@ -198,6 +207,7 @@ function CaseStudyNavigationBlocks({
             onNavigate(questions.findIndex((item) => item.id === block.scenario.id))
           }
           question={block.scenario}
+          questionState={questionStateById[block.scenario.id]}
         />
         {block.questions.map((question, questionIndex) => {
           const index = questions.findIndex((item) => item.id === question.id);
@@ -215,6 +225,7 @@ function CaseStudyNavigationBlocks({
               locked={locked}
               onClick={() => onNavigate(index)}
               question={question}
+              questionState={questionStateById[question.id]}
             />
           );
         })}
@@ -255,8 +266,11 @@ function NavigationButton({
   locked = false,
   label,
   ariaLabel,
+  questionState,
 }) {
-  const state = getQuestionState(question, answers);
+  const state = ['answered', 'unanswered', 'incomplete', 'info'].includes(questionState)
+    ? questionState
+    : getQuestionState(question, answers);
   const isInfoItem = question.type === 'case-study-info' || question.type === 'informational';
   const isFlagged = !isInfoItem && flaggedQuestionIds.includes(question.id);
   const visibleQuestionNumber = question.questionNumber ?? index + 1;

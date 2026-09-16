@@ -146,6 +146,44 @@ function normalizeAttemptLanguage<T extends Obj>(value: T): T {
 export function mapSavedResponse(raw: unknown): Obj {
   return pick(object(raw), ["itemId", "revision", "updatedAt"]);
 }
+export function mapPythonWorkspace(raw: unknown): Obj {
+  const value = object(raw);
+  requireOnlyKeys(value, ["ok", "itemId", "exists", "revision", "workspaceHash", "workspace", "updatedAt"]);
+  if (typeof value.itemId !== "string" || typeof value.exists !== "boolean" ||
+    !Number.isSafeInteger(value.revision) || Number(value.revision) < 0 ||
+    (value.workspaceHash !== null && (typeof value.workspaceHash !== "string" || !/^[0-9a-f]{64}$/.test(value.workspaceHash))) ||
+    (value.updatedAt !== null && typeof value.updatedAt !== "string") ||
+    (value.exists ? !value.workspace || typeof value.workspace !== "object" || Array.isArray(value.workspace) : value.workspace !== null)) {
+    throw new SafeError("internal_failure");
+  }
+  return pick(value, ["itemId", "exists", "revision", "workspaceHash", "workspace", "updatedAt"]);
+}
+export function mapPythonWorkspaceSave(raw: unknown): Obj {
+  const value = object(raw);
+  requireOnlyKeys(value, ["ok", "itemId", "revision", "workspaceHash", "updatedAt"]);
+  if (typeof value.itemId !== "string" || !Number.isSafeInteger(value.revision) || Number(value.revision) < 1 ||
+    typeof value.workspaceHash !== "string" || !/^[0-9a-f]{64}$/.test(value.workspaceHash) ||
+    typeof value.updatedAt !== "string") throw new SafeError("internal_failure");
+  return pick(value, ["itemId", "revision", "workspaceHash", "updatedAt"]);
+}
+export function mapPythonRun(raw: unknown): Obj {
+  const value = object(raw);
+  requireOnlyKeys(value, ["ok", "runId", "state", "terminalOutcome", "stdout", "stderr", "exitCode", "cancellationRequestedAt", "disposalState", "createdAt", "updatedAt"]);
+  const states = new Set(["authorized", "queued", "running", "cancel_requested", "completed", "failed", "cancelled"]);
+  const outcomes = new Set(["completed", "timeout", "resource_limit", "failed", "cancelled"]);
+  const disposal = new Set(["not_requested", "pending", "confirmed", "failed"]);
+  if (typeof value.runId !== "string" || typeof value.state !== "string" || !states.has(value.state) ||
+    (value.terminalOutcome !== null && (typeof value.terminalOutcome !== "string" || !outcomes.has(value.terminalOutcome))) ||
+    typeof value.stdout !== "string" || typeof value.stderr !== "string" ||
+    new TextEncoder().encode(value.stdout).byteLength + new TextEncoder().encode(value.stderr).byteLength > 1024 * 1024 ||
+    (value.exitCode !== null && (!Number.isSafeInteger(value.exitCode) || Number(value.exitCode) < 0 || Number(value.exitCode) > 255)) ||
+    (value.cancellationRequestedAt !== null && typeof value.cancellationRequestedAt !== "string") ||
+    typeof value.disposalState !== "string" || !disposal.has(value.disposalState) ||
+    typeof value.createdAt !== "string" || typeof value.updatedAt !== "string") {
+    throw new SafeError("internal_failure");
+  }
+  return pick(value, ["runId", "state", "terminalOutcome", "stdout", "stderr", "exitCode", "cancellationRequestedAt", "disposalState", "createdAt", "updatedAt"]);
+}
 export function mapFlags(raw: unknown): Obj {
   const value = object(raw);
   if (!Array.isArray(value.itemIds) || value.itemIds.some((id) => typeof id !== "string")) throw new SafeError("internal_failure");
@@ -540,6 +578,9 @@ const PROTECTED_KEYS = new Set([
   "publicationrequestid", "internaluuid",
   "correctvalue", "correctvaluesbystatement", "correcttargetidsbysource",
   "correctoptionidsbyblank", "pointsbyblank", "maximumrawpoints", "modelsolution",
+  "correctcode", "expectedoutput", "expectedoutputs", "gradingkey", "gradingkeys",
+  "gradingrule", "gradingrules", "hiddentest", "hiddentests", "materialdigest",
+  "protectedmaterialdigest",
 ]);
 const PRE_REVIEW_RESPONSE_KEYS = new Set([
   "acceptedanswer", "acceptedanswers", "answerkey", "correctanswer",
@@ -551,6 +592,9 @@ const PRE_REVIEW_RESPONSE_KEYS = new Set([
   "publicationrequestid", "internaluuid",
   "correctvalue", "correctvaluesbystatement", "correcttargetidsbysource",
   "correctoptionidsbyblank", "pointsbyblank", "maximumrawpoints", "modelsolution",
+  "correctcode", "expectedoutput", "expectedoutputs", "gradingkey", "gradingkeys",
+  "gradingrule", "gradingrules", "hiddentest", "hiddentests", "materialdigest",
+  "protectedmaterialdigest",
 ]);
 function sanitizePresentation(
   value: unknown,

@@ -27,6 +27,12 @@ const REASON_MESSAGES = Object.freeze({
   replacement_failed: 'The new attempt could not be created. Your existing attempt remains available.',
   abandon_failed: 'The attempt could not be ended safely. It remains resumable.',
   stale_response: 'A newer answer is already saved. Refresh before continuing.',
+  revision_conflict: 'A newer Python workspace revision is already saved. Review it before continuing.',
+  workspace_request_conflict: 'This workspace save request was already used for different content.',
+  executor_disabled: 'Python execution is not available yet. Your saved workspace is retained.',
+  run_not_found: 'This Python run is no longer available.',
+  run_request_conflict: 'This Python run request was already used for a different revision.',
+  run_in_progress: 'A Python run is already in progress for this task.',
   already_submitted: 'This attempt has already been submitted.',
   review_unavailable: 'Question review is withheld for this attempt.',
   invalid_lifecycle_transition: 'This attempt can no longer accept that action. Refresh its current state.',
@@ -130,6 +136,22 @@ export function createProtectedExamClient({ accessToken, getAccessToken, fetchIm
     saveResponse: (attemptId, itemId, response, expectedRevision, requestId, options) =>
       request(`/attempts/${attemptId}/items/${itemId}/response`, {
         ...options, method: 'PUT', body: { response, expectedRevision, requestId },
+      }),
+    getPythonWorkspace: (attemptId, itemId, options) =>
+      request(`/attempts/${attemptId}/items/${itemId}/python/workspace`, options),
+    savePythonWorkspace: (attemptId, itemId, workspace, expectedRevision, requestId, options) =>
+      request(`/attempts/${attemptId}/items/${itemId}/python/workspace`, {
+        ...options, method: 'PUT', body: { workspace, expectedRevision, requestId },
+      }),
+    requestPythonRun: (attemptId, itemId, expectedRevision, requestId, options) =>
+      request(`/attempts/${attemptId}/items/${itemId}/python/runs`, {
+        ...options, method: 'POST', body: { expectedRevision, requestId },
+      }),
+    getPythonRun: (attemptId, itemId, runId, options) =>
+      request(`/attempts/${attemptId}/items/${itemId}/python/runs/${runId}`, options),
+    cancelPythonRun: (attemptId, itemId, runId, requestId, options) =>
+      request(`/attempts/${attemptId}/items/${itemId}/python/runs/${runId}/cancel`, {
+        ...options, method: 'POST', body: { requestId },
       }),
     listFlags: (attemptId, options) => request(`/attempts/${attemptId}/flags`, options),
     setFlag: (attemptId, itemId, flagged, requestId, options) => request(`/attempts/${attemptId}/items/${itemId}/flag`, { ...options, method: 'PUT', body: { flagged, requestId } }),

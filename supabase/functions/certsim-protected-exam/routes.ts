@@ -30,7 +30,12 @@ export type RouteId =
   | "staffDashboardQuery"
   | "staffLearnerDetail"
   | "historySummary"
-  | "printSummary";
+  | "printSummary"
+  | "pythonWorkspaceGet"
+  | "pythonWorkspaceSave"
+  | "pythonRunRequest"
+  | "pythonRunStatus"
+  | "pythonRunCancel";
 export interface Route {
   id: RouteId;
   method: string;
@@ -69,6 +74,11 @@ const RPC: Record<RouteId, string> = {
   staffLearnerDetail: "certsim_protected_staff_learner_detail",
   historySummary: "certsim_protected_history_summary",
   printSummary: "certsim_protected_print_summary",
+  pythonWorkspaceGet: "certsim_protected_get_python_workspace",
+  pythonWorkspaceSave: "certsim_protected_save_python_workspace",
+  pythonRunRequest: "certsim_protected_request_python_run",
+  pythonRunStatus: "certsim_protected_get_python_run",
+  pythonRunCancel: "certsim_protected_cancel_python_run",
 };
 export function matchRoute(request: Request): Route {
   const url = new URL(request.url);
@@ -97,6 +107,11 @@ export function matchRoute(request: Request): Route {
     ["staffLearnerDetail", "GET", /^\/staff\/learner-detail$/, []],
     ["printSummary", "GET", /^\/attempts\/([^/]+)\/print-summary$/, ["attemptId"]],
     ["lifecycleSummary", "GET", /^\/attempts\/([^/]+)\/lifecycle-summary$/, ["attemptId"]],
+    ["pythonWorkspaceGet", "GET", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/workspace$/, ["attemptId", "itemId"]],
+    ["pythonWorkspaceSave", "PUT", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/workspace$/, ["attemptId", "itemId"]],
+    ["pythonRunRequest", "POST", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs$/, ["attemptId", "itemId"]],
+    ["pythonRunStatus", "GET", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs\/([^/]+)$/, ["attemptId", "itemId", "runId"]],
+    ["pythonRunCancel", "POST", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs\/([^/]+)\/cancel$/, ["attemptId", "itemId", "runId"]],
     ["eligibility", "GET", /^\/eligibility$/, []],
     ["current", "GET", /^\/attempts\/current$/, []],
     ["currentBindings", "GET", /^\/attempts\/current-bindings$/, []],

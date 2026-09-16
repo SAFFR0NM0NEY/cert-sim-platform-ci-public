@@ -12,6 +12,9 @@ test('legacy-only weak evidence falls back to a current profile and enables prot
     const url=new URL(route.request().url()); const path=url.pathname.split('/certsim-protected-exam')[1];
     const json=(value,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(value)});
     if(path.startsWith('/history')) return json({items:[legacyResult],returnedCount:1,totalCount:1,remainingCount:0,nextCursor:null});
+    if(path.startsWith('/practice/weak-areas')) {
+      return json({examKey:'az400',packageVersion:'1.0.0',profileKey:url.searchParams.get('profileId'),domains:[{domainKey:'domain-x',evidenceCount:1,lowestPercentage:55}]});
+    }
     if(path.startsWith('/practice/availability')) {
       availabilityRequests.push(Object.fromEntries(url.searchParams));
       return json({examKey:'az400',packageVersion:'1.0.0',profileKey:url.searchParams.get('profileId'),purpose:'weak_area',selectedCount:10,available:20,adjustedCount:false});

@@ -1,9 +1,9 @@
 import FinalSubmitReviewPresentation from './FinalSubmitReviewPresentation.jsx';
 import { getStructuredResponseState } from '../../lib/structuredResponse.js';
 
-export default function ProtectedFinalSubmitReview({ answers, exam, flaggedQuestionIds, onNavigateToItem, onReturnToExam, onSubmitFinal, questions, remainingSeconds }) {
+export default function ProtectedFinalSubmitReview({ answers, exam, flaggedQuestionIds, onNavigateToItem, onReturnToExam, onSubmitFinal, questionStateById = {}, questions, remainingSeconds }) {
   const flaggedSet = new Set(flaggedQuestionIds);
-  const scoredItems = questions.map((question, questionIndex) => ({ question, questionIndex, answerState: getAnswerState(question, answers[question.id]) })).filter((item) => item.answerState !== 'info');
+  const scoredItems = questions.map((question, questionIndex) => ({ question, questionIndex, answerState: questionStateById[question.id] ?? getAnswerState(question, answers[question.id]) })).filter((item) => item.answerState !== 'info');
   const answeredCount = scoredItems.filter((item) => item.answerState === 'answered').length;
   const unansweredCount = scoredItems.filter((item) => item.answerState === 'unanswered').length;
   const incompleteItems = scoredItems.filter((item) => item.answerState === 'incomplete');
