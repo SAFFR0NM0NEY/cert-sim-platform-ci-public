@@ -25,6 +25,7 @@
     "test:issue86-browser": "playwright test tests/r3g/issue86-python-lab.spec.js --workers=1",
     "test:issue86-modal-integration": "npm --prefix services/python-executor-modal ci --ignore-scripts && node scripts/validate-issue86-modal-integration.mjs && npm --prefix services/python-executor-modal test",
     "test:issue86-modal-live": "node scripts/test-issue86-modal-live-acceptance.mjs",
+    "test:issue86-modal-stdlib-live": "node scripts/test-issue86-modal-stdlib-hotfix-live.mjs",
     "validate:issue85": "node scripts/validate-issue85-python-standard.mjs && node scripts/validate-protected-mode-parity.mjs",
     "validate:issue113": "node scripts/validate-issue113-readable-matching-review.mjs",
     "validate:issue102": "node scripts/validate-issue102-protected-result-pdf.mjs",
