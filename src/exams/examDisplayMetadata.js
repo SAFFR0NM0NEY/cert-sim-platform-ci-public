@@ -60,6 +60,17 @@ const definitions = [
     internalAliases: [],
     searchAliases: ['Azure AI', 'AI Fundamentals'],
   },
+  {
+    canonicalId: 'pythonnextgeneration',
+    routeSlug: 'python-next-generation',
+    code: 'Python',
+    shortTitle: 'Python Next Generation',
+    fullTitle: 'Python Next Generation',
+    vendor: 'Certiport',
+    aliases: ['Python Next Generation'],
+    internalAliases: [],
+    searchAliases: ['Python', 'Python Next Generation', 'Certiport Python'],
+  },
 ];
 
 export function normalizeExamDisplayIdentity(value) {

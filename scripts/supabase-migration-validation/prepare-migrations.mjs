@@ -88,6 +88,8 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260914120212_issue86_python_lab_orchestration.sql',
   '20260915063933_issue86_modal_execution_completion.sql',
   '20260916103000_issue86_trusted_grading_completion.sql',
+  '20260916155319_issue86_python_next_generation_release_prep.sql',
+  '20260917074357_platform_owner_protected_exam_bypass.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -175,6 +177,8 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260914120212_issue86_python_lab_orchestration.sql': 'f692460f8d61b02b06054b4cc3774e0e298bd82f94fb0cfbd1c41bd39a1c3d5d',
   '20260915063933_issue86_modal_execution_completion.sql': '4ffab647ee09877c3a961bf514ff75a014957fe9c2841cfe1236f6e8c8cd90c0',
   '20260916103000_issue86_trusted_grading_completion.sql': '16fdb6dfb78888731d64c68746b5294f95cc0099fc02992cfb70b7f524fcab55',
+  '20260916155319_issue86_python_next_generation_release_prep.sql': '6a04bbf7989c12ca4d021ed19052407cf3dc1ae50580ce856985bd8b6d12b927',
+  '20260917074357_platform_owner_protected_exam_bypass.sql': '6a1c1d1b852ba63159f8dcab72da6063855ba242b8bc9f744889ecad6ac9876e',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

@@ -18,6 +18,6 @@ assert.deepEqual(getProtectedDashboardMetadata('ai901', futureSource), { package
 assert.equal(getProtectedDashboardMetadata('missing', futureSource), null);
 assert.equal(sc200ExamDefinition.protectedPackageVersion, '1.1.0');
 assert.equal(sc200ExamDefinition.questionCount, 300);
-assert.deepEqual(Object.fromEntries(examRegistry.map(({ id, questionCount }) => [id, questionCount])), { sc200: 300, az204: 287, 'security-plus-sy0-701': 370, az400: 433, ai901: 334 });
+assert.deepEqual(Object.fromEntries(examRegistry.map(({ id, questionCount }) => [id, questionCount])), { inf303: 276, sc200: 300, az204: 287, 'security-plus-sy0-701': 370, az400: 433, ai901: 334, pythonnextgeneration: 283 });
 for (const forbidden of ['correctAnswer', 'correctOptionIds', 'explanation', 'canonicalFormMembership']) assert.doesNotMatch(profileSource, new RegExp(forbidden, 'i'));
 console.log(JSON.stringify({ ok: true, issue: 99, packageVersion: '3.0.0', questionCount: 334, versionAware: true, protectedContentFields: 0 }));

@@ -141,6 +141,12 @@ export default function StudentDetails({
                 </dd>
               </div>
             )}
+            {selectedProfile.executableCount ? (
+              <div>
+                <dt>Executable tasks</dt>
+                <dd>{selectedProfile.executableCount}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>Timer</dt>
               <dd>{selectedProfile.timeLimitMinutes} min</dd>

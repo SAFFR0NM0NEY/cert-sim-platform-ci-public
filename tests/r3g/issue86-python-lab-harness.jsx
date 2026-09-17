@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import ExamWorkspacePresentation from '../../src/components/exam/ExamWorkspacePresentation.jsx';
 import PythonLabWorkspace from '../../src/components/exam/PythonLabWorkspace.jsx';
 import '../../src/styles/global.css';
 
@@ -29,6 +30,8 @@ const serverConflictWorkspace = {
 };
 
 const mode = new URLSearchParams(window.location.search).get('mode') ?? 'starter';
+const rendersPublishedShape = mode === 'real-shape' || mode === 'real-shape-resume';
+const persistedWorkspaceKey = `issue86:${attemptId}:${itemId}`;
 const calls = [];
 let reads = 0;
 let saves = 0;
@@ -42,6 +45,13 @@ const client = {
   async getPythonWorkspace(...args) {
     record('getPythonWorkspace', args.slice(0, 2));
     reads += 1;
+    if (mode === 'real-shape-resume') {
+      const persisted = window.localStorage.getItem(persistedWorkspaceKey);
+      if (persisted) {
+        const parsed = JSON.parse(persisted);
+        return workspaceRead(parsed.revision, parsed.workspace);
+      }
+    }
     if (mode === 'resume') return workspaceRead(4, resumedWorkspace);
     if (mode === 'conflict' && reads > 1) return workspaceRead(7, serverConflictWorkspace);
     return workspaceRead(0, null);
@@ -52,12 +62,19 @@ const client = {
     if (mode === 'conflict' && saves === 1) {
       throw Object.assign(new Error('A newer workspace revision is saved.'), { code: 'revision_conflict' });
     }
-    return {
+    const saved = {
       itemId,
       revision: Number(args[3]) + 1,
       workspaceHash,
       updatedAt: '2026-09-14T12:00:00Z',
     };
+    if (mode === 'real-shape-resume') {
+      window.localStorage.setItem(persistedWorkspaceKey, JSON.stringify({
+        revision: saved.revision,
+        workspace: args[2],
+      }));
+    }
+    return saved;
   },
   async requestPythonRun(...args) {
     record('requestPythonRun', args.slice(0, 4));
@@ -98,6 +115,17 @@ const presentation = {
   starterWorkspace,
   allowedFilenames: ['main.py', 'support/helper.py'],
 };
+const publishedPresentation = {
+  coverageTags: ['synthetic-python', 'executable-python-lab-v1'],
+  difficulty: 'medium',
+  editableFiles: ['main.py'],
+  instructions: 'Implement the learner-visible synthetic requirement and save your work.',
+  interactionVersion: 'executable-python-lab-v1',
+  language: 'python',
+  officialObjectiveKey: 'synthetic-objective',
+  officialSkillGroup: 'executable-python-lab-v1',
+  starterCode: 'def synthetic_function():\n    return None\n',
+};
 
 function workspaceRead(revision, workspace) {
   return {
@@ -110,14 +138,71 @@ function workspaceRead(revision, workspace) {
   };
 }
 
-createRoot(document.getElementById('root')).render(
-  <main>
-    <h1>Issue 86 Python lab</h1>
-    <PythonLabWorkspace
-      attemptId={attemptId}
-      client={client}
-      itemId={itemId}
-      presentation={presentation}
-    />
-  </main>,
-);
+function FormalLabHarness() {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const questions = [
+    {
+      id: '86000000-0000-4000-8000-000000000204',
+      questionNumber: 1,
+      type: 'single-choice',
+      stem: 'Select the synthetic placeholder.',
+      options: [{ id: 'a', text: 'Synthetic option' }],
+    },
+    {
+      id: itemId,
+      questionNumber: 2,
+      type: 'executable-python-lab-v1',
+      ...publishedPresentation,
+    },
+  ];
+  const exam = {
+    code: 'Python Next Generation',
+    deliveryMode: 'protected',
+    durationMinutes: 50,
+    name: 'Python Next Generation',
+    profile: { name: 'Lab', timeLimitMinutes: 50, totalScoredQuestions: 31 },
+    mode: { name: 'Formal Lab' },
+  };
+  return <ExamWorkspacePresentation
+    actionControls={<div className="exam-actions"><button type="button">Save response</button></div>}
+    answers={{}}
+    caseStudyBlocks={[]}
+    currentIndex={currentIndex}
+    currentSection="normal"
+    exam={exam}
+    exitDescription="The same formal attempt remains available for resume."
+    exitLabel="Save & exit"
+    flaggedQuestionIds={[]}
+    fullscreenSupported={false}
+    isFullscreen={false}
+    isQuestionMapOpen={false}
+    isSectionedExam={false}
+    navigatorQuestions={questions}
+    normalQuestions={questions}
+    onAnswerChange={() => {}}
+    onCloseQuestionMap={() => {}}
+    onExit={() => {}}
+    onNavigate={setCurrentIndex}
+    onOpenQuestionMap={() => {}}
+    onToggleFullscreen={() => {}}
+    overlays={null}
+    pbqQuestions={[]}
+    progressLabel={`Question ${currentIndex + 1} of ${questions.length}`}
+    pythonLab={{ attemptId, client }}
+    questionStateById={{}}
+    scoredAnswerSummary="0 answered"
+    timed={false}
+  />;
+}
+
+createRoot(document.getElementById('root')).render(rendersPublishedShape
+  ? <FormalLabHarness />
+  : <main>
+      <h1>Issue 86 Python lab</h1>
+      <PythonLabWorkspace
+        attemptId={attemptId}
+        client={client}
+        itemId={itemId}
+        presentation={presentation}
+      />
+    </main>);

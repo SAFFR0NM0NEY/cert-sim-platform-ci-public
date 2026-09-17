@@ -7,6 +7,7 @@ const EXAM_IDENTITIES = Object.freeze({
   az400: 'az400',
   'security-plus-sy0-701': 'securityplussy0701',
   inf303: 'inf303',
+  pythonnextgeneration: 'pythonnextgeneration',
 });
 export const PROTECTED_ATTEMPT_PURPOSES = Object.freeze(['assigned_assessment', 'self_directed_exam', 'study_sandbox', 'targeted_domain', 'weak_area', 'pbq_practice']);
 export const PROTECTED_LANGUAGE_PREFERENCES = Object.freeze(['csharp', 'python', 'mixed']);
@@ -36,6 +37,10 @@ const PROFILE_IDENTITIES = Object.freeze({
     'strict-beta-compact',
   ]),
   inf303: Object.freeze(['inf303-standard', 'inf303-compact']),
+  pythonnextgeneration: Object.freeze([
+    'pythonnextgeneration-no-lab',
+    'pythonnextgeneration-lab',
+  ]),
 });
 
 const SAFE_PRESENTATION_TYPES = new Set([

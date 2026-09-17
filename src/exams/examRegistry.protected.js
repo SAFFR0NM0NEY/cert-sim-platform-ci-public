@@ -69,6 +69,15 @@ const definitions = [
     modes: [mode('ai901-protected-practice', 'AI-901 Practice')],
     profiles: withRouteActions('ai901', ['compact', 'full']),
   },
+  {
+    id: 'pythonnextgeneration', lifecycle: EXAM_LIFECYCLES.productionReady,
+    statusLabel: 'Protected practice', statusNote: 'Protected practice.',
+    domainCount: 6, pbqCount: 0, caseStudyCount: 0, passingScore: 700,
+    domainNames: ['Domain 1', 'Domain 2', 'Domain 3', 'Domain 4', 'Domain 5', 'Domain 6'],
+    domainSummary: '6 domains',
+    modes: [mode('python-next-generation-protected-practice', 'Python Next Generation Practice')],
+    profiles: withRouteActions('pythonnextgeneration', ['no-lab', 'lab']),
+  },
 ].map(createContentFreeDefinition);
 
 function withRouteActions(examId, actions) {
@@ -144,7 +153,7 @@ function createContentFreeDefinition(item) {
   });
 }
 
-export const [inf303ExamDefinition, sc200ExamDefinition, az204ExamDefinition, securityPlusSy0701ExamDefinition, az400ExamDefinition, ai901ExamDefinition] = definitions;
+export const [inf303ExamDefinition, sc200ExamDefinition, az204ExamDefinition, securityPlusSy0701ExamDefinition, az400ExamDefinition, ai901ExamDefinition, pythonNextGenerationExamDefinition] = definitions;
 export const examRegistry = definitions;
 export const activeExamConfigs = examRegistry.filter(isLiveVisibleExamConfig);
 export const liveVisibleExamConfigs = examRegistry.filter(isLiveVisibleExamConfig);

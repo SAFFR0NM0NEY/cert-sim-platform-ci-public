@@ -135,19 +135,19 @@ sql(`
   select 1/(bool_and(exam_delivery.can_use_profile('${actors.owner.id}',pv.id,pp.id,'self_directed_exam'))::integer)
     from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
     where pv.exam_key='ai901' and pv.package_version='1.0.0';
-  select 1/(bool_and(exam_delivery.can_use_profile('${actors.developer.id}',pv.id,pp.id,'self_directed_exam'))::integer)
+  select 1/((not bool_or(exam_delivery.can_use_profile('${actors.developer.id}',pv.id,pp.id,'self_directed_exam')))::integer)
     from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
     where pv.exam_key='ai901' and pv.package_version='1.0.0';
-  select 1/(bool_and(exam_delivery.can_use_profile('${actors.administrator.id}',pv.id,pp.id,'self_directed_exam'))::integer)
+  select 1/((not bool_or(exam_delivery.can_use_profile('${actors.administrator.id}',pv.id,pp.id,'self_directed_exam')))::integer)
     from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
     where pv.exam_key='ai901' and pv.package_version='1.0.0';
-  select 1/(bool_and(exam_delivery.can_use_profile('${actors.trainer.id}',pv.id,pp.id,'self_directed_exam'))::integer)
+  select 1/((not bool_or(exam_delivery.can_use_profile('${actors.trainer.id}',pv.id,pp.id,'self_directed_exam')))::integer)
     from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
     where pv.exam_key='ai901' and pv.package_version='1.0.0';
-  select 1/(bool_and(exam_delivery.can_use_profile('${actors['campus-administrator'].id}',pv.id,pp.id,'self_directed_exam'))::integer)
+  select 1/((not bool_or(exam_delivery.can_use_profile('${actors['campus-administrator'].id}',pv.id,pp.id,'self_directed_exam')))::integer)
     from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
     where pv.exam_key='ai901' and pv.package_version='1.0.0';
-  select 1/(bool_and(exam_delivery.can_use_profile('${actors.reception.id}',pv.id,pp.id,'self_directed_exam'))::integer)
+  select 1/((not bool_or(exam_delivery.can_use_profile('${actors.reception.id}',pv.id,pp.id,'self_directed_exam')))::integer)
     from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id
     where pv.exam_key='ai901' and pv.package_version='1.0.0';
   select 1/((not exists(select 1 from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id

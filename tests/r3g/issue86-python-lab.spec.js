@@ -1,5 +1,38 @@
 import { expect, test } from '@playwright/test';
 
+test('real published presentation shape renders through the formal Lab workspace', async ({ page }) => {
+  await page.goto('/tests/r3g/issue86-python-lab-harness.html?mode=real-shape');
+  await page.getByRole('button', { name: 'Go to question 2' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Python coding task' })).toBeVisible();
+  await expect(page.getByLabel('Lab instructions')).toContainText('learner-visible synthetic requirement');
+  await expect(page.getByLabel(/Python source.*main\.py/)).toHaveValue('def synthetic_function():\n    return None\n');
+  await expect(page.getByRole('button', { name: 'Save code' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeVisible();
+  await expect(page.getByText(/model solution|hidden test|grading rule|expected output|material digest/i)).toHaveCount(0);
+});
+
+test('reload resumes the same formal Lab attempt with the real presentation shape', async ({ page }) => {
+  await page.goto('/tests/r3g/issue86-python-lab-harness.html?mode=real-shape-resume');
+  await page.evaluate(() => window.localStorage.clear());
+  await page.reload();
+  await page.getByRole('button', { name: 'Go to question 2' }).click();
+
+  const editor = page.getByLabel(/Python source.*main\.py/);
+  await expect(editor).toHaveValue('def synthetic_function():\n    return None\n');
+  await editor.fill('print("saved before reload")\n');
+  await page.getByRole('button', { name: 'Save code' }).click();
+  await expect(page.getByText('Revision 1', { exact: true })).toBeVisible();
+
+  await page.reload();
+  await page.getByRole('button', { name: 'Go to question 2' }).click();
+  await expect(page.getByRole('heading', { name: 'Python coding task' })).toBeVisible();
+  await expect(page.getByLabel(/Python source.*main\.py/)).toHaveValue('print("saved before reload")\n');
+  await expect(page.getByText('Revision 1', { exact: true })).toBeVisible();
+  const calls = await page.evaluate(() => window.__issue86PythonLabCalls);
+  expect(calls.map(({ method }) => method)).toEqual(['getPythonWorkspace']);
+});
+
 test('starter workspace saves edited source and reports the disabled executor without fake output', async ({ page }) => {
   await page.goto('/tests/r3g/issue86-python-lab-harness.html?mode=starter');
   await expect(page.getByRole('heading', { name: 'Complete the browser-fixture Python task.' })).toBeVisible();

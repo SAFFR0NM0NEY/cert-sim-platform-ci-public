@@ -584,6 +584,12 @@ function TimedAttemptsSection({
                   <dd>{formatCaseStudySummary(profile)}</dd>
                 </div>
               ) : null}
+              {profile.executableCount ? (
+                <div>
+                  <dt>Executable tasks</dt>
+                  <dd>{profile.executableCount}</dd>
+                </div>
+              ) : null}
               <div>
                 <dt>Standard questions</dt>
                 <dd>{formatStandardQuestionSummary(profile)}</dd>

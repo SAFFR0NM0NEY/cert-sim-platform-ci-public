@@ -9,6 +9,7 @@ const REASON_MESSAGES = Object.freeze({
   not_allowlisted: 'This protected exam is not available to your account.',
   pilot_disabled: 'Protected delivery is not currently available for this exam.',
   not_assigned: 'No active protected-exam assignment was found.',
+  access_not_granted: 'This protected exam requires an active assignment or entitlement.',
   no_published_package: 'The assigned exam package is not available.',
   attempt_not_found: 'No resumable protected attempt was found.',
   attempt_expired: 'This protected attempt has expired.',

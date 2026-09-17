@@ -16,9 +16,10 @@ const expected = {
   'security-plus-sy0-701': ['security-plus', 'SY0-701', 'Security+', 'CompTIA Security+ (SY0-701)', 'CompTIA'],
   az400: ['az400', 'AZ-400', 'Designing and Implementing Microsoft DevOps Solutions', 'AZ-400: Designing and Implementing Microsoft DevOps Solutions', 'Microsoft'],
   ai901: ['ai901', 'AI-901', 'Azure AI Fundamentals', 'Microsoft Azure AI Fundamentals', 'Microsoft'],
+  pythonnextgeneration: ['python-next-generation', 'Python', 'Python Next Generation', 'Python Next Generation', 'Certiport'],
 };
 
-assert.equal(examDisplayMetadata.length, 6);
+assert.equal(examDisplayMetadata.length, 7);
 for (const [id, values] of Object.entries(expected)) {
   const metadata = getExamDisplayMetadata(id);
   assert.deepEqual(
@@ -36,6 +37,9 @@ for (const alias of ['AZ204', 'AZ 204', 'az-204']) assert.equal(getExamDisplayMe
 for (const alias of ['INF303', 'INF 303', 'inf-303', 'ITS-303']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'inf303');
 for (const alias of ['SC200', 'SC 200', 'sc-200']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'sc200');
 for (const alias of ['Security+', 'Security Plus', 'SY0701', 'securityplussy0701']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'security-plus-sy0-701');
+for (const alias of ['pythonnextgeneration', 'python-next-generation', 'Python Next Generation', 'Python']) assert.equal(getExamDisplayMetadata(alias)?.canonicalId, 'pythonnextgeneration');
+assert.equal(getExamDisplayMetadata('Python Standard')?.canonicalId, 'inf303');
+assert.notEqual(getExamDisplayMetadata('Python')?.canonicalId, 'inf303', 'Python Next Generation must not reuse the INF-303 identity.');
 assert.equal(getExamDisplayLabel('opaque-private-key'), 'Exam', 'Unknown internal identities must not leak into UI fallbacks.');
 assert.equal(
   normalizeProtectedHistoryResult({
@@ -51,4 +55,4 @@ assert.deepEqual(
   'Registry metadata must satisfy the canonical contract.',
 );
 
-console.log(JSON.stringify({ ok: true, exams: examDisplayMetadata.length, aliasesValidated: 7 }));
+console.log(JSON.stringify({ ok: true, exams: examDisplayMetadata.length, aliasesValidated: 11 }));

@@ -16,7 +16,7 @@ const select = (state = {}) => filterAndSortExamLibrary(exams, {
   ...state,
 });
 
-assert.equal(exams.length, 6, 'The visible protected registry should contain six exams.');
+assert.equal(exams.length, 7, 'The visible protected registry should contain seven exams.');
 assert.equal(normalizeExamLibrarySearch('  AI–901  '), 'ai 901');
 
 for (const query of ['AI-901', 'ai-901', 'ai901', '  AI-901  ', 'AI 901', 'Azure AI', 'AI Fundamentals']) {
@@ -36,19 +36,23 @@ assert.deepEqual(ids(select({ query: 'DevOps' })), ['az400']);
 for (const query of ['SC-200', 'sc200', 'Security Operations Analyst', 'Microsoft Sentinel']) {
   assert.deepEqual(ids(select({ query })), ['sc200'], `${query} should find SC-200.`);
 }
-for (const query of ['INF-303', 'inf303', 'ITS-303', 'Python Standard', 'Certiport']) {
+for (const query of ['INF-303', 'inf303', 'ITS-303', 'Python Standard']) {
   assert.deepEqual(ids(select({ query })), ['inf303'], `${query} should find Python Standard.`);
 }
+assert.deepEqual(ids(select({ query: 'Python' })), ['inf303', 'pythonnextgeneration']);
+assert.deepEqual(ids(select({ query: 'Python Next Generation' })), ['pythonnextgeneration']);
+assert.deepEqual(ids(select({ query: 'Certiport Python' })), ['inf303', 'pythonnextgeneration']);
+assert.deepEqual(ids(select({ query: 'Certiport' })), ['inf303', 'pythonnextgeneration']);
 assert.deepEqual(ids(select({ query: 'Microsoft', vendor: 'Microsoft', lifecycle: 'controlledBeta' })), ['az400', 'ai901']);
-assert.deepEqual(ids(select({ lifecycle: 'productionReady' })), ['inf303', 'sc200', 'security-plus-sy0-701']);
+assert.deepEqual(ids(select({ lifecycle: 'productionReady' })), ['inf303', 'sc200', 'security-plus-sy0-701', 'pythonnextgeneration']);
 assert.deepEqual(ids(select({ vendor: 'CompTIA', lifecycle: 'productionReady' })), ['security-plus-sy0-701']);
 assert.deepEqual(ids(select({ query: 'Security+', vendor: 'Microsoft' })), []);
 
 const canonicalIds = ids(exams);
 const sourceBeforeSort = ids(exams);
 assert.deepEqual(ids(select()), canonicalIds, 'Recommended must preserve registry order.');
-assert.deepEqual(ids(select({ sort: 'name' })), ['az204', 'az400', 'security-plus-sy0-701', 'inf303', 'ai901', 'sc200']);
-assert.deepEqual(ids(select({ sort: 'vendor' })), ['inf303', 'security-plus-sy0-701', 'sc200', 'az204', 'az400', 'ai901']);
+assert.deepEqual(ids(select({ sort: 'name' })), ['az204', 'az400', 'security-plus-sy0-701', 'inf303', 'ai901', 'pythonnextgeneration', 'sc200']);
+assert.deepEqual(ids(select({ sort: 'vendor' })), ['inf303', 'pythonnextgeneration', 'security-plus-sy0-701', 'sc200', 'az204', 'az400', 'ai901']);
 assert.deepEqual(ids(exams), sourceBeforeSort, 'Sorting must not mutate the registry.');
 
 const options = deriveExamLibraryOptions(exams);
@@ -66,6 +70,6 @@ console.log(JSON.stringify({
   ok: true,
   visibleCertificationExams: exams.length,
   vendors: options.vendors.length,
-  searchCases: 33,
+  searchCases: 36,
   itDirectionCounted: false,
 }));

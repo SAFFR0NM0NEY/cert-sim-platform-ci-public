@@ -26,6 +26,39 @@ const presentation = Object.freeze({
   starterWorkspace,
   allowedFilenames: Object.freeze(['main.py', 'support/helper.py']),
 });
+const publishedPresentation = Object.freeze({
+  coverageTags: Object.freeze(['synthetic-python', 'executable-python-lab-v1']),
+  difficulty: 'medium',
+  editableFiles: Object.freeze(['main.py']),
+  instructions: 'Implement the learner-visible synthetic requirement, then save the file.',
+  interactionVersion: 'executable-python-lab-v1',
+  language: 'python',
+  officialObjectiveKey: 'synthetic-objective',
+  officialSkillGroup: 'executable-python-lab-v1',
+  starterCode: 'def synthetic_function():\n    return None\n',
+});
+
+test('published Python Next Generation presentation adapts to the browser workspace contract', () => {
+  const normalized = normalizePythonLabPresentation(publishedPresentation);
+  assert.equal(normalized.task, 'Python coding task');
+  assert.deepEqual(normalized.instructions, [publishedPresentation.instructions]);
+  assert.deepEqual(normalized.starterWorkspace, {
+    entryPoint: 'main.py',
+    files: [{ path: 'main.py', content: publishedPresentation.starterCode }],
+  });
+  assert.deepEqual(normalized.allowedFilenames, ['main.py']);
+});
+
+test('published presentation adapter rejects ambiguous or incomplete workspace mappings', () => {
+  assert.throws(() => normalizePythonLabPresentation({
+    ...publishedPresentation,
+    editableFiles: ['main.py', 'helper.py'],
+  }), /invalid_python_lab_starter_workspace/);
+  assert.throws(() => normalizePythonLabPresentation({
+    ...publishedPresentation,
+    starterCode: undefined,
+  }), /invalid_python_lab_starter_workspace/);
+});
 
 test('initial load uses the learner-visible starter workspace without persisting it', async () => {
   const mapped = toPresentationQuestion({

@@ -49,6 +49,22 @@ export const protectedProfileMetadata = Object.freeze({
       profile('ai901-controlled-beta-full', 'Full', 50, 45, { standardQuestionCount: 50 }),
     ]),
   }),
+  pythonnextgeneration: Object.freeze({
+    packageVersion: '1.0.0',
+    inventoryCount: 283,
+    profiles: Object.freeze([
+      profile('pythonnextgeneration-no-lab', 'No-Lab', 35, 50, {
+        standardQuestionCount: 35,
+        canonicalFormCount: 6,
+        executableCount: 0,
+      }),
+      profile('pythonnextgeneration-lab', 'Lab', 31, 50, {
+        standardQuestionCount: 24,
+        canonicalFormCount: 6,
+        executableCount: 7,
+      }),
+    ]),
+  }),
 });
 
 export function getProtectedProfileMetadata(examId) {

@@ -4,7 +4,9 @@ import { getExamLifecycle, isLiveVisibleLifecycle } from '../src/exams/examLifec
 import { examRegistry } from '../src/exams/examRegistry.protected.js';
 import { getProtectedProfileKey } from '../src/lib/protectedExamContract.js';
 
-const reviewedExemptions = Object.freeze({});
+const reviewedExemptions = Object.freeze({
+  pythonnextgeneration: 'Issue #86 publishes independently released No-Lab and Lab profiles.',
+});
 
 for (const exam of examRegistry) {
   if (!isLiveVisibleLifecycle(getExamLifecycle(exam))) continue;
@@ -12,13 +14,14 @@ for (const exam of examRegistry) {
   if (exemption) {
     assert.equal(typeof exemption, 'string');
     assert.ok(exemption.trim().length > 0);
-    continue;
   }
   const metadata = protectedProfileMetadata[exam.id];
   assert.ok(metadata, `${exam.id} requires protected metadata`);
   const names = metadata.profiles.map(({ name }) => name.toLowerCase());
-  assert.ok(names.some((name) => name.includes('full') || name.includes('standard')), `${exam.id} requires Full`);
-  assert.ok(names.some((name) => name.includes('compact')), `${exam.id} requires Compact`);
+  if (!exemption) {
+    assert.ok(names.some((name) => name.includes('full') || name.includes('standard')), `${exam.id} requires Full`);
+    assert.ok(names.some((name) => name.includes('compact')), `${exam.id} requires Compact`);
+  }
   for (const profile of metadata.profiles) {
     assert.ok(profile.totalScoredQuestions > 0);
     assert.ok(profile.timeLimitMinutes > 0);

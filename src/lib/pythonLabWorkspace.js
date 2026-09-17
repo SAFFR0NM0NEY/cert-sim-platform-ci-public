@@ -15,6 +15,7 @@ const TERMINAL_OUTCOMES = new Set(['completed', 'timeout', 'resource_limit', 'fa
 const DISPOSAL_STATES = new Set(['not_requested', 'pending', 'confirmed', 'failed']);
 const CANCELLABLE_RUN_STATES = new Set(['authorized', 'queued', 'running']);
 const MAX_OUTPUT_BYTES = 1024 * 1024;
+const GENERIC_PYTHON_TASK_HEADING = 'Python coding task';
 
 export function isExecutablePythonLab(question) {
   return question?.interactionVersion === PYTHON_LAB_INTERACTION_VERSION;
@@ -25,17 +26,14 @@ export function normalizePythonLabPresentation(value) {
   assertPresentationSafe(value);
   if (!isExecutablePythonLab(value)) throw contractError('invalid_python_lab_interaction');
 
-  const task = firstBoundedText([value.task, value.question, value.prompt, value.title], 16_000);
-  if (!task) throw contractError('invalid_python_lab_task');
   const instructions = normalizeInstructions(value.instructions);
-  const starterCandidate = value.starterWorkspace ?? (
-    Array.isArray(value.files)
-      ? { entryPoint: value.entryPoint, files: value.files }
-      : null
-  );
+  const task = firstBoundedText([value.task, value.question, value.prompt, value.title], 16_000)
+    || (instructions.length > 0 ? GENERIC_PYTHON_TASK_HEADING : '');
+  if (!task) throw contractError('invalid_python_lab_task');
+  const starterCandidate = starterWorkspaceCandidate(value);
   const starterWorkspace = normalizePythonWorkspace(starterCandidate);
   const allowedFilenames = normalizeAllowedFilenames(
-    value.allowedFilenames ?? starterWorkspace.files.map((file) => file.path),
+    value.allowedFilenames ?? value.editableFiles ?? starterWorkspace.files.map((file) => file.path),
   );
   if (starterWorkspace.files.some((file) => !allowedFilenames.includes(file.path))) {
     throw contractError('invalid_python_lab_allowed_files');
@@ -48,6 +46,30 @@ export function normalizePythonLabPresentation(value) {
     starterWorkspace,
     allowedFilenames: Object.freeze(allowedFilenames),
   });
+}
+
+function starterWorkspaceCandidate(value) {
+  if (value.starterWorkspace !== undefined && value.starterWorkspace !== null) {
+    return value.starterWorkspace;
+  }
+  if (Array.isArray(value.files)) {
+    return { entryPoint: value.entryPoint, files: value.files };
+  }
+
+  const hasStarterCode = Object.hasOwn(value, 'starterCode');
+  const hasEditableFiles = Object.hasOwn(value, 'editableFiles');
+  if (!hasStarterCode && !hasEditableFiles) return null;
+  if (
+    typeof value.starterCode !== 'string' ||
+    !Array.isArray(value.editableFiles) ||
+    value.editableFiles.length !== 1
+  ) throw contractError('invalid_python_lab_starter_workspace');
+
+  const [entryPoint] = normalizeAllowedFilenames(value.editableFiles);
+  return {
+    entryPoint,
+    files: [{ path: entryPoint, content: value.starterCode }],
+  };
 }
 
 export function normalizePythonWorkspace(value, allowedFilenames = null) {

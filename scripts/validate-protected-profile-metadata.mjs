@@ -30,6 +30,10 @@ const expected = {
     'ai901-controlled-beta-compact': [25, 25, 25, 0, 0, 0, null],
     'ai901-controlled-beta-full': [50, 45, 50, 0, 0, 0, null],
   },
+  pythonnextgeneration: {
+    'pythonnextgeneration-no-lab': [35, 50, 35, 0, 0, 0, null],
+    'pythonnextgeneration-lab': [31, 50, 24, 0, 0, 0, null],
+  },
 };
 
 let count = 0;
@@ -51,8 +55,10 @@ for (const exam of liveVisibleExamConfigs) {
     ], expected[exam.id][profile.id]);
     assert.deepEqual(profile, { ...profile, ...safe });
     assert.equal(order, expected[exam.id][profile.id][6]);
+    if (profile.id === 'pythonnextgeneration-no-lab') assert.equal(profile.executableCount, 0);
+    if (profile.id === 'pythonnextgeneration-lab') assert.equal(profile.executableCount, 7);
     count += 1;
   }
 }
-assert.equal(count, 15, 'all production-enabled protected profiles must be checked');
+assert.equal(count, 17, 'all production-enabled protected profiles must be checked');
 console.log(`Protected profile metadata parity validation passed (${count} profiles).`);

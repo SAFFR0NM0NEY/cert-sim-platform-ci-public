@@ -20,6 +20,11 @@ const fixtures = [
   ['historical alias', 'Microsoft Azure AI Fundamentals', 'AI-901 — Azure AI Fundamentals'],
   ['practice Security+ internal key', 'securityplussy0701', 'SY0-701 — Security+'],
 ];
+fixtures.push([
+  'current protected Python Next Generation',
+  'pythonnextgeneration',
+  'Python — Python Next Generation',
+]);
 
 for (const [description, identity, expected] of fixtures) {
   assert.equal(getSavedResultExamLabel(identity), expected, description);
@@ -27,9 +32,9 @@ for (const [description, identity, expected] of fixtures) {
 assert.equal(getSavedResultExamLabel('unidentified-historical-exam'), UNKNOWN_EXAM_LABEL);
 
 const filterOptions = getSavedResultExamFilterOptions(liveVisibleExamConfigs);
-assert.equal(filterOptions.length, 6);
+assert.equal(filterOptions.length, 7);
 assert.deepEqual(
-  filterOptions.map(({ label }) => label),
+  filterOptions.slice(0, 6).map(({ label }) => label),
   [
     'INF-303 — Python Standard',
     'SC-200 — Microsoft Security Operations Analyst',
@@ -40,6 +45,7 @@ assert.deepEqual(
   ],
 );
 assert.equal(filterOptions.find(({ value }) => value === 'security-plus-sy0-701')?.label, 'SY0-701 — Security+');
+assert.equal(filterOptions.at(-1)?.label, 'Python — Python Next Generation');
 assert.ok(filterOptions.every(({ label }) => !label.includes('securityplussy0701')));
 
 assert.match(page, /getSavedResultExamLabel\(item\.examKey\)/);

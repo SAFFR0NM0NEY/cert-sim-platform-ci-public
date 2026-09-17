@@ -30,6 +30,7 @@ function profileCharacteristics(profile) {
     parts.push(`${profile.caseStudyCount} ${label} / ${profile.caseStudyQuestionCount} items`);
   }
   if (profile.pbqCount) parts.push(`${profile.pbqCount} PBQs`);
+  if (profile.executableCount) parts.push(`${profile.executableCount} executable tasks`);
   if (profile.canonicalFormCount) parts.push(`${profile.canonicalFormCount} canonical forms`);
   if (profile.sectionOrder) parts.push(`order: ${profile.sectionOrder}`);
   if (profile.pbqPlacement) parts.push(`PBQs: ${profile.pbqPlacement}`);
