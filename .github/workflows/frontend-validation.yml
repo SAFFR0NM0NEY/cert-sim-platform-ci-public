@@ -1,40 +1,55 @@
-name: Frontend validation
+name: Issue 86 render hotfix supplemental validation
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - 'candidate/**'
+      - 'candidate/issue86-render-hotfix-b1b6d6c-supplemental'
 
 permissions:
   contents: read
 
-concurrency:
-  group: public-frontend-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  frontend-validation:
+  provenance-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Prove exact-source parent and CI-only diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_parent='2faaee602b833e6b43ab1e75758eace970ef4cff'
+          expected_source='b1b6d6c9bfa1f324c136c42602d1fe267bcc6387'
+
+          test "$(git rev-parse HEAD^)" = "$expected_parent"
+          mapfile -t changed_paths < <(git diff --name-only HEAD^ HEAD)
+          test "${#changed_paths[@]}" -eq 1
+          test "${changed_paths[0]}" = '.github/workflows/frontend-validation.yml'
+          test "$(tr -d '\r\n' < CI_SOURCE_SHA.txt)" = "$expected_source"
+          git diff --check HEAD^ HEAD
+
+  issue86-frontend:
+    needs: provenance-guard
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci --prefer-offline
       - run: npx playwright install --with-deps chromium
-      - name: Functional browser validation
-        run: npm run test:r3g-browser
-      - name: Issue 65 and protected frontend validation
-        run: |
-          node scripts/validate-issue65-untimed-practice.mjs
-          npm run validate:history-pagination
-          npm run validate:purpose-aware-readiness
-          npm run validate:r3e
-          npm run validate:exam-library
-          npm run validate:issue59
+      - name: Issue 86 browser validation
+        run: npm run test:issue86-browser
+      - name: Issue 86 executor, grader, and frontend validation
+        run: npm run validate:issue86
+      - name: Exam library static validation
+        run: npm run validate:exam-library
       - name: Protected production environment guard validation
         run: npm run validate:protected-production-build
       - run: npm run build
