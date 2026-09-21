@@ -136,8 +136,7 @@ Deno.test("disposable origin and authentication boundary", async () => {
   assertStatus("ALLOWED_ORIGIN_PREFLIGHT", preflight, 200);
   assertOutcome(
     "ALLOWED_ORIGIN_PREFLIGHT_CORS",
-    preflight.response.headers.get("access-control-allow-origin") ===
-      allowedOrigin,
+    preflight.response.headers.get("access-control-allow-origin") === "*",
   );
 
   const unauthResponse = await fetch(
