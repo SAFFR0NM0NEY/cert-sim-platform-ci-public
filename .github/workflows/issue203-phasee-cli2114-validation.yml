@@ -193,7 +193,7 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/issue203-expected-migrations.txt")" -eq 90
           echo '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300  supabase/migrations/20260920124528_issue133_examops_phase4b.sql' | sha256sum -c -
           echo 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725  supabase/migrations/20260921044626_issue133_phase5a_operator_readonly.sql' | sha256sum -c -
-          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
           docker ps --format '{{.Names}}\t{{.Image}}' | awk '$1 ~ /^supabase_db_/ {print "DISPOSABLE_DATABASE_IMAGE=" $2}'
           npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
           set -a
@@ -328,7 +328,7 @@ jobs:
           test "$(grep -c '^CERTSIM_ALLOWED_ORIGINS=' "$edge_env")" -eq 1
           echo 'EDGE_ALLOWED_ORIGIN=http://localhost:5173'
           echo 'EDGE_WORKDIR_FUNCTION=PASS'
-          echo 'EDGE_START_ORDER=STACK_WITHOUT_EDGE_THEN_SERVE'
+          echo 'EDGE_START_ORDER=STACK_THEN_SERVE_WITH_BOUNDARY_READINESS'
           npx --yes supabase@2.114.0 --workdir "$workdir" functions serve certsim-protected-exam --env-file "$edge_env" >"$edge_log" 2>&1 &
           edge_pid=$!
           ready=0
@@ -341,7 +341,34 @@ jobs:
             if [ "$status" = 401 ]; then ready=1; break; fi
             sleep 1
           done
-          test "$ready" = 1
+          if [ "$ready" != 1 ]; then
+            if kill -0 "$edge_pid" >/dev/null 2>&1; then
+              echo 'EDGE_SERVE_EXIT_CLASS=PROCESS_ALIVE_BOUNDARY_NOT_READY'
+            else
+              set +e
+              wait "$edge_pid"
+              serve_exit_code=$?
+              set -e
+              edge_pid=''
+              echo "EDGE_SERVE_EXIT_CODE=$serve_exit_code"
+              if grep -Eqi 'failed to pull docker image|no such image' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=IMAGE_UNAVAILABLE'
+              elif grep -Eqi 'address already in use|port is already allocated' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=PORT_CONFLICT'
+              elif grep -Eqi 'invalid mount config|bind source path does not exist|no such file or directory' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=FILESYSTEM_OR_MOUNT'
+              elif grep -Eqi 'network .* not found|failed to connect.*network' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=NETWORK_UNAVAILABLE'
+              elif grep -Eqi 'failed to parse|failed to load config|env file' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=CONFIG_OR_ENV'
+              elif grep -Eqi 'container.*(exited|not running)|edge runtime.*(exited|failed)' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=RUNTIME_EXIT'
+              else
+                echo 'EDGE_SERVE_EXIT_CLASS=UNKNOWN'
+              fi
+            fi
+            exit 1
+          fi
           kill -0 "$edge_pid" >/dev/null 2>&1
           echo 'INTENDED_SERVE_PROCESS_ALIVE=YES'
           echo 'EDGE_ALLOWED_ORIGIN_READINESS=PASS'
