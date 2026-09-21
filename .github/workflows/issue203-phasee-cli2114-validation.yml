@@ -366,6 +366,31 @@ jobs:
               else
                 echo 'EDGE_SERVE_EXIT_CLASS=UNKNOWN'
               fi
+              EDGE_LOG_PATH="$edge_log" EDGE_MASK_ANON="$ANON_KEY" EDGE_MASK_SERVICE="$SERVICE_ROLE_KEY" EDGE_MASK_USER="$CERTSIM_USER_JWT" EDGE_MASK_ACTOR="$CERTSIM_ACTOR_ID" node --input-type=module <<'NODE'
+              import { readFileSync } from 'node:fs';
+              let text = readFileSync(process.env.EDGE_LOG_PATH, 'utf8');
+              for (const name of ['EDGE_MASK_ANON', 'EDGE_MASK_SERVICE', 'EDGE_MASK_USER', 'EDGE_MASK_ACTOR']) {
+                const value = process.env[name];
+                if (value) text = text.split(value).join('[REDACTED_VALUE]');
+              }
+              const sanitized = text
+                .replace(/\u001b\[[0-9;]*m/g, '')
+                .replace(/eyJ[A-Za-z0-9._-]+/g, '[REDACTED_TOKEN]')
+                .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, '[REDACTED_UUID]')
+                .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]')
+                .replace(/postgres(?:ql)?:\/\/\S+/gi, '[REDACTED_DB_URL]');
+              const diagnosticLines = sanitized
+                .split(/\r?\n/)
+                .filter((line) => /error|fail|invalid|cannot|not found|no such|exited|skipping/i.test(line))
+                .slice(-12);
+              if (diagnosticLines.length === 0) {
+                console.log('EDGE_SERVE_SANITIZED=NO_ALLOWLISTED_DIAGNOSTIC_LINE');
+              } else {
+                for (const line of diagnosticLines) {
+                  console.log(`EDGE_SERVE_SANITIZED=${line.slice(0, 300)}`);
+                }
+              }
+          NODE
             fi
             exit 1
           fi
