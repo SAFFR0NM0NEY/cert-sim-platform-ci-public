@@ -3,7 +3,7 @@ name: Issue 203 Phase E CLI 2.114.0 supplemental validation
 on:
   push:
     branches:
-      - "supplemental/issue203-88b5b8a-cli2114"
+      - "supplemental/issue203-1ee87ee-cli2114"
 
 permissions:
   contents: read
@@ -14,10 +14,10 @@ concurrency:
 
 env:
   EXPECTED_REPOSITORY: SAFFR0NM0NEY/cert-sim-platform-ci-public
-  EXPECTED_BRANCH: supplemental/issue203-88b5b8a-cli2114
-  EXPECTED_PUBLIC_BASE_SHA: 9ef075519825a11c23c5f73a2132d899963814ba
-  EXPECTED_PRIVATE_SHA: 88b5b8a3ea1df09e48a2358d07362d6d0ebeb291
-  EXPECTED_MANIFEST_SHA256: 4feb01235dc7ea723b6e817403ca8e9d1691c38cb2dd5dd2fbe5c9816a775f72
+  EXPECTED_BRANCH: supplemental/issue203-1ee87ee-cli2114
+  EXPECTED_PUBLIC_BASE_SHA: 69259af3df8b6bd6299d201c76ded3239969884c
+  EXPECTED_PRIVATE_SHA: 1ee87ee195edb4d61ddcf7ea43b1464a1184d86f
+  EXPECTED_MANIFEST_SHA256: ce23ed31646e80c2de459e53dc88ac65cf624faf407389c4f143e707b898a908
   SUPABASE_CLI_VERSION: 2.114.0
 
 jobs:
