@@ -329,7 +329,7 @@ jobs:
           echo 'EDGE_ALLOWED_ORIGIN=http://localhost:5173'
           echo 'EDGE_WORKDIR_FUNCTION=PASS'
           echo 'EDGE_START_ORDER=STACK_THEN_SERVE_WITH_BOUNDARY_READINESS'
-          npx --yes supabase@2.114.0 --workdir "$workdir" functions serve certsim-protected-exam --env-file "$edge_env" >"$edge_log" 2>&1 &
+          npx --yes supabase@2.114.0 --workdir "$workdir" functions serve --env-file "$edge_env" >"$edge_log" 2>&1 &
           edge_pid=$!
           ready=0
           for attempt in {1..60}; do
@@ -351,7 +351,9 @@ jobs:
               set -e
               edge_pid=''
               echo "EDGE_SERVE_EXIT_CODE=$serve_exit_code"
-              if grep -Eqi 'failed to pull docker image|no such image' "$edge_log"; then
+              if grep -Eqi 'accepts [0-9]+ arg|unknown (command|flag)|usage:' "$edge_log"; then
+                echo 'EDGE_SERVE_EXIT_CLASS=CLI_INVOCATION'
+              elif grep -Eqi 'failed to pull docker image|no such image' "$edge_log"; then
                 echo 'EDGE_SERVE_EXIT_CLASS=IMAGE_UNAVAILABLE'
               elif grep -Eqi 'address already in use|port is already allocated' "$edge_log"; then
                 echo 'EDGE_SERVE_EXIT_CLASS=PORT_CONFLICT'
@@ -381,7 +383,7 @@ jobs:
                 .replace(/postgres(?:ql)?:\/\/\S+/gi, '[REDACTED_DB_URL]');
               const diagnosticLines = sanitized
                 .split(/\r?\n/)
-                .filter((line) => /error|fail|invalid|cannot|not found|no such|exited|skipping/i.test(line))
+                .filter((line) => /error|fail|invalid|cannot|not found|no such|exited|skipping|accepts|unknown|usage:/i.test(line))
                 .slice(-12);
               if (diagnosticLines.length === 0) {
                 console.log('EDGE_SERVE_SANITIZED=NO_ALLOWLISTED_DIAGNOSTIC_LINE');
@@ -473,7 +475,7 @@ jobs:
             echo 'Disposable Edge containers remain after cleanup.'
             exit 1
           fi
-          if pgrep -f '[s]upabase@2.114.0.*functions serve.*certsim-protected-exam' >/dev/null; then
+          if pgrep -f '[s]upabase@2.114.0.*functions serve' >/dev/null; then
             echo 'Disposable Edge serve process remains after cleanup.'
             exit 1
           fi
