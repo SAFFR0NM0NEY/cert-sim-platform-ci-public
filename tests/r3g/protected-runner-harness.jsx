@@ -21,6 +21,6 @@ function Harness() {
     window.__setProtectedAccessToken = setAccessToken;
     return () => { delete window.__setProtectedAccessToken; };
   }, []);
-  return <>{open ? <ProtectedExamRunner assignmentId={assignmentId} codingLanguagePreference={az204 ? language : null} examConfig={exam} onCodingLanguagePreferenceChange={setLanguage} onPracticeRequestChange={(next) => setDomain(next.domain)} onExit={() => setOpen(false)} practiceRequest={assignmentId ? null : request} profile={profile} selectedMode={exam.strictBetaMode} session={{ access_token: accessToken }} student={{ name: 'Fixture learner' }} /> : <main><h1>Selected exam dashboard</h1><button onClick={() => setOpen(true)}>Return to protected attempt</button></main>}</>;
+  return <>{open ? <ProtectedExamRunner assignmentId={assignmentId} codingLanguagePreference={az204 ? language : null} examConfig={exam} onCodingLanguagePreferenceChange={setLanguage} onPracticeRequestChange={(next) => setDomain(next.domain)} onExit={() => setOpen(false)} practiceRequest={assignmentId ? null : request} profile={profile} selectedMode={exam.strictBetaMode} session={{ access_token: accessToken, user: { id: '00000000-0000-4000-8000-000000000203' } }} student={{ name: 'Fixture learner' }} /> : <main><h1>Selected exam dashboard</h1><button onClick={() => setOpen(true)}>Return to protected attempt</button></main>}</>;
 }
 createRoot(document.getElementById('root')).render(<Harness />);

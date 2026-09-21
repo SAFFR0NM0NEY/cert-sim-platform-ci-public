@@ -184,6 +184,18 @@ export function mapPythonRun(raw: unknown): Obj {
   }
   return pick(value, ["runId", "state", "terminalOutcome", "stdout", "stderr", "exitCode", "cancellationRequestedAt", "disposalState", "createdAt", "updatedAt"]);
 }
+export function mapLatestPythonRun(raw: unknown): Obj {
+  const value = object(raw);
+  requireOnlyKeys(value, ["ok", "itemId", "workspaceRevision", "run"]);
+  if (typeof value.itemId !== "string" || !Number.isSafeInteger(value.workspaceRevision) ||
+    Number(value.workspaceRevision) < 0 || (value.run !== null && typeof value.run !== "object")) {
+    throw new SafeError("internal_failure");
+  }
+  const run = value.run === null
+    ? null
+    : mapPythonRun({ ok: true, ...object(value.run) });
+  return { itemId: value.itemId, workspaceRevision: value.workspaceRevision, run };
+}
 export function mapFlags(raw: unknown): Obj {
   const value = object(raw);
   if (!Array.isArray(value.itemIds) || value.itemIds.some((id) => typeof id !== "string")) throw new SafeError("internal_failure");
@@ -351,6 +363,15 @@ export function mapReview(raw: unknown): Obj {
   return {
     review: {
       items: mapPresentationItems(review.items, (item, questionNumber) => {
+        if (item.questionType === "executable-python-lab-v1") {
+          return {
+            ...pick(item, [
+              "itemId", "questionType", "status", "earnedPoints", "maxPoints",
+            ]),
+            questionNumber,
+            presentation: sanitizeQuestionPresentation(item.questionType, item.presentation),
+          };
+        }
         const mapped = {
           ...pick(item, [
           "itemId",

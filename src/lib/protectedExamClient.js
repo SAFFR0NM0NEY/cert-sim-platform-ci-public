@@ -2,6 +2,14 @@ import { supabaseConfig } from './supabaseConfig.js';
 
 const FUNCTION_NAME = 'certsim-protected-exam';
 const TIMEOUT_MS = 15_000;
+const PYTHON_RUN_TIMEOUT_MS = 60_000;
+const SUBMISSION_TIMEOUT_MS = 120_000;
+const RETRY_SAFE_GRADING_CODES = new Set([
+  'grading_failed',
+  'grading_incomplete',
+  'grading_reconciliation_required',
+  'submission_in_progress',
+]);
 
 const REASON_MESSAGES = Object.freeze({
   unauthenticated: 'Your session has expired. Sign in again before continuing.',
@@ -34,6 +42,13 @@ const REASON_MESSAGES = Object.freeze({
   run_not_found: 'This Python run is no longer available.',
   run_request_conflict: 'This Python run request was already used for a different revision.',
   run_in_progress: 'A Python run is already in progress for this task.',
+  python_workspace_required: 'A saved Python workspace is required for this action.',
+  submission_in_progress: 'Trusted grading is still in progress. Completion is not yet confirmed. Continue the same submission when ready.',
+  grading_material_invalid: 'A saved Python task cannot be graded because its grading contract is invalid.',
+  grading_incomplete: 'Trusted grading is incomplete for one or more saved Python tasks. Continue the same submission when ready.',
+  grading_binding_mismatch: 'Trusted grading could not verify the saved Python workspace binding.',
+  grading_reconciliation_required: 'Trusted grading requires safe reconciliation. Completion is not yet confirmed.',
+  grading_failed: 'Trusted Python grading could not be completed. Your saved work is retained and completion is not yet confirmed.',
   already_submitted: 'This attempt has already been submitted.',
   review_unavailable: 'Question review is withheld for this attempt.',
   invalid_lifecycle_transition: 'This attempt can no longer accept that action. Refresh its current state.',
@@ -54,7 +69,7 @@ export function createProtectedExamClient({ accessToken, getAccessToken, fetchIm
   }
   const baseUrl = `${supabaseConfig.supabaseUrl}/functions/v1/${FUNCTION_NAME}`;
 
-  async function request(path, { method = 'GET', body, signal } = {}) {
+  async function request(path, { method = 'GET', body, signal, timeoutMs = TIMEOUT_MS } = {}) {
     const maximumTransportAttempts = method === 'GET' ? 2 : 1;
     let transportAttempt = 0;
     let authenticationRecoveryUsed = false;
@@ -64,7 +79,7 @@ export function createProtectedExamClient({ accessToken, getAccessToken, fetchIm
         forceRefresh: authenticationRecoveryUsed,
         rejectedAccessToken,
       });
-      const timeout = AbortSignal.timeout(TIMEOUT_MS);
+      const timeout = AbortSignal.timeout(timeoutMs);
       const combinedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
       let response;
       try {
@@ -147,7 +162,10 @@ export function createProtectedExamClient({ accessToken, getAccessToken, fetchIm
     requestPythonRun: (attemptId, itemId, expectedRevision, requestId, options) =>
       request(`/attempts/${attemptId}/items/${itemId}/python/runs`, {
         ...options, method: 'POST', body: { expectedRevision, requestId },
+        timeoutMs: PYTHON_RUN_TIMEOUT_MS,
       }),
+    getLatestPythonRun: (attemptId, itemId, options) =>
+      request(`/attempts/${attemptId}/items/${itemId}/python/runs/latest`, options),
     getPythonRun: (attemptId, itemId, runId, options) =>
       request(`/attempts/${attemptId}/items/${itemId}/python/runs/${runId}`, options),
     cancelPythonRun: (attemptId, itemId, runId, requestId, options) =>
@@ -161,7 +179,10 @@ export function createProtectedExamClient({ accessToken, getAccessToken, fetchIm
     getAttemptLifecycleSummary: (attemptId, options) => request(`/attempts/${attemptId}/lifecycle-summary`, options),
     submitAttempt: (attemptId, submissionId, options) =>
       request(`/attempts/${attemptId}/submit`, {
-        ...options, method: 'POST', body: { submissionId },
+        ...options,
+        method: 'POST',
+        body: { submissionId },
+        timeoutMs: SUBMISSION_TIMEOUT_MS,
       }),
     getResult: (attemptId, options) => request(`/attempts/${attemptId}/result`, options),
     getReview: (attemptId, options) => request(`/attempts/${attemptId}/review`, options),
@@ -250,6 +271,7 @@ export async function submitProtectedAttemptWithRecovery(
       recovered: false,
     };
   } catch (submitError) {
+    if (isRetrySafeSubmissionError(submitError)) throw submitError;
     if (submitError?.code !== 'already_submitted' && !isAmbiguousStartFailure(submitError)) {
       throw submitError;
     }
@@ -258,13 +280,32 @@ export async function submitProtectedAttemptWithRecovery(
         payload: await client.getResult(attemptId, options),
         recovered: true,
       };
-    } catch {
+    } catch (lookupError) {
+      if (lookupError?.code === 'attempt_not_found') {
+        throw createClientError(
+          'submission_in_progress',
+          REASON_MESSAGES.submission_in_progress,
+        );
+      }
+      if (isRetrySafeResultLookupError(lookupError)) throw lookupError;
       throw createClientError(
         'submission_state_conflict',
         REASON_MESSAGES.submission_state_conflict,
       );
     }
   }
+}
+
+export function isRetrySafeSubmissionError(error) {
+  return RETRY_SAFE_GRADING_CODES.has(error?.code);
+}
+
+export function isRetrySafeResultLookupError(error) {
+  if (
+    error?.ambiguousTransport === true &&
+    ['network_failure', 'request_timeout'].includes(error?.code)
+  ) return true;
+  return error?.code === 'internal_failure' && Number(error?.httpStatus) >= 500;
 }
 
 export function isAmbiguousStartFailure(error) {

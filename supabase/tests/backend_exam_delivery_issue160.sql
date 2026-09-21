@@ -78,6 +78,18 @@ insert into exam_delivery.practice_policies(
   'az204','1.1.0','standard-profile','weak_area','production_authorized',true,
   null,40,false,'after_submission','after_submission'
 );
+insert into exam_delivery.practice_policies(
+  canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,
+  maximum_completed_attempts,maximum_session_items,immediate_feedback,
+  review_release_policy,answer_release_policy
+)
+select 'az204','1.1.0','standard-profile',purpose::exam_delivery.attempt_purpose,
+  'production_authorized',true,null,40,purpose='study_sandbox',
+  case when purpose='study_sandbox' then 'immediate_study_feedback' else 'after_submission' end,
+  case when purpose='study_sandbox' then 'immediate_study_feedback' else 'after_submission' end
+from unnest(array[
+  'self_directed_exam','study_sandbox','targeted_domain','pbq_practice'
+]) purpose;
 insert into exam_delivery.package_profile_defaults(
   canonical_exam_key,profile_key,purpose,package_version_id,package_profile_id,enabled,configured_by
 ) values(
@@ -140,9 +152,9 @@ select is(
 select is((exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000003','az204','standard-profile')#>>'{domains,0,domainKey}'),'student-current','student formal evidence remains discoverable');
 select is((exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000004','az204','standard-profile')->'domains'),'[]'::jsonb,'student practice activity creates no learner evidence');
 select is((select actor_classification from exam_delivery.attempts where id='16000000-0000-0000-0000-000000000304'),'staff','developer attempt is classified as staff');
-select is((exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000005','az204','standard-profile')->'domains'),'[]'::jsonb,'developer staff evidence is excluded');
+select is(exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000005','az204','standard-profile'),'{"ok": false, "code": "access_not_granted"}'::jsonb,'developer staff evidence is excluded by the profile-access boundary');
 select is((select actor_classification from exam_delivery.attempts where id='16000000-0000-0000-0000-000000000305'),'staff','trainer attempt is classified as staff');
-select is((exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000006','az204','standard-profile')->'domains'),'[]'::jsonb,'trainer staff evidence is excluded');
+select is(exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000006','az204','standard-profile'),'{"ok": false, "code": "access_not_granted"}'::jsonb,'trainer staff evidence is excluded by the profile-access boundary');
 select is((select count(*)::integer from exam_delivery.weak_domain_evidence_for_practice('16000000-0000-0000-0000-000000000002','16000000-0000-0000-0000-000000000110')),0,'all practice purposes are excluded from owner evidence');
 select is((exam_delivery.weak_area_options('16000000-0000-0000-0000-000000000002','az204','standard-profile')->'domains'),'[]'::jsonb,'owner evidence is isolated across users');
 

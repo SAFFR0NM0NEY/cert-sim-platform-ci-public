@@ -14,6 +14,7 @@ import { downloadProtectedResultSummaryPdf } from '../lib/savedResultReportExpor
 import { buildWeakAreaPracticeRequest } from '../lib/protectedPracticeRequest.js';
 import { PROTECTED_LANGUAGE_PREFERENCES } from '../lib/protectedExamContract.js';
 import { CODING_LANGUAGE_OPTIONS } from '../utils/codingLanguage.js';
+import ReleasedReviewWorkspace from '../components/exam/ReleasedReviewWorkspace.jsx';
 
 export default function ProtectedSavedResultsPage({ attemptId, codingLanguagePreference, onBackHome, onCodingLanguagePreferenceChange, onOpenAccount, onOpenDetail, onReturnHome, onReturnToList, session, openWeakAreaPractice = false, weakAreaPracticeExamId = '', onStartWeakAreaPractice }) {
   const client = useMemo(() => session?.access_token ? createProtectedExamClient({ accessToken: session.access_token }) : null, [session?.access_token]);
@@ -170,16 +171,50 @@ function ProtectedWeakAreaPractice({ client, codingLanguagePreference, initialEx
   </div>;
 }
 
-function ProtectedResultDetail({ attemptId, client, onBack }) {
+export function ProtectedResultDetail({ attemptId, client, onBack }) {
   const [detail, setDetail] = useState({ state: 'loading', value: null, message: '' });
   const [pdf, setPdf] = useState({ preparing: false, message: '', error: '' });
+  const [releasedReview, setReleasedReview] = useState({ state: 'idle', value: null, message: '', open: false });
+  const reviewControllerRef = useRef(null);
   useEffect(() => {
     const controller = new AbortController();
     if (!client) { setDetail({ state: 'signed-out', value: null, message: 'Sign in to open this result.' }); return () => controller.abort(); }
     client.getPrintableSummary(attemptId, { signal: controller.signal }).then((value) => setDetail({ state: 'ready', value, message: '' })).catch((error) => { if (!controller.signal.aborted) setDetail({ state: error?.code === 'attempt_not_found' ? 'denied' : 'error', value: null, message: error.message || 'This result could not be opened.' }); });
     return () => controller.abort();
   }, [attemptId, client]);
+  useEffect(() => {
+    setReleasedReview({ state: 'idle', value: null, message: '', open: false });
+    return () => reviewControllerRef.current?.abort();
+  }, [attemptId, client]);
   const value = detail.value;
+  async function openReleasedReview() {
+    if (releasedReview.value) {
+      setReleasedReview((current) => ({ ...current, open: true, message: '' }));
+      return;
+    }
+    if (!client) {
+      setReleasedReview({ state: 'error', value: null, message: 'Sign in to open released question review.', open: false });
+      return;
+    }
+    reviewControllerRef.current?.abort();
+    const controller = new AbortController();
+    reviewControllerRef.current = controller;
+    setReleasedReview({ state: 'loading', value: null, message: 'Loading released review…', open: false });
+    try {
+      const payload = await client.getReview(attemptId, { signal: controller.signal });
+      if (!controller.signal.aborted) setReleasedReview({ state: 'ready', value: payload.review, message: '', open: true });
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setReleasedReview({
+        state: 'error',
+        value: null,
+        message: error?.code === 'review_unavailable'
+          ? 'Released question review is not available for this result.'
+          : 'Released question review could not be loaded. Return to this result summary and try again.',
+        open: false,
+      });
+    }
+  }
   async function downloadPdf() {
     setPdf({ preparing: true, message: '', error: '' });
     try {
@@ -189,7 +224,40 @@ function ProtectedResultDetail({ attemptId, client, onBack }) {
       setPdf({ preparing: false, message: '', error: 'PDF download failed. Use Print as a fallback.' });
     }
   }
-  return <section className="form-panel protected-result-detail" aria-labelledby="protected-result-detail-heading"><p className="eyebrow">Saved Result</p><h2 id="protected-result-detail-heading">Result summary</h2>{detail.state === 'loading' ? <p role="status">Loading result summary…</p> : null}{detail.message ? <p role={detail.state === 'error' ? 'alert' : 'status'}>{detail.message}</p> : null}{value ? <><dl className="exam-stats compact"><div><dt>Exam</dt><dd>{getSavedResultExamLabel(value.exam?.key)}</dd></div><div><dt>Exam profile</dt><dd>{value.profile?.name || 'Standard profile'}</dd></div><div><dt>Attempt</dt><dd>{value.source === 'legacy_authoritative' && isAssessmentResult(value) ? 'Historical exam attempt' : getAttemptKindLabel(value)}</dd></div><div><dt>Score</dt><dd>{value.percentage == null ? 'Not recorded' : `${value.percentage}%`}</dd></div><div><dt>Status</dt><dd>{value.passed === true ? 'Passed' : value.passed === false ? 'Needs review' : 'Not recorded'}</dd></div><div><dt>Completed</dt><dd>{new Date(value.completedAt).toLocaleString()}</dd></div><div><dt>Review</dt><dd>{value.reviewStatus === 'released' ? 'Released' : 'Withheld'}</dd></div></dl><p>Question and answer review is available only when the applicable release policy permits it.</p><div className="button-row wrap no-print"><button className="secondary-button" type="button" onClick={() => window.print()}>Print result summary</button><button className="secondary-button" disabled={pdf.preparing} type="button" onClick={downloadPdf}>{pdf.preparing ? 'Preparing PDF...' : 'Download PDF'}</button></div>{pdf.message ? <p role="status">{pdf.message}</p> : null}{pdf.error ? <p role="alert">{pdf.error}</p> : null}</> : null}<button type="button" className="primary-button no-print" onClick={onBack}>Back to Saved Results</button></section>;
+  if (releasedReview.open && releasedReview.value) {
+    return <ReleasedReviewWorkspace review={releasedReview.value} onReturn={() => setReleasedReview((current) => ({ ...current, open: false }))} />;
+  }
+  return (
+    <section className="form-panel protected-result-detail" aria-labelledby="protected-result-detail-heading">
+      <p className="eyebrow">Saved Result</p>
+      <h2 id="protected-result-detail-heading">Result summary</h2>
+      {detail.state === 'loading' ? <p role="status">Loading result summary…</p> : null}
+      {detail.message ? <p role={detail.state === 'error' ? 'alert' : 'status'}>{detail.message}</p> : null}
+      {value ? (
+        <>
+          <dl className="exam-stats compact">
+            <div><dt>Exam</dt><dd>{getSavedResultExamLabel(value.exam?.key)}</dd></div>
+            <div><dt>Exam profile</dt><dd>{value.profile?.name || 'Standard profile'}</dd></div>
+            <div><dt>Attempt</dt><dd>{value.source === 'legacy_authoritative' && isAssessmentResult(value) ? 'Historical exam attempt' : getAttemptKindLabel(value)}</dd></div>
+            <div><dt>Score</dt><dd>{value.percentage == null ? 'Not recorded' : `${value.percentage}%`}</dd></div>
+            <div><dt>Status</dt><dd>{value.passed === true ? 'Passed' : value.passed === false ? 'Needs review' : 'Not recorded'}</dd></div>
+            <div><dt>Completed</dt><dd>{new Date(value.completedAt).toLocaleString()}</dd></div>
+            <div><dt>Review</dt><dd>{value.reviewStatus === 'released' ? 'Released' : 'Withheld'}</dd></div>
+          </dl>
+          <p>Question and answer review is available only when the applicable release policy permits it.</p>
+          <div className="button-row wrap no-print">
+            {value.reviewStatus === 'released' ? <button className="secondary-button" disabled={releasedReview.state === 'loading'} type="button" onClick={openReleasedReview}>{releasedReview.state === 'loading' ? 'Loading released review…' : 'View released review'}</button> : null}
+            <button className="secondary-button" type="button" onClick={() => window.print()}>Print result summary</button>
+            <button className="secondary-button" disabled={pdf.preparing} type="button" onClick={downloadPdf}>{pdf.preparing ? 'Preparing PDF...' : 'Download PDF'}</button>
+          </div>
+          {releasedReview.message ? <p role={releasedReview.state === 'error' ? 'alert' : 'status'}>{releasedReview.message}</p> : null}
+          {pdf.message ? <p role="status">{pdf.message}</p> : null}
+          {pdf.error ? <p role="alert">{pdf.error}</p> : null}
+        </>
+      ) : null}
+      <button type="button" className="primary-button no-print" onClick={onBack}>Back to Saved Results</button>
+    </section>
+  );
 }
 
 function normalizeExamKey(value) { return String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ''); }

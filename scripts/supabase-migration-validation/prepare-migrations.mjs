@@ -90,6 +90,10 @@ export const SOURCE_MIGRATIONS = Object.freeze([
   '20260916103000_issue86_trusted_grading_completion.sql',
   '20260916155319_issue86_python_next_generation_release_prep.sql',
   '20260917074357_platform_owner_protected_exam_bypass.sql',
+  '20260917121244_issue86_executable_submission_run_restore.sql',
+  '20260917185333_issue86_live_submit_recovery.sql',
+  '20260920124528_issue133_examops_phase4b.sql',
+  '20260921044626_issue133_phase5a_operator_readonly.sql',
 ]);
 
 export const SOURCE_MIGRATION_HASHES = Object.freeze({
@@ -179,6 +183,10 @@ export const SOURCE_MIGRATION_HASHES = Object.freeze({
   '20260916103000_issue86_trusted_grading_completion.sql': '16fdb6dfb78888731d64c68746b5294f95cc0099fc02992cfb70b7f524fcab55',
   '20260916155319_issue86_python_next_generation_release_prep.sql': '6a04bbf7989c12ca4d021ed19052407cf3dc1ae50580ce856985bd8b6d12b927',
   '20260917074357_platform_owner_protected_exam_bypass.sql': '6a1c1d1b852ba63159f8dcab72da6063855ba242b8bc9f744889ecad6ac9876e',
+  '20260917121244_issue86_executable_submission_run_restore.sql': '6488cfeaa4329f6c9966541e93dcefb3bf5db94f4ed1157dfd56a82ddce5d353',
+  '20260917185333_issue86_live_submit_recovery.sql': '46f705538722b96f06f2573c9ac9e17ffdd61a1464591c5a87cd4d3327b92950',
+  '20260920124528_issue133_examops_phase4b.sql': '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300',
+  '20260921044626_issue133_phase5a_operator_readonly.sql': 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725',
 });
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

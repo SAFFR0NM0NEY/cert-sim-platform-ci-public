@@ -57,10 +57,10 @@ for (const [resolver, presentation, value, config] of [
 assert.equal(resolveReleasedReorderTexts(reorder, { answer: ['step-a'] }, { questionType: 'unsupported-type' }).status, 'not-applicable');
 
 const component = fs.readFileSync(new URL('../src/components/exam/ReleasedReviewAnswer.jsx', import.meta.url), 'utf8');
-const runner = fs.readFileSync(new URL('../src/components/exam/ProtectedExamRunner.jsx', import.meta.url), 'utf8');
+const workspace = fs.readFileSync(new URL('../src/components/exam/ReleasedReviewWorkspace.jsx', import.meta.url), 'utf8');
 const edge = fs.readFileSync(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
 const pdf = fs.readFileSync(new URL('../src/lib/savedResultReportExport.js', import.meta.url), 'utf8');
-assert.match(runner, /questionType=\{item\.questionType\}/);
+assert.match(workspace, /questionType=\{item\.questionType\}/);
 assert.match(component, /<ol className="released-answer-list">/);
 assert.match(component, /Answer details unavailable/);
 assert.match(component, /SUPPORTED_RESPONSE_QUESTION_TYPES/);

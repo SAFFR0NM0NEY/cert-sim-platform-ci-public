@@ -60,6 +60,15 @@ insert into exam_delivery.practice_policies(
   'issue147fixture','2.0.0','standard-profile','weak_area','production_authorized',true,
   null,40,false,'after_submission','after_submission'
 );
+insert into exam_delivery.practice_policies(
+  canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,
+  maximum_completed_attempts,maximum_session_items,immediate_feedback,
+  review_release_policy,answer_release_policy
+) values
+  ('issue147fixture','2.0.0','standard-profile','self_directed_exam','production_authorized',true,
+   null,40,false,'after_submission','after_submission'),
+  ('issue147fixture','1.0.0','standard-profile','self_directed_exam','production_authorized',true,
+   null,40,false,'after_submission','after_submission');
 insert into exam_delivery.package_profile_defaults(
   canonical_exam_key,profile_key,purpose,package_version_id,package_profile_id,enabled,configured_by
 ) values(

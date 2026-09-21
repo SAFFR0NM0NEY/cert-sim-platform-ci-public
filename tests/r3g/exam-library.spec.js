@@ -12,8 +12,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('search, filters, sorting, count, reset, and guidance separation compose', async ({ page }) => {
-  await expect(cards(page)).toHaveCount(6);
-  await expect(count(page)).toContainText('Showing 6 of 6 certification exams');
+  await expect(cards(page)).toHaveCount(7);
+  await expect(count(page)).toContainText('Showing 7 of 7 certification exams');
   await expect(page.getByRole('heading', { name: 'IT Direction Assessment' })).toBeVisible();
 
   const search = page.getByLabel('Search exams');
@@ -21,11 +21,11 @@ test('search, filters, sorting, count, reset, and guidance separation compose', 
   await expect(cards(page)).toHaveCount(1);
   await expect(cards(page).first().locator('.exam-selector-code')).toHaveText('AI-901');
   await expect(cards(page).first().locator('.exam-selector-title')).toHaveText('Azure AI Fundamentals');
-  await expect(count(page)).toContainText('Showing 1 of 6 certification exams');
+  await expect(count(page)).toContainText('Showing 1 of 7 certification exams');
 
   await page.getByLabel('Vendor').selectOption('CompTIA');
   await expect(cards(page)).toHaveCount(0);
-  await expect(count(page)).toContainText('Showing 0 of 6 certification exams');
+  await expect(count(page)).toContainText('Showing 0 of 7 certification exams');
   await expect(page.getByRole('heading', { name: 'No certification exams match' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'IT Direction Assessment' })).toBeVisible();
 
@@ -34,8 +34,8 @@ test('search, filters, sorting, count, reset, and guidance separation compose', 
   await expect(page.getByLabel('Vendor')).toHaveValue('all');
   await expect(page.getByLabel('Status')).toHaveValue('all');
   await expect(page.getByLabel('Sort by')).toHaveValue('recommended');
-  await expect(cards(page)).toHaveCount(6);
-  await expect(count(page)).toContainText('Showing 6 of 6 certification exams');
+  await expect(cards(page)).toHaveCount(7);
+  await expect(count(page)).toContainText('Showing 7 of 7 certification exams');
 
   await page.getByLabel('Vendor').selectOption('Microsoft');
   await page.getByLabel('Status').selectOption('controlledBeta');
@@ -54,6 +54,7 @@ test('cards render canonical code, short title, and vendor as separate fields', 
     ['AZ-400', 'Designing and Implementing Microsoft DevOps Solutions', 'Microsoft'],
     ['AI-901', 'Azure AI Fundamentals', 'Microsoft'],
     ['INF-303', 'Python Standard', 'Certiport'],
+    ['Python', 'Python Next Generation', 'Certiport'],
   ];
 
   for (const [code, shortTitle, vendor] of expected) {
@@ -78,7 +79,7 @@ test('filtered selection and browser history preserve explicit navigation', asyn
 
   await page.getByRole('button', { name: 'Back to Exam Library' }).click();
   await expect(page).toHaveURL('/exams');
-  await expect(cards(page)).toHaveCount(6);
+  await expect(cards(page)).toHaveCount(7);
 
   await page.getByLabel('Search exams').fill('Security+');
   await expect(cards(page)).toHaveCount(1);

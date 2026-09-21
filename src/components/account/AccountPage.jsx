@@ -51,6 +51,7 @@ function AccountPageContent({
   onContinueLastSelectedExam,
   onOpenAssignments,
   onOpenCampusDetail,
+  onOpenExamOperations,
   onOpenGroupDetail,
   onOpenOrganisationManagement,
   onOpenOrganisationDetail,
@@ -521,6 +522,14 @@ function AccountPageContent({
                     description="Review IT Direction Assessment placement results and follow-up notes."
                     actionLabel="Open Placement Dashboard"
                     onClick={onOpenReceptionPlacement}
+                  />
+                ) : null}
+                {isPlatformOwner ? (
+                  <AccountActionCard
+                    title="Exam Operations"
+                    description="Review protected release health, continuation custody, history, and telemetry availability."
+                    actionLabel="Open Exam Operations"
+                    onClick={onOpenExamOperations}
                   />
                 ) : null}
                 {isPlatformOwner ? (

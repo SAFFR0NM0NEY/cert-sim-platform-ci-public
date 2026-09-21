@@ -51,6 +51,52 @@ const fixtures = {
     response: { displayUnavailable: true },
     correct: { displayUnavailable: true },
   },
+  commandCollision: {
+    questionType: 'pbq-config-panel',
+    presentation: {
+      assets: {
+        devices: [{
+          id: 'collision-host',
+          allowedCommands: ['inspect server'],
+          tools: [{ id: 'inspect-tool', command: 'inspect server', label: 'Inspect server configuration' }],
+        }],
+      },
+      tasks: {
+        interactionStyle: 'interactive-topology',
+        decisionTargets: [{
+          id: 'collision-action',
+          label: 'Containment action',
+          options: [{ id: 'collision-isolate', label: 'Isolate host' }],
+        }],
+      },
+    },
+    response: {},
+    correct: {
+      expectedMap: { 'collision-action': 'collision-isolate' },
+      requiredCommandIds: ['inspect server'],
+    },
+  },
+  ambiguousCommand: {
+    questionType: 'pbq-config-panel',
+    presentation: {
+      assets: {
+        devices: [
+          { id: 'host-a', tools: [{ id: 'inspect-a', command: 'inspect server', label: 'Inspect server' }] },
+          { id: 'host-b', tools: [{ id: 'inspect-b', command: 'inspect server', label: 'Review server policy' }] },
+        ],
+      },
+      tasks: {
+        interactionStyle: 'interactive-topology',
+        decisionTargets: [{
+          id: 'ambiguous-action',
+          label: 'Containment action',
+          options: [{ id: 'ambiguous-isolate', label: 'Isolate host' }],
+        }],
+      },
+    },
+    response: {},
+    correct: { expectedMap: { 'ambiguous-action': 'ambiguous-isolate' }, requiredCommandIds: [] },
+  },
 };
 
 function Harness() {

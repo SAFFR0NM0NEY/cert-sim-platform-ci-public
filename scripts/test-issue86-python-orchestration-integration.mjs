@@ -18,9 +18,21 @@ const ids = {
   profile: '86000000-0000-4000-8000-000000000021',
   executableQuestion: '86000000-0000-4000-8000-000000000022',
   ordinaryQuestion: '86000000-0000-4000-8000-000000000023',
+  unansweredQuestion: '86000000-0000-4000-8000-000000000024',
+  unansweredQuestionTwo: '86000000-0000-4000-8000-000000000025',
+  unansweredQuestionThree: '86000000-0000-4000-8000-000000000026',
+  unansweredQuestionFour: '86000000-0000-4000-8000-000000000027',
+  unansweredQuestionFive: '86000000-0000-4000-8000-000000000028',
+  unansweredQuestionSix: '86000000-0000-4000-8000-000000000029',
   ownerAttempt: '86000000-0000-4000-8000-000000000030',
   ownerItem: '86000000-0000-4000-8000-000000000031',
   ownerOrdinaryItem: '86000000-0000-4000-8000-000000000032',
+  ownerUnansweredItem: '86000000-0000-4000-8000-000000000033',
+  ownerUnansweredItemTwo: '86000000-0000-4000-8000-000000000034',
+  ownerUnansweredItemThree: '86000000-0000-4000-8000-000000000035',
+  ownerUnansweredItemFour: '86000000-0000-4000-8000-000000000036',
+  ownerUnansweredItemFive: '86000000-0000-4000-8000-000000000037',
+  ownerUnansweredItemSix: '86000000-0000-4000-8000-000000000038',
   outsiderAttempt: '86000000-0000-4000-8000-000000000040',
   outsiderItem: '86000000-0000-4000-8000-000000000041',
   abandonedAttempt: '86000000-0000-4000-8000-000000000050',
@@ -47,6 +59,17 @@ const ids = {
   ordinaryResponseRequest: '86000000-0000-4000-8000-000000000096',
   submission: '86000000-0000-4000-8000-000000000097',
   conflictingSubmission: '86000000-0000-4000-8000-000000000098',
+  allUnansweredAttempt: '86000000-0000-4000-8000-000000000100',
+  allUnansweredItemOne: '86000000-0000-4000-8000-000000000101',
+  allUnansweredItemTwo: '86000000-0000-4000-8000-000000000102',
+  allUnansweredItemThree: '86000000-0000-4000-8000-000000000103',
+  allUnansweredItemFour: '86000000-0000-4000-8000-000000000104',
+  allUnansweredItemFive: '86000000-0000-4000-8000-000000000105',
+  allUnansweredItemSix: '86000000-0000-4000-8000-000000000106',
+  allUnansweredItemSeven: '86000000-0000-4000-8000-000000000107',
+  allUnansweredSubmission: '86000000-0000-4000-8000-000000000108',
+  expiredFrozenAttempt: '86000000-0000-4000-8000-000000000109',
+  expiredFrozenSubmission: '86000000-0000-4000-8000-000000000110',
 };
 
 const gradingMaterial = {
@@ -89,7 +112,7 @@ runSql(`
   );
   insert into exam_delivery.package_profiles(
     id,package_version_id,profile_key,display_name,question_count,time_limit_minutes,selection_config
-  ) values('${ids.profile}','${ids.package}','python-r5','Issue 86 synthetic profile',2,60,'{}');
+  ) values('${ids.profile}','${ids.package}','python-r5','Issue 86 synthetic profile',8,60,'{}');
   insert into exam_delivery.package_questions(
     id,package_version_id,question_id,question_type,domain_key,section_key,
     source_ordinal,presentation_payload,content_hash
@@ -97,13 +120,31 @@ runSql(`
     ('${ids.executableQuestion}','${ids.package}','issue86-executable','executable-python-lab-v1','d1','python',1,
       '{"interactionVersion":"executable-python-lab-v1"}',repeat('4',64)),
     ('${ids.ordinaryQuestion}','${ids.package}','issue86-ordinary','single-choice','d1','standard',2,
-      '{"stem":"synthetic","options":[{"id":"a","text":"A"},{"id":"b","text":"B"}]}',repeat('5',64));
+      '{"stem":"synthetic","options":[{"id":"a","text":"A"},{"id":"b","text":"B"}]}',repeat('5',64)),
+    ('${ids.unansweredQuestion}','${ids.package}','issue86-unanswered','executable-python-lab-v1','d1','python',3,
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('f',64)),
+    ('${ids.unansweredQuestionTwo}','${ids.package}','issue86-unanswered-2','executable-python-lab-v1','d1','python',4,
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('0',64)),
+    ('${ids.unansweredQuestionThree}','${ids.package}','issue86-unanswered-3','executable-python-lab-v1','d1','python',5,
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('1',64)),
+    ('${ids.unansweredQuestionFour}','${ids.package}','issue86-unanswered-4','executable-python-lab-v1','d1','python',6,
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('2',64)),
+    ('${ids.unansweredQuestionFive}','${ids.package}','issue86-unanswered-5','executable-python-lab-v1','d1','python',7,
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('3',64)),
+    ('${ids.unansweredQuestionSix}','${ids.package}','issue86-unanswered-6','executable-python-lab-v1','d1','python',8,
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('4',64));
   insert into exam_delivery.package_question_protected_content(
     question_id,package_version_id,scoring_payload,review_payload,authoring_metadata
   ) values
     ('${ids.executableQuestion}','${ids.package}','${JSON.stringify(executableScoring)}','{}','{"scored":true}'),
     ('${ids.ordinaryQuestion}','${ids.package}','{"correctAnswer":"a"}',
-      '{"explanation":"Synthetic explanation.","remediation":"Synthetic remediation."}','{"scored":true}');
+      '{"explanation":"Synthetic explanation.","remediation":"Synthetic remediation."}','{"scored":true}'),
+    ('${ids.unansweredQuestion}','${ids.package}','{"maximumRawPoints":7}','{}','{"scored":true}'),
+    ('${ids.unansweredQuestionTwo}','${ids.package}','{"maximumRawPoints":7}','{}','{"scored":true}'),
+    ('${ids.unansweredQuestionThree}','${ids.package}','{"maximumRawPoints":7}','{}','{"scored":true}'),
+    ('${ids.unansweredQuestionFour}','${ids.package}','{"maximumRawPoints":7}','{}','{"scored":true}'),
+    ('${ids.unansweredQuestionFive}','${ids.package}','{"maximumRawPoints":7}','{}','{"scored":true}'),
+    ('${ids.unansweredQuestionSix}','${ids.package}','{"maximumRawPoints":7}','{}','{"scored":true}');
   update exam_delivery.package_versions set status='published',published_at=statement_timestamp()
     where id='${ids.package}';
   insert into exam_delivery.exam_profile_activations(
@@ -112,10 +153,11 @@ runSql(`
   insert into exam_delivery.practice_policies(
     canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,
     maximum_session_items,immediate_feedback,review_release_policy,answer_release_policy
-  ) values(
-    'issue86fixture','1.0.0','python-r5','study_sandbox','open_authenticated',true,
-    10,true,'immediate_study_feedback','immediate_study_feedback'
-  );
+  ) values
+    ('issue86fixture','1.0.0','python-r5','study_sandbox','open_authenticated',true,
+      10,true,'immediate_study_feedback','immediate_study_feedback'),
+    ('issue86fixture','1.0.0','python-r5','self_directed_exam','open_authenticated',true,
+      10,false,'never','never');
 
   insert into exam_delivery.attempts(
     id,owner_id,package_version_id,package_profile_id,client_request_id,status,
@@ -127,7 +169,12 @@ runSql(`
     ('${ids.outsiderAttempt}','${ids.outsider}','${ids.package}','${ids.profile}',gen_random_uuid(),'in_progress',
       'issue86','issue86',statement_timestamp(),statement_timestamp(),null,'study_sandbox','{}','not_applicable',statement_timestamp(),statement_timestamp()+interval '30 days'),
     ('${ids.abandonedAttempt}','${ids.owner}','${ids.package}','${ids.profile}',gen_random_uuid(),'abandoned',
-      'issue86','issue86',statement_timestamp(),statement_timestamp(),null,'study_sandbox','{}','not_applicable',statement_timestamp(),statement_timestamp()+interval '30 days');
+      'issue86','issue86',statement_timestamp(),statement_timestamp(),null,'study_sandbox','{}','not_applicable',statement_timestamp(),statement_timestamp()+interval '30 days'),
+    ('${ids.expiredFrozenAttempt}','${ids.owner}','${ids.package}','${ids.profile}',gen_random_uuid(),'in_progress',
+      'issue86','issue86',statement_timestamp()-interval '2 hours',statement_timestamp()-interval '2 hours',
+      statement_timestamp()-interval '1 hour','self_directed_exam','{}','not_applicable',null,null);
+  insert into exam_delivery.python_submission_grading_sessions(attempt_id,submission_id,created_at)
+    values('${ids.expiredFrozenAttempt}','${ids.expiredFrozenSubmission}',statement_timestamp()-interval '90 minutes');
   insert into exam_delivery.attempt_items(
     id,attempt_id,package_version_id,package_question_id,presented_question_number,
     option_order,presentation_snapshot,presentation_hash
@@ -136,6 +183,18 @@ runSql(`
       '{"interactionVersion":"executable-python-lab-v1"}',repeat('6',64)),
     ('${ids.ownerOrdinaryItem}','${ids.ownerAttempt}','${ids.package}','${ids.ordinaryQuestion}',2,'[]',
       '{"stem":"synthetic","options":[{"id":"a","text":"A"},{"id":"b","text":"B"}]}',repeat('7',64)),
+    ('${ids.ownerUnansweredItem}','${ids.ownerAttempt}','${ids.package}','${ids.unansweredQuestion}',3,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('0',64)),
+    ('${ids.ownerUnansweredItemTwo}','${ids.ownerAttempt}','${ids.package}','${ids.unansweredQuestionTwo}',4,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('1',64)),
+    ('${ids.ownerUnansweredItemThree}','${ids.ownerAttempt}','${ids.package}','${ids.unansweredQuestionThree}',5,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('2',64)),
+    ('${ids.ownerUnansweredItemFour}','${ids.ownerAttempt}','${ids.package}','${ids.unansweredQuestionFour}',6,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('3',64)),
+    ('${ids.ownerUnansweredItemFive}','${ids.ownerAttempt}','${ids.package}','${ids.unansweredQuestionFive}',7,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('4',64)),
+    ('${ids.ownerUnansweredItemSix}','${ids.ownerAttempt}','${ids.package}','${ids.unansweredQuestionSix}',8,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('5',64)),
     ('${ids.outsiderItem}','${ids.outsiderAttempt}','${ids.package}','${ids.executableQuestion}',1,'[]',
       '{"interactionVersion":"executable-python-lab-v1"}',repeat('8',64)),
     ('${ids.abandonedItem}','${ids.abandonedAttempt}','${ids.package}','${ids.executableQuestion}',1,'[]',
@@ -146,6 +205,12 @@ runSql(`
     ('${ids.ownerItem}','${ids.ownerAttempt}','${JSON.stringify(executableScoring)}','{}',repeat('a',64)),
     ('${ids.ownerOrdinaryItem}','${ids.ownerAttempt}','{"correctAnswer":"a"}',
       '{"explanation":"Synthetic explanation.","remediation":"Synthetic remediation."}',repeat('b',64)),
+    ('${ids.ownerUnansweredItem}','${ids.ownerAttempt}','{"maximumRawPoints":7}','{}',repeat('0',64)),
+    ('${ids.ownerUnansweredItemTwo}','${ids.ownerAttempt}','{"maximumRawPoints":7}','{}',repeat('1',64)),
+    ('${ids.ownerUnansweredItemThree}','${ids.ownerAttempt}','{"maximumRawPoints":7}','{}',repeat('2',64)),
+    ('${ids.ownerUnansweredItemFour}','${ids.ownerAttempt}','{"maximumRawPoints":7}','{}',repeat('3',64)),
+    ('${ids.ownerUnansweredItemFive}','${ids.ownerAttempt}','{"maximumRawPoints":7}','{}',repeat('4',64)),
+    ('${ids.ownerUnansweredItemSix}','${ids.ownerAttempt}','{"maximumRawPoints":7}','{}',repeat('5',64)),
     ('${ids.outsiderItem}','${ids.outsiderAttempt}','${JSON.stringify(executableScoring)}','{}',repeat('c',64)),
     ('${ids.abandonedItem}','${ids.abandonedAttempt}','${JSON.stringify(executableScoring)}','{}',repeat('d',64));
 `);
@@ -360,6 +425,19 @@ const learnerRun = rpc(`select public.certsim_protected_get_python_run(
 )`);
 equal(learnerRun.stdout, 'learner output\n', 'learner run DTO includes bounded stdout');
 equal(Object.hasOwn(learnerRun, 'providerExecutionId'), false, 'learner run DTO excludes provider identity');
+const latestLearnerRun = rpc(`select public.certsim_protected_get_latest_python_run(
+  '${ids.owner}','${ids.ownerAttempt}','${ids.ownerItem}'
+)`);
+equal(latestLearnerRun.workspaceRevision, 2, 'latest learner run read binds the current saved revision');
+equal(latestLearnerRun.run.runId, liveRun, 'latest learner run read returns the newest current-revision learner run');
+equal(latestLearnerRun.run.stdout, 'learner output\n', 'latest learner run read restores bounded output');
+equal(Object.hasOwn(latestLearnerRun.run, 'providerExecutionId'), false, 'latest learner run omits provider identity');
+equal(rpc(`select public.certsim_protected_get_latest_python_run(
+  '${ids.owner}','${ids.ownerAttempt}','${ids.ownerUnansweredItem}'
+)`), { ok: true, itemId: ids.ownerUnansweredItem, workspaceRevision: 0, run: null }, 'unanswered executable item has no fabricated run');
+equal(rpc(`select public.certsim_protected_get_latest_python_run(
+  '${ids.outsider}','${ids.ownerAttempt}','${ids.ownerItem}'
+)`).code, 'attempt_not_found', 'cross-owner latest-run read is anti-enumerating');
 
 expectFailure(`set role authenticated; select public.certsim_protected_get_python_workspace('${ids.owner}','${ids.ownerAttempt}','${ids.ownerItem}')`, /permission denied/i, 'browser cannot execute fixed wrapper directly');
 expectFailure(`set role authenticated; select public.certsim_service_begin_python_execution(
@@ -391,7 +469,8 @@ equal(prepared.required, true, 'executable item requires trusted grading');
 equal(prepared.ready, false, 'submission is not ready before verified evidence');
 equal(prepared.completed, false, 'first preparation is not a completed-result replay');
 equal(prepared.items.length, 1, 'one executable item receives one grading authority');
-const gradingItem = prepared.items[0];
+equal(Number(scalar(`select count(*) from exam_delivery.python_lab_workspaces where attempt_item_id='${ids.ownerUnansweredItem}'`)), 0, 'unanswered executable item remains workspace-free');
+let gradingItem = prepared.items[0];
 equal(gradingItem.itemId, ids.ownerItem, 'grading authority binds the exact attempt item');
 equal(gradingItem.workspaceRevision, 2, 'grading freezes the latest workspace revision');
 equal(gradingItem.workspaceHash, second.workspaceHash, 'grading freezes the latest workspace hash');
@@ -409,19 +488,61 @@ equal(rpc(`select public.certsim_protected_save_python_workspace(
   '${ids.owner}','${ids.ownerAttempt}','${ids.ownerItem}','${workspaceTwo}'::jsonb,1,'${ids.saveTwo}'
 )`), second, 'an exact pre-freeze save replay remains idempotent');
 
-const finalRequestDigest = '9'.repeat(64);
-const finalResultDigest = '8'.repeat(64);
+const failedRequestDigest = '9'.repeat(64);
+const failedResultDigest = '7'.repeat(64);
 const claimed = rpc(`select public.certsim_service_materialize_python_submission_grading(
   '${ids.owner}','${ids.ownerAttempt}','${ids.submission}','${ids.ownerItem}',
-  '${gradingItem.runId}','${finalRequestDigest}'
+  '${gradingItem.runId}','${failedRequestDigest}'
 )`);
 equal(claimed.claimed, true, 'first final grading materialization claims the durable run');
 equal(claimed.state, 'running', 'claimed final grading run is explicitly running');
 equal(rpc(`select public.certsim_service_materialize_python_submission_grading(
   '${ids.owner}','${ids.ownerAttempt}','${ids.submission}','${ids.ownerItem}',
-  '${gradingItem.runId}','${finalRequestDigest}'
+  '${gradingItem.runId}','${failedRequestDigest}'
 )`).claimed, false, 'materialization retry creates no duplicate run');
 
+const gradingCancellation = rpc(`select public.certsim_service_request_python_submission_grading_cancellation(
+  '${ids.owner}','${ids.ownerAttempt}','${ids.submission}','${ids.ownerItem}',
+  '${gradingItem.runId}','${gradingItem.runId}'
+)`);
+equal(gradingCancellation.state, 'cancel_requested', 'provider reconciliation records cancellation before terminal persistence');
+equal(gradingCancellation.disposalState, 'pending', 'provider disposal remains pending until terminal persistence');
+const failedTerminal = rpc(`select public.certsim_service_complete_python_execution(
+  '${gradingItem.runId}','${failedRequestDigest}','execution.${gradingItem.executionRequestId}',
+  '${failedResultDigest}','cancelled','cancelled','','',null,true
+)`);
+equal(failedTerminal.state, 'cancelled', 'failed first grading generation is terminal before retry');
+equal(failedTerminal.disposalState, 'confirmed', 'failed first generation confirms provider disposal');
+equal(scalar(`select (statement_timestamp()>=expires_at)::text from exam_delivery.attempts where id='${ids.expiredFrozenAttempt}'`), 'true', 'frozen submission fixture is naturally expired');
+equal(rpc(`select exam_delivery.authorize_attempt_continuation(
+  '${ids.expiredFrozenAttempt}','resume'
+)`).code, 'invalid_lifecycle_transition', 'expiry still blocks ordinary attempt resume');
+equal(rpc(`select exam_delivery.authorize_attempt_continuation(
+  '${ids.expiredFrozenAttempt}','submit'
+)`).ok, true, 'submission frozen before expiry retains only its submit continuation path');
+equal(rpc(`select public.certsim_service_prepare_python_submission_grading(
+  '${ids.owner}','${ids.expiredFrozenAttempt}','${ids.expiredFrozenSubmission}'
+)`), { ok: true, required: false, ready: true, completed: false, items: [] }, 'service preparation can reconcile a pre-expiry freeze after natural expiry');
+
+const retryPrepared = rpc(`select public.certsim_service_prepare_python_submission_grading(
+  '${ids.owner}','${ids.ownerAttempt}','${ids.submission}'
+)`);
+equal(retryPrepared.ok, true, 'same frozen submission remains recoverable after failed first generation');
+equal(retryPrepared.ready, false, 'replacement generation still requires trusted evidence');
+equal(retryPrepared.items.length, 1, 'retry does not create work for untouched executable items');
+equal(retryPrepared.items[0].attemptNumber, 2, 'terminal failed work receives one next generation');
+equal(retryPrepared.items[0].state, 'authorized', 'replacement generation is provider-ready');
+equal(retryPrepared.items[0].workspaceHash, gradingItem.workspaceHash, 'retry retains the frozen workspace binding');
+equal(Number(scalar(`select count(*) from exam_delivery.python_submission_grading_sessions where attempt_id='${ids.ownerAttempt}' and submission_id='${ids.submission}'`)), 1, 'same submission identity remains authoritative');
+gradingItem = retryPrepared.items[0];
+
+const finalRequestDigest = '6'.repeat(64);
+const finalResultDigest = '8'.repeat(64);
+const replacementClaimed = rpc(`select public.certsim_service_materialize_python_submission_grading(
+  '${ids.owner}','${ids.ownerAttempt}','${ids.submission}','${ids.ownerItem}',
+  '${gradingItem.runId}','${finalRequestDigest}'
+)`);
+equal(replacementClaimed.claimed, true, 'replacement generation receives one materialization');
 const finalCompleted = rpc(`select public.certsim_service_complete_python_execution(
   '${gradingItem.runId}','${finalRequestDigest}','execution.${gradingItem.executionRequestId}',
   '${finalResultDigest}','completed','completed','','',0,true
@@ -452,6 +573,11 @@ equal(rpc(`select public.certsim_service_persist_verified_python_grading_evidenc
   '[{"ruleId":"rule.synthetic","earnedRawPoints":3,"maximumRawPoints":5}]'::jsonb
 )`).code, 'grading_evidence_replay', 'conflicting final evidence retry is rejected');
 
+equal(scalar(`select run.id::text from exam_delivery.python_execution_runs run
+  where run.attempt_id='${ids.ownerAttempt}' and run.attempt_item_id='${ids.ownerItem}'
+    and not exists(select 1 from exam_delivery.python_submission_grading_runs submission_run where submission_run.run_id=run.id)
+  order by run.created_at desc,run.id desc limit 1`), liveRun, 'latest learner run excludes newer submission grading runs');
+
 const ready = rpc(`select public.certsim_service_prepare_python_submission_grading(
   '${ids.owner}','${ids.ownerAttempt}','${ids.submission}'
 )`);
@@ -462,11 +588,16 @@ const submitted = rpc(`select public.certsim_protected_submit_attempt(
 )`);
 equal(submitted.ok, true, 'generic protected submission consumes trusted grading evidence');
 equal(Number(scalar(`select raw_score from exam_delivery.attempt_results where attempt_id='${ids.ownerAttempt}'`)), 5, 'generic score combines four lab points with one ordinary point');
-equal(Number(scalar(`select max_score from exam_delivery.attempt_results where attempt_id='${ids.ownerAttempt}'`)), 6, 'generic maximum combines lab and ordinary capacities');
+equal(Number(scalar(`select max_score from exam_delivery.attempt_results where attempt_id='${ids.ownerAttempt}'`)), 48, 'generic maximum includes all six unanswered executable maxima in the denominator');
 equal(scalar(`select status from exam_delivery.attempts where id='${ids.ownerAttempt}'`), 'completed', 'successful trusted submission completes the attempt');
 equal(Number(scalar(`select (result_summary->>'answeredCount')::integer from exam_delivery.attempt_results where attempt_id='${ids.ownerAttempt}'`)), 2, 'saved workspace counts as an answered executable item');
-equal(Number(scalar(`select count(*) from exam_delivery.python_submission_grading_runs where attempt_id='${ids.ownerAttempt}' and submission_id='${ids.submission}'`)), 1, 'submission owns one durable grading run');
+equal(Number(scalar(`select count(*) from exam_delivery.python_submission_grading_runs where attempt_id='${ids.ownerAttempt}' and submission_id='${ids.submission}'`)), 2, 'submission retains failed and successful grading generations');
 equal(Number(scalar(`select count(*) from exam_delivery.python_grading_evidence evidence join exam_delivery.python_submission_grading_runs submission_run on submission_run.run_id=evidence.run_id where submission_run.attempt_id='${ids.ownerAttempt}' and submission_run.submission_id='${ids.submission}'`)), 1, 'submission owns one durable grading evidence row');
+
+const savedHistory = rpc(`select public.certsim_protected_list_history(
+  '${ids.owner}','issue86fixture',null,20
+)`);
+equal(savedHistory.items.some((item) => item.attemptId === ids.ownerAttempt), true, 'Saved Results history contains the recovered result');
 
 const storedResponseHash = scalar(`select response_hash from exam_delivery.attempt_results where attempt_id='${ids.ownerAttempt}'`);
 equal(storedResponseHash, scalar(`select encode(extensions.digest(convert_to(coalesce(jsonb_agg(jsonb_build_object(
@@ -482,12 +613,26 @@ where i.attempt_id='${ids.ownerAttempt}'`), 'result hash includes the exact fina
 
 const review = JSON.parse(scalar(`select review_payload::text from exam_delivery.review_snapshots where attempt_id='${ids.ownerAttempt}'`));
 const executableReview = review.items.find((item) => item.itemId === ids.ownerItem);
+const unansweredItemIds = [
+  ids.ownerUnansweredItem,
+  ids.ownerUnansweredItemTwo,
+  ids.ownerUnansweredItemThree,
+  ids.ownerUnansweredItemFour,
+  ids.ownerUnansweredItemFive,
+  ids.ownerUnansweredItemSix,
+];
+const unansweredReviews = unansweredItemIds.map((itemId) => review.items.find((item) => item.itemId === itemId));
 equal(Boolean(executableReview), true, 'review retains the executable item score');
 equal(executableReview.earnedPoints, 4, 'review exposes only the awarded executable raw points');
 equal(executableReview.maxPoints, 5, 'review exposes only the executable maximum points');
 equal(Object.hasOwn(executableReview, 'correctAnswer'), false, 'review omits executable protected scoring material');
 equal(Object.hasOwn(executableReview, 'explanation'), false, 'review omits executable protected explanation material');
 equal(Object.hasOwn(executableReview, 'remediation'), false, 'review omits executable protected remediation material');
+equal(unansweredReviews.every(Boolean), true, 'review retains all six workspace-free executable items');
+equal(unansweredReviews.every((item) => item.status === 'Unanswered'), true, 'all workspace-free executable reviews are explicitly unanswered');
+equal(unansweredReviews.every((item) => item.earnedPoints === 0), true, 'all workspace-free executable reviews earn zero points');
+equal(unansweredReviews.every((item) => item.maxPoints === 7), true, 'all workspace-free executable reviews retain full maximum points');
+equal(unansweredReviews.every((item) => !Object.hasOwn(item, 'correctAnswer')), true, 'unanswered executable reviews omit protected answer material');
 equal(JSON.stringify(review).includes('trustedGrading'), false, 'review serialization contains no trusted grading payload');
 equal(JSON.stringify(review).includes(gradingMaterialDigest), false, 'review serialization contains no grading material digest');
 equal(rpc(`select public.certsim_protected_submit_attempt(
@@ -501,6 +646,68 @@ const completedPreparation = rpc(`select public.certsim_service_prepare_python_s
 )`);
 equal(completedPreparation, { ok: true, required: false, ready: true, completed: true, items: [] }, 'completed submission preparation is an idempotent result replay');
 expectFailure(`delete from exam_delivery.python_submission_grading_sessions where attempt_id='${ids.ownerAttempt}'`, /immutable/i, 'submission freeze authority is immutable');
+
+runSql(`
+  insert into exam_delivery.attempts(
+    id,owner_id,package_version_id,package_profile_id,client_request_id,status,
+    generator_version,scorer_version,created_at,started_at,expires_at,purpose,
+    practice_configuration,language_preference,practice_last_activity_at,practice_idle_expires_at
+  ) values(
+    '${ids.allUnansweredAttempt}','${ids.owner}','${ids.package}','${ids.profile}',gen_random_uuid(),'in_progress',
+    'issue86','issue86',statement_timestamp(),statement_timestamp(),null,'study_sandbox','{}','not_applicable',statement_timestamp(),statement_timestamp()+interval '30 days'
+  );
+  insert into exam_delivery.attempt_items(
+    id,attempt_id,package_version_id,package_question_id,presented_question_number,
+    option_order,presentation_snapshot,presentation_hash
+  ) values
+    ('${ids.allUnansweredItemOne}','${ids.allUnansweredAttempt}','${ids.package}','${ids.executableQuestion}',1,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('a',64)),
+    ('${ids.allUnansweredItemTwo}','${ids.allUnansweredAttempt}','${ids.package}','${ids.unansweredQuestion}',2,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('b',64)),
+    ('${ids.allUnansweredItemThree}','${ids.allUnansweredAttempt}','${ids.package}','${ids.unansweredQuestionTwo}',3,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('c',64)),
+    ('${ids.allUnansweredItemFour}','${ids.allUnansweredAttempt}','${ids.package}','${ids.unansweredQuestionThree}',4,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('d',64)),
+    ('${ids.allUnansweredItemFive}','${ids.allUnansweredAttempt}','${ids.package}','${ids.unansweredQuestionFour}',5,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('e',64)),
+    ('${ids.allUnansweredItemSix}','${ids.allUnansweredAttempt}','${ids.package}','${ids.unansweredQuestionFive}',6,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('f',64)),
+    ('${ids.allUnansweredItemSeven}','${ids.allUnansweredAttempt}','${ids.package}','${ids.unansweredQuestionSix}',7,'[]',
+      '{"interactionVersion":"executable-python-lab-v1"}',repeat('0',64));
+  insert into exam_delivery.attempt_item_protected_content(
+    attempt_item_id,attempt_id,scoring_snapshot,review_snapshot,protected_snapshot_hash
+  ) values
+    ('${ids.allUnansweredItemOne}','${ids.allUnansweredAttempt}','${JSON.stringify(executableScoring)}','{}',repeat('a',64)),
+    ('${ids.allUnansweredItemTwo}','${ids.allUnansweredAttempt}','{"maximumRawPoints":7}','{}',repeat('b',64)),
+    ('${ids.allUnansweredItemThree}','${ids.allUnansweredAttempt}','{"maximumRawPoints":7}','{}',repeat('c',64)),
+    ('${ids.allUnansweredItemFour}','${ids.allUnansweredAttempt}','{"maximumRawPoints":7}','{}',repeat('d',64)),
+    ('${ids.allUnansweredItemFive}','${ids.allUnansweredAttempt}','{"maximumRawPoints":7}','{}',repeat('e',64)),
+    ('${ids.allUnansweredItemSix}','${ids.allUnansweredAttempt}','{"maximumRawPoints":7}','{}',repeat('f',64)),
+    ('${ids.allUnansweredItemSeven}','${ids.allUnansweredAttempt}','{"maximumRawPoints":7}','{}',repeat('0',64));
+`);
+
+const allUnansweredPrepared = rpc(`select public.certsim_service_prepare_python_submission_grading(
+  '${ids.owner}','${ids.allUnansweredAttempt}','${ids.allUnansweredSubmission}'
+)`);
+equal(allUnansweredPrepared, { ok: true, required: true, ready: true, completed: false, items: [] }, 'seven executable items with no saved work need no grading jobs');
+equal(Number(scalar(`select count(*) from exam_delivery.python_submission_grading_runs where attempt_id='${ids.allUnansweredAttempt}'`)), 0, 'all-unanswered submission creates no Modal grading jobs');
+
+const allUnansweredSubmitted = rpc(`select public.certsim_protected_submit_attempt(
+  '${ids.owner}','${ids.allUnansweredAttempt}','${ids.allUnansweredSubmission}'
+)`);
+equal(allUnansweredSubmitted.ok, true, 'all-unanswered executable attempt submits successfully');
+equal(Number(scalar(`select raw_score from exam_delivery.attempt_results where attempt_id='${ids.allUnansweredAttempt}'`)), 0, 'all-unanswered executable attempt earns zero raw points');
+equal(Number(scalar(`select max_score from exam_delivery.attempt_results where attempt_id='${ids.allUnansweredAttempt}'`)), 47, 'all-unanswered executable attempt retains every maximum in the denominator');
+equal(Number(scalar(`select (result_summary->>'answeredCount')::integer from exam_delivery.attempt_results where attempt_id='${ids.allUnansweredAttempt}'`)), 0, 'all-unanswered executable attempt reports zero answered items');
+equal(Number(scalar(`select count(*) from exam_delivery.python_grading_evidence evidence join exam_delivery.python_submission_grading_runs submission_run on submission_run.run_id=evidence.run_id where submission_run.attempt_id='${ids.allUnansweredAttempt}'`)), 0, 'all-unanswered executable attempt creates no grading evidence');
+
+const allUnansweredReview = JSON.parse(scalar(`select review_payload::text from exam_delivery.review_snapshots where attempt_id='${ids.allUnansweredAttempt}'`));
+equal(allUnansweredReview.items.length, 7, 'all-unanswered review retains all seven executable items');
+equal(allUnansweredReview.items.every((item) => item.status === 'Unanswered'), true, 'all-unanswered review classifies every item as unanswered');
+equal(allUnansweredReview.items.every((item) => item.earnedPoints === 0), true, 'all-unanswered review awards zero points to every item');
+equal(allUnansweredReview.items.reduce((total, item) => total + item.maxPoints, 0), 47, 'all-unanswered review preserves all maximum points');
+equal(JSON.stringify(allUnansweredReview).includes('trustedGrading'), false, 'all-unanswered review exposes no trusted grading payload');
+equal(JSON.stringify(allUnansweredReview).includes(gradingMaterialDigest), false, 'all-unanswered review exposes no grading material digest');
 
 console.log(JSON.stringify({ ok: true, assertions, providerCalls: 0, learnerExecutions: 0 }, null, 2));
 

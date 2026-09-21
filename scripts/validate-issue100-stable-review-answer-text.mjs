@@ -45,16 +45,17 @@ assert.equal(resolveReleasedChoiceTexts(select, { answer: [] }).status, 'invalid
 assert.equal(resolveReleasedChoiceTexts({ type: 'reorder', options }, {}, { correct: true }).status, 'not-applicable');
 
 const runner = fs.readFileSync(new URL('../src/components/exam/ProtectedExamRunner.jsx', import.meta.url), 'utf8');
+const workspace = fs.readFileSync(new URL('../src/components/exam/ReleasedReviewWorkspace.jsx', import.meta.url), 'utf8');
 const reviewAnswer = fs.readFileSync(new URL('../src/components/exam/ReleasedReviewAnswer.jsx', import.meta.url), 'utf8');
 const edgeResponses = fs.readFileSync(new URL('../supabase/functions/certsim-protected-exam/responses.ts', import.meta.url), 'utf8');
 const edgeTests = fs.readFileSync(new URL('../supabase/functions/certsim-protected-exam/tests/function_test.ts', import.meta.url), 'utf8');
 const partialScorer = fs.readFileSync(new URL('../supabase/tests/backend_exam_delivery_issue83_partial_scorer.sql', import.meta.url), 'utf8');
 
-assert.match(runner, /<ReleasedReviewAnswer presentation=\{item\.presentation\}/);
+assert.match(workspace, /<ReleasedReviewAnswer presentation=\{item\.presentation\}/);
 assert.match(reviewAnswer, /<ul className="released-answer-list">/);
 assert.match(reviewAnswer, /resolveReleasedChoiceTexts\(presentation, value, options\)/);
-assert.match(runner, /questionType=\{item\.questionType\}/);
-assert.doesNotMatch(runner, /<dt>Correct answer<\/dt><dd>\{formatReviewValue/);
+assert.match(workspace, /questionType=\{item\.questionType\}/);
+assert.doesNotMatch(workspace, /<dt>Correct answer<\/dt><dd>\{formatReviewValue/);
 assert.match(runner, /reviewWithheld &&/);
 assert.match(edgeResponses, /assertPracticeFeedbackSafe/);
 assert.match(edgeTests, /correctAnswer: "blocked"/);

@@ -43,7 +43,7 @@ const PROFILE_IDENTITIES = Object.freeze({
   ]),
 });
 
-const SAFE_PRESENTATION_TYPES = new Set([
+export const PROTECTED_PRESENTATION_TYPES = Object.freeze([
   'single-choice', 'multi-select', 'reorder', 'drag-drop-match',
   'dropdown-code', 'dropdown-command', 'case-study-context', 'informational',
   'true-false-single-v1', 'true-false-composite-v1', 'matching-v1',
@@ -52,6 +52,8 @@ const SAFE_PRESENTATION_TYPES = new Set([
   'pbq-network-diagram', 'pbq-config-panel', 'pbq-hotspot',
   'pbq-drag-drop-match', 'pbq-ordering', 'pbq-workspace',
 ]);
+
+const SAFE_PRESENTATION_TYPES = new Set(PROTECTED_PRESENTATION_TYPES);
 
 const BLOCKED_PRESENTATION_KEYS = new Set([
   'acceptedanswer', 'acceptedanswers', 'answer', 'answerkey', 'answers',

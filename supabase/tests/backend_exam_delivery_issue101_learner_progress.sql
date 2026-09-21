@@ -23,6 +23,16 @@ insert into exam_delivery.package_profiles(id,package_version_id,profile_key,dis
 values('10110000-0000-0000-0000-000000000201','10110000-0000-0000-0000-000000000200','full','Full',1,60);
 insert into exam_delivery.package_profile_defaults(canonical_exam_key,profile_key,purpose,package_version_id,package_profile_id)
 values('issue101fixture','full','self_directed_exam','10110000-0000-0000-0000-000000000200','10110000-0000-0000-0000-000000000201');
+insert into exam_delivery.practice_policies(
+  canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,
+  maximum_completed_attempts,maximum_session_items,immediate_feedback,
+  review_release_policy,answer_release_policy
+)
+select 'issue101fixture','1.0.0','full',purpose::exam_delivery.attempt_purpose,
+  'production_authorized',true,null,40,purpose='weak_area',
+  case when purpose='weak_area' then 'immediate_study_feedback' else 'after_submission' end,
+  case when purpose='weak_area' then 'immediate_study_feedback' else 'after_submission' end
+from unnest(array['self_directed_exam','weak_area']) purpose;
 
 create temp table issue101_attempts(n integer primary key,id uuid not null default gen_random_uuid());
 insert into issue101_attempts(n) select generate_series(1,22);

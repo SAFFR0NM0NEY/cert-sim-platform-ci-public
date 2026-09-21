@@ -852,13 +852,19 @@ test('released shuffled choice review renders stable option text as accessible l
   await page.getByRole('button', { name: 'Submit Final Attempt' }).click();
   await page.getByRole('button', { name: 'View released review' }).click();
 
-  const reviewCards = page.locator('.protected-review-list article');
-  await expect(reviewCards).toHaveCount(4);
-  await expect(reviewCards.nth(0).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.']);
-  await expect(reviewCards.nth(1).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.']);
-  await expect(reviewCards.nth(2).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.', 'Allow anonymous access.']);
-  await expect(reviewCards.nth(3).locator('.released-answer-list').nth(0).getByRole('listitem')).toHaveText(['Detect objects in an image → Document Intelligence']);
-  await expect(reviewCards.nth(3).locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Detect objects in an image → Azure AI Vision', 'Extract text from a document → Document Intelligence']);
+  const reviewCard = page.locator('.released-review-card');
+  await expect(reviewCard).toHaveCount(1);
+  await expect(reviewCard.locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.']);
+
+  await page.getByRole('button', { name: 'Question 2, Partial' }).click();
+  await expect(reviewCard.locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.']);
+
+  await page.getByRole('button', { name: 'Question 3, Incorrect' }).click();
+  await expect(reviewCard.locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Use managed identity.', 'Use a shared access key.', 'Allow anonymous access.']);
+
+  await page.getByRole('button', { name: 'Question 4, Partial' }).click();
+  await expect(reviewCard.locator('.released-answer-list').nth(0).getByRole('listitem')).toHaveText(['Detect objects in an image → Document Intelligence']);
+  await expect(reviewCard.locator('.released-answer-list').nth(1).getByRole('listitem')).toHaveText(['Detect objects in an image → Azure AI Vision', 'Extract text from a document → Document Intelligence']);
   await expect(page.getByText('A, C', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/left-a|right-x|correctPairs|answer:/)).toHaveCount(0);
 });

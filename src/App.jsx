@@ -9,6 +9,7 @@ import MyAssignmentsPage from './components/account/MyAssignmentsPage.jsx';
 import MyReportsPage from './components/account/MyReportsPage.jsx';
 import StudentProgressPage from './components/account/StudentProgressPage.jsx';
 import CampusDetailPage from './components/admin/CampusDetailPage.jsx';
+import ExamOperationsPage from './components/admin/ExamOperationsPage.jsx';
 import GroupDetailPage from './components/admin/GroupDetailPage.jsx';
 import OrganisationManagementPage from './components/admin/OrganisationManagementPage.jsx';
 import OrganisationDetailPage from './components/admin/OrganisationDetailPage.jsx';
@@ -709,7 +710,8 @@ export default function App() {
       requestedScreen === 'account-assignments' ||
       requestedScreen === 'account-progress' ||
       requestedScreen === 'reception-placement' ||
-      requestedScreen === 'developer-dashboard'
+      requestedScreen === 'developer-dashboard' ||
+      requestedScreen === 'admin-exam-operations'
     ) {
       return requestedScreen;
     }
@@ -913,6 +915,28 @@ export default function App() {
       setSavedResultAttemptId('');
       setTrainerStudentId('');
       setTrainerAssignmentId('');
+      setAdminOrganisationId('');
+      setAdminCampusId('');
+      setAdminGroupId('');
+      setJoinInviteToken('');
+      return;
+    }
+
+    if (target.screen === 'admin-exam-operations') {
+      setScreen('admin-exam-operations');
+      setActiveExam(null);
+      setStudent(null);
+      setResult(null);
+      setItDirectionResult(null);
+      setItDirectionClient(null);
+      setSelectedMode(null);
+      setSelectedProfile(null);
+      setPracticeExamConfig(null);
+      setPbqPreviewLabs([]);
+      setSavedResultAttemptId('');
+      setTrainerStudentId('');
+      setTrainerAssignmentId('');
+      setDeveloperReportId('');
       setAdminOrganisationId('');
       setAdminCampusId('');
       setAdminGroupId('');
@@ -1202,6 +1226,26 @@ export default function App() {
 
   function handleOpenOrganisationManagement() {
     setScreen('admin-organisations');
+    setActiveExam(null);
+    setStudent(null);
+    setResult(null);
+    setItDirectionResult(null);
+    setItDirectionClient(null);
+    setSelectedMode(null);
+    setSelectedProfile(null);
+    setPracticeExamConfig(null);
+    setPbqPreviewLabs([]);
+    setSavedResultAttemptId('');
+    setTrainerStudentId('');
+    setTrainerAssignmentId('');
+    setDeveloperReportId('');
+    setAdminOrganisationId('');
+    setAdminCampusId('');
+    setAdminGroupId('');
+  }
+
+  function handleOpenExamOperations() {
+    setScreen('admin-exam-operations');
     setActiveExam(null);
     setStudent(null);
     setResult(null);
@@ -2232,6 +2276,7 @@ export default function App() {
           onContinueLastSelectedExam={handleContinueLastSelectedExam}
           onOpenAssignments={handleOpenMyAssignments}
           onOpenCampusDetail={handleOpenAdminCampusDetail}
+          onOpenExamOperations={handleOpenExamOperations}
           onOpenGroupDetail={handleOpenAdminGroupDetail}
           onOpenOrganisationManagement={handleOpenOrganisationManagement}
           onOpenOrganisationDetail={handleOpenAdminOrganisationDetail}
@@ -2342,6 +2387,15 @@ export default function App() {
           onOpenCampusDetail={handleOpenAdminCampusDetail}
           onOpenGroupDetail={handleOpenAdminGroupDetail}
           onOpenOrganisationDetail={handleOpenAdminOrganisationDetail}
+        />
+      )}
+
+      {screen === 'admin-exam-operations' && (
+        <ExamOperationsPage
+          identity={currentIdentity}
+          onBackHome={handleRestart}
+          onBrowseExams={() => setScreen('browse-exams')}
+          onOpenAccount={handleOpenAccount}
         />
       )}
 
@@ -2880,6 +2934,12 @@ function getRouteTargetForPath(pathname, search = '') {
     };
   }
 
+  if (routePath === '/admin/exam-operations') {
+    return {
+      screen: 'admin-exam-operations',
+    };
+  }
+
   if (routePath.startsWith('/admin/organisations/')) {
     const adminOrganisationId = decodeRoutePart(
       routePath.replace('/admin/organisations/', '').trim(),
@@ -3260,6 +3320,10 @@ function getPathForCurrentState({
 
   if (screen === 'admin-organisations') {
     return '/admin/organisations';
+  }
+
+  if (screen === 'admin-exam-operations') {
+    return '/admin/exam-operations';
   }
 
   if (screen === 'admin-organisation-detail') {

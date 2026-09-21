@@ -3,11 +3,18 @@ import test from 'node:test';
 
 import {
   createPythonLabWorkspaceController,
+  normalizeLatestPythonRunDto,
   normalizePythonLabPresentation,
   normalizePythonRunDto,
   normalizePythonWorkspace,
 } from '../src/lib/pythonLabWorkspace.js';
 import { toPresentationQuestion } from '../src/lib/protectedExamContract.js';
+import {
+  createProtectedExamClient,
+  isRetrySafeResultLookupError,
+  isRetrySafeSubmissionError,
+  submitProtectedAttemptWithRecovery,
+} from '../src/lib/protectedExamClient.js';
 
 const attemptId = '86000000-0000-4000-8000-000000000101';
 const itemId = '86000000-0000-4000-8000-000000000102';
@@ -81,12 +88,60 @@ test('server resume restores the exact latest workspace revision', async () => {
   const restored = { entryPoint: 'main.py', files: [{ path: 'main.py', content: 'print("restored")\n' }, { path: 'support/helper.py', content: 'VALUE = 2\n' }] };
   const { client } = fakeClient({
     getPythonWorkspace: async () => workspaceRead({ exists: true, revision: 4, workspace: restored }),
+    getLatestPythonRun: async () => latestRunRead(4),
   });
   const controller = createController(client);
   assert.equal(await controller.load(), true);
   assert.deepEqual(controller.getSnapshot().workspace, restored);
   assert.equal(controller.getSnapshot().serverRevision, 4);
   assert.equal(controller.getSnapshot().persisted, true);
+});
+
+test('server resume restores only the latest run for the exact saved revision', async () => {
+  const restored = { entryPoint: 'main.py', files: [{ path: 'main.py', content: 'print("restored")\n' }, { path: 'support/helper.py', content: 'VALUE = 2\n' }] };
+  const completed = runDto({
+    state: 'completed', terminalOutcome: 'completed', stdout: 'restored output\n',
+    exitCode: 0, disposalState: 'confirmed',
+  });
+  const { client, calls } = fakeClient({
+    getPythonWorkspace: async () => workspaceRead({ exists: true, revision: 4, workspace: restored }),
+    getLatestPythonRun: async () => latestRunRead(4, completed),
+  });
+  const controller = createController(client);
+  assert.equal(await controller.load(), true);
+  assert.equal(controller.getSnapshot().runRevision, 4);
+  assert.equal(controller.getSnapshot().run.stdout, 'restored output\n');
+  assert.deepEqual(calls.map(({ method }) => method), ['getPythonWorkspace', 'getLatestPythonRun']);
+});
+
+test('current saved revision without a matching run never restores older output', async () => {
+  const restored = { entryPoint: 'main.py', files: [{ path: 'main.py', content: 'print("new")\n' }, { path: 'support/helper.py', content: 'VALUE = 3\n' }] };
+  const { client } = fakeClient({
+    getPythonWorkspace: async () => workspaceRead({ exists: true, revision: 5, workspace: restored }),
+    getLatestPythonRun: async () => latestRunRead(5),
+  });
+  const controller = createController(client);
+  assert.equal(await controller.load(), true);
+  assert.equal(controller.getSnapshot().run, null);
+  assert.equal(controller.getSnapshot().runRevision, null);
+  assert.match(controller.getSnapshot().message, /Current revision has not been run yet/);
+});
+
+test('saving a newer revision suppresses the prior run result', async () => {
+  const restored = { entryPoint: 'main.py', files: [{ path: 'main.py', content: 'print("old")\n' }, { path: 'support/helper.py', content: 'VALUE = 2\n' }] };
+  const { client } = fakeClient({
+    getPythonWorkspace: async () => workspaceRead({ exists: true, revision: 4, workspace: restored }),
+    getLatestPythonRun: async () => latestRunRead(4, runDto({ state: 'completed', terminalOutcome: 'completed', stdout: 'old output\n', exitCode: 0, disposalState: 'confirmed' })),
+    savePythonWorkspace: async () => workspaceSave(5),
+  });
+  const controller = createController(client);
+  await controller.load();
+  controller.updateFile('main.py', 'print("new")\n');
+  assert.equal(await controller.save(), true);
+  assert.equal(controller.getSnapshot().serverRevision, 5);
+  assert.equal(controller.getSnapshot().run, null);
+  assert.equal(controller.getSnapshot().runRevision, null);
+  assert.match(controller.getSnapshot().message, /Current revision has not been run yet/);
 });
 
 test('save persists edited source and records the returned revision', async () => {
@@ -193,6 +248,115 @@ test('run saves a dirty workspace before requesting its returned revision', asyn
   assert.equal(controller.getSnapshot().run.state, 'queued');
 });
 
+test('learner Run uses a dedicated timeout that accepts the live 21.5 second case', async () => {
+  const timeoutValues = [];
+  const originalTimeout = AbortSignal.timeout;
+  const syntheticElapsedMs = 21_532;
+  AbortSignal.timeout = (timeoutMs) => {
+    timeoutValues.push(timeoutMs);
+    return new AbortController().signal;
+  };
+  try {
+    const client = createProtectedExamClient({
+      accessToken: 'synthetic-access-token',
+      fetchImpl: async (_url, request) => {
+        assert.equal(request.signal.aborted, false);
+        assert.ok(syntheticElapsedMs > 15_000);
+        assert.ok(syntheticElapsedMs < timeoutValues.at(-1));
+        return jsonResponse(runDto({
+          state: 'completed',
+          terminalOutcome: 'completed',
+          stdout: 'safe output\n',
+          exitCode: 0,
+          disposalState: 'confirmed',
+        }));
+      },
+    });
+    const run = await client.requestPythonRun(attemptId, itemId, 1, 'run-timeout-request');
+    assert.equal(run.state, 'completed');
+    assert.deepEqual(timeoutValues, [60_000]);
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+  }
+});
+
+test('ambiguous learner Run automatically reconciles once with the same request identity', async () => {
+  const requestIds = [];
+  let calls = 0;
+  let logicalRuns = 0;
+  let providerExecutions = 0;
+  const authoritativeRun = runDto({
+    state: 'completed', terminalOutcome: 'completed', stdout: 'recovered\n',
+    exitCode: 0, disposalState: 'confirmed',
+  });
+  const { client } = fakeClient({
+    requestPythonRun: async (...args) => {
+      calls += 1;
+      requestIds.push(args[3]);
+      if (calls === 1) {
+        logicalRuns += 1;
+        providerExecutions += 1;
+        throw clientError('request_timeout', { ambiguousTransport: true });
+      }
+      return authoritativeRun;
+    },
+  });
+  const controller = createController(client, ['save-id', 'stable-run-id']);
+  await controller.load();
+  await controller.save();
+  assert.equal(await controller.requestRun(), true);
+  assert.deepEqual(requestIds, ['stable-run-id', 'stable-run-id']);
+  assert.equal(new Set(requestIds).size, 1);
+  assert.equal(logicalRuns, 1);
+  assert.equal(providerExecutions, 1);
+  assert.deepEqual(controller.getSnapshot().run, authoritativeRun);
+});
+
+test('two ambiguous Run transports stop safely and retain source plus request identity', async () => {
+  const requestIds = [];
+  let calls = 0;
+  const { client } = fakeClient({
+    requestPythonRun: async (...args) => {
+      calls += 1;
+      requestIds.push(args[3]);
+      if (calls <= 2) throw clientError('network_failure', { ambiguousTransport: true });
+      return runDto({ state: 'running' });
+    },
+  });
+  const controller = createController(client, ['save-id', 'stable-run-id']);
+  await controller.load();
+  controller.updateFile('main.py', 'print("retained")\n');
+  assert.equal(await controller.requestRun(), false);
+  assert.equal(calls, 2);
+  assert.deepEqual(requestIds, ['stable-run-id', 'stable-run-id']);
+  assert.equal(controller.getSnapshot().workspace.files[0].content, 'print("retained")\n');
+  assert.equal(controller.getSnapshot().dirty, false);
+  assert.equal(controller.getSnapshot().persisted, true);
+  assert.equal(controller.getSnapshot().errorCode, 'run_state_ambiguous');
+  assert.equal(
+    controller.getSnapshot().message,
+    'The Run outcome could not be confirmed. Your code is saved. Retry Run to reconcile the same request.',
+  );
+  assert.doesNotMatch(controller.getSnapshot().message, /service could not be reached/i);
+  assert.equal(await controller.requestRun(), true);
+  assert.equal(requestIds[2], 'stable-run-id');
+});
+
+test('server-authoritative terminal Run failure remains a normal rendered result', async () => {
+  const terminalFailure = runDto({
+    state: 'failed', terminalOutcome: 'failed', disposalState: 'confirmed',
+  });
+  const { client } = fakeClient({ requestPythonRun: async () => terminalFailure });
+  const controller = createController(client, ['save-id', 'run-id']);
+  await controller.load();
+  await controller.save();
+  assert.equal(await controller.requestRun(), true);
+  assert.equal(controller.getSnapshot().phase, 'ready');
+  assert.deepEqual(controller.getSnapshot().run, terminalFailure);
+  assert.equal(controller.getSnapshot().message, 'Execution state: failed.');
+  assert.doesNotMatch(controller.getSnapshot().message, /transport|service could not be reached/i);
+});
+
 test('executor_disabled becomes a bounded availability state without fake output', async () => {
   const { client } = fakeClient({
     requestPythonRun: async () => { throw clientError('executor_disabled', { httpStatus: 503 }); },
@@ -286,6 +450,12 @@ test('run DTO accepts bounded learner output and rejects internal fields', () =>
   }
 });
 
+test('latest-run DTO is exact-revision and rejects internal fields', () => {
+  assert.equal(normalizeLatestPythonRunDto(latestRunRead(4, runDto()), itemId, 4).run.runId, runDto().runId);
+  assert.throws(() => normalizeLatestPythonRunDto(latestRunRead(3, runDto()), itemId, 4), /invalid_python_latest_run/);
+  assert.throws(() => normalizeLatestPythonRunDto({ ...latestRunRead(4), providerExecutionId: 'blocked' }, itemId, 4), /invalid_python_latest_run/);
+});
+
 test('workspace validation rejects traversal, non-Python, duplicates, and oversized source', () => {
   for (const invalid of [
     { entryPoint: '../main.py', files: [{ path: '../main.py', content: '' }] },
@@ -311,6 +481,7 @@ function fakeClient(overrides = {}) {
   const calls = [];
   const defaults = {
     getPythonWorkspace: async () => workspaceRead(),
+    getLatestPythonRun: async () => latestRunRead(1),
     savePythonWorkspace: async (...args) => workspaceSave((args[3] ?? 0) + 1),
     requestPythonRun: async () => runDto(),
     getPythonRun: async () => runDto(),
@@ -354,6 +525,102 @@ function runDto(overrides = {}) {
   };
 }
 
+function latestRunRead(workspaceRevision, run = null) {
+  return { itemId, workspaceRevision, run };
+}
+
 function clientError(code, extras = {}) {
   return Object.assign(new Error(extras.message ?? code), { code, ...extras });
 }
+
+function jsonResponse(payload, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+  };
+}
+
+test('known retry-safe grading error remains actionable instead of becoming submission conflict', async () => {
+  let resultReads = 0;
+  const client = {
+    submitAttempt: async () => {
+      throw clientError('grading_failed', {
+        httpStatus: 503,
+        message: 'Trusted Python grading could not be completed. Your saved work is retained.',
+      });
+    },
+    getResult: async () => {
+      resultReads += 1;
+      throw clientError('attempt_not_found');
+    },
+  };
+  await assert.rejects(
+    () => submitProtectedAttemptWithRecovery(client, attemptId, 'submission-1'),
+    (error) => error.code === 'grading_failed'
+      && /saved work is retained/i.test(error.message),
+  );
+  assert.equal(resultReads, 0);
+});
+
+test('submission retry classification is one exact allowlist', () => {
+  for (const code of [
+    'grading_failed',
+    'grading_incomplete',
+    'grading_reconciliation_required',
+    'submission_in_progress',
+  ]) assert.equal(isRetrySafeSubmissionError({ code }), true);
+  for (const code of [
+    'grading_material_invalid',
+    'grading_binding_mismatch',
+    'submission_conflict',
+    'invalid_lifecycle_transition',
+    'unauthenticated',
+    'internal_failure',
+  ]) assert.equal(isRetrySafeSubmissionError({ code }), false);
+
+  assert.equal(isRetrySafeResultLookupError(clientError('network_failure', { ambiguousTransport: true })), true);
+  assert.equal(isRetrySafeResultLookupError(clientError('request_timeout', { ambiguousTransport: true })), true);
+  assert.equal(isRetrySafeResultLookupError(clientError('internal_failure', { httpStatus: 503 })), true);
+  assert.equal(isRetrySafeResultLookupError(clientError('not_allowlisted', { httpStatus: 503 })), false);
+  assert.equal(isRetrySafeResultLookupError(clientError('unauthenticated', { httpStatus: 401 })), false);
+});
+
+test('ambiguous response after result commit recovers the existing authoritative result', async () => {
+  const authoritative = { result: { attemptId, serverAuthoritative: true } };
+  const recovered = await submitProtectedAttemptWithRecovery({
+    submitAttempt: async () => {
+      throw clientError('request_timeout', { ambiguousTransport: true });
+    },
+    getResult: async () => authoritative,
+  }, attemptId, 'submission-2');
+  assert.deepEqual(recovered, { payload: authoritative, recovered: true });
+});
+
+test('ambiguous uncommitted submit remains retryable instead of directing to missing history', async () => {
+  await assert.rejects(
+    () => submitProtectedAttemptWithRecovery({
+      submitAttempt: async () => {
+        throw clientError('request_timeout', { ambiguousTransport: true });
+      },
+      getResult: async () => {
+        throw clientError('attempt_not_found');
+      },
+    }, attemptId, 'submission-3'),
+    (error) => error.code === 'submission_in_progress'
+      && /continue the same submission/i.test(error.message),
+  );
+
+  await assert.rejects(
+    () => submitProtectedAttemptWithRecovery({
+      submitAttempt: async () => {
+        throw clientError('request_timeout', { ambiguousTransport: true });
+      },
+      getResult: async () => {
+        throw clientError('network_failure', { ambiguousTransport: true });
+      },
+    }, attemptId, 'submission-4'),
+    (error) => error.code === 'network_failure'
+      && error.ambiguousTransport === true,
+  );
+});

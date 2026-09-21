@@ -17,7 +17,7 @@ insert into public.organisations(id,name,organisation_type,status) values ('8510
 insert into public.memberships(user_id,organisation_id,role,status) values ('85100000-0000-0000-0000-000000000001','85100000-0000-0000-0000-000000000010','platform_owner','active');
 
 create function pg_temp.issue85_python_form_request(p_exam text,p_request uuid,p_fault text default null)
-returns jsonb language plpgsql as $$
+returns jsonb language plpgsql security definer set search_path='' as $$
 declare
   payload jsonb;
   questions jsonb := '[]'::jsonb;

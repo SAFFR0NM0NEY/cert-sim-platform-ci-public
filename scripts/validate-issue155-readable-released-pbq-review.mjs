@@ -202,6 +202,92 @@ for (const variant of interactionVariants) {
   for (const id of variant.privateIds) assert.doesNotMatch(display, new RegExp(escapeRegExp(id)), `${variant.name} leaked ${id}`);
 }
 
+const collisionTarget = {
+  id: 'collision-action',
+  label: 'Containment action',
+  options: [option('collision-isolate', 'Isolate host')],
+};
+const collisionTool = {
+  id: 'inspect-tool',
+  command: 'inspect server',
+  label: 'Inspect server configuration',
+};
+const collisionTasks = {
+  interactionStyle: 'interactive-topology',
+  decisionTargets: [collisionTarget],
+};
+const collisionCorrect = {
+  expectedMap: { 'collision-action': 'collision-isolate' },
+  requiredCommandIds: ['inspect server'],
+};
+const collisionPresentation = (devices) => ({ assets: { devices }, tasks: collisionTasks });
+const fallbackFirstCollision = collisionPresentation([{
+  id: 'fallback-first-host',
+  allowedCommands: ['inspect server'],
+  tools: [collisionTool],
+}]);
+const explicitFirstCollision = collisionPresentation([
+  { id: 'explicit-first-host', tools: [collisionTool] },
+  { id: 'fallback-second-host', allowedCommands: [' INSPECT   SERVER '] },
+]);
+
+for (const [name, presentation] of [
+  ['fallback then explicit', fallbackFirstCollision],
+  ['explicit then fallback', explicitFirstCollision],
+]) {
+  assert.equal(resolveReleasedPbqAnswer(presentation, {}, { questionType: 'pbq-config-panel' }).status, 'empty', `${name}: empty learner response`);
+  const correct = resolveReleasedPbqAnswer(presentation, collisionCorrect, { correct: true, questionType: 'pbq-config-panel' });
+  assert.equal(correct.status, 'resolved', `${name}: expected answer`);
+  assert.match(JSON.stringify(correct), /Inspect server configuration/, `${name}: explicit command label`);
+  assert.doesNotMatch(JSON.stringify(correct), /"inspect server"/, `${name}: raw fallback command label`);
+}
+assert.deepEqual(
+  resolveReleasedPbqAnswer(fallbackFirstCollision, collisionCorrect, { correct: true, questionType: 'pbq-config-panel' }),
+  resolveReleasedPbqAnswer(explicitFirstCollision, collisionCorrect, { correct: true, questionType: 'pbq-config-panel' }),
+  'command label priority must be traversal-order independent',
+);
+
+const aliasResult = resolveReleasedPbqAnswer(
+  fallbackFirstCollision,
+  { executedCommands: ['inspect server', 'inspect-tool'] },
+  { questionType: 'pbq-config-panel' },
+);
+assert.equal(aliasResult.status, 'resolved');
+assert.deepEqual(aliasResult.groups[0].texts, ['Inspect server configuration', 'Inspect server configuration']);
+
+const ambiguousCommandLabels = collisionPresentation([
+  { id: 'ambiguous-host-a', tools: [{ id: 'inspect-a', command: 'inspect server', label: 'Inspect server' }] },
+  { id: 'ambiguous-host-b', tools: [{ id: 'inspect-b', command: 'inspect server', label: 'Review server policy' }] },
+]);
+assert.equal(
+  resolveReleasedPbqAnswer(ambiguousCommandLabels, {}, { questionType: 'pbq-config-panel' }).status,
+  'invalid',
+  'different explicit labels for one command identity must fail closed',
+);
+
+const sameLabelDifferentCommands = collisionPresentation([{
+  id: 'separate-command-host',
+  tools: [
+    { id: 'inspect-alias', command: 'inspect server', label: 'Review server' },
+    { id: 'review-alias', command: 'review server', label: 'Review server' },
+  ],
+}]);
+assert.equal(
+  resolveReleasedPbqAnswer(sameLabelDifferentCommands, { executedCommands: ['inspect server', 'review server'] }, { questionType: 'pbq-config-panel' }).status,
+  'resolved',
+  'different command identities may share one explicit display label',
+);
+
+const punctuationDistinct = collisionPresentation([{
+  id: 'punctuation-host',
+  allowedCommands: ['inspect-server', 'inspect server'],
+}]);
+assert.equal(
+  resolveReleasedPbqAnswer(punctuationDistinct, { executedCommands: ['inspect-server', 'inspect server'] }, { questionType: 'pbq-config-panel' }).status,
+  'resolved',
+  'punctuation-distinct command identities must remain separate',
+);
+
 const config = fixtures.find(({ type }) => type === 'pbq-config-panel');
 assert.equal(resolveReleasedPbqAnswer(config.presentation, { unknownResponseKey: 'private-value' }, { questionType: config.type }).status, 'invalid');
 assert.equal(resolveReleasedPbqAnswer(config.presentation, { strategy: 'future-strategy', expectedMap: {} }, { correct: true, questionType: config.type }).status, 'invalid');

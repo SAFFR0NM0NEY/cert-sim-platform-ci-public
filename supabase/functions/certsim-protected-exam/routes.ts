@@ -34,6 +34,7 @@ export type RouteId =
   | "pythonWorkspaceGet"
   | "pythonWorkspaceSave"
   | "pythonRunRequest"
+  | "pythonRunLatest"
   | "pythonRunStatus"
   | "pythonRunCancel";
 export interface Route {
@@ -77,6 +78,7 @@ const RPC: Record<RouteId, string> = {
   pythonWorkspaceGet: "certsim_protected_get_python_workspace",
   pythonWorkspaceSave: "certsim_protected_save_python_workspace",
   pythonRunRequest: "certsim_protected_request_python_run",
+  pythonRunLatest: "certsim_protected_get_latest_python_run",
   pythonRunStatus: "certsim_protected_get_python_run",
   pythonRunCancel: "certsim_protected_cancel_python_run",
 };
@@ -110,6 +112,7 @@ export function matchRoute(request: Request): Route {
     ["pythonWorkspaceGet", "GET", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/workspace$/, ["attemptId", "itemId"]],
     ["pythonWorkspaceSave", "PUT", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/workspace$/, ["attemptId", "itemId"]],
     ["pythonRunRequest", "POST", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs$/, ["attemptId", "itemId"]],
+    ["pythonRunLatest", "GET", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs\/latest$/, ["attemptId", "itemId"]],
     ["pythonRunStatus", "GET", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs\/([^/]+)$/, ["attemptId", "itemId", "runId"]],
     ["pythonRunCancel", "POST", /^\/attempts\/([^/]+)\/items\/([^/]+)\/python\/runs\/([^/]+)\/cancel$/, ["attemptId", "itemId", "runId"]],
     ["eligibility", "GET", /^\/eligibility$/, []],

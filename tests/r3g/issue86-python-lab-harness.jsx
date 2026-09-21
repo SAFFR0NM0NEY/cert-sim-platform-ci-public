@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import ExamWorkspacePresentation from '../../src/components/exam/ExamWorkspacePresentation.jsx';
 import PythonLabWorkspace from '../../src/components/exam/PythonLabWorkspace.jsx';
+import ReleasedExecutablePythonReview from '../../src/components/exam/ReleasedExecutablePythonReview.jsx';
 import '../../src/styles/global.css';
 
 const attemptId = '86000000-0000-4000-8000-000000000201';
@@ -30,8 +31,10 @@ const serverConflictWorkspace = {
 };
 
 const mode = new URLSearchParams(window.location.search).get('mode') ?? 'starter';
-const rendersPublishedShape = mode === 'real-shape' || mode === 'real-shape-resume';
+const rendersPublishedShape = ['real-shape', 'real-shape-resume', 'real-shape-run-restore'].includes(mode);
+const rendersReview = mode === 'review';
 const persistedWorkspaceKey = `issue86:${attemptId}:${itemId}`;
+const persistedRunKey = `${persistedWorkspaceKey}:latest-run`;
 const calls = [];
 let reads = 0;
 let saves = 0;
@@ -45,7 +48,7 @@ const client = {
   async getPythonWorkspace(...args) {
     record('getPythonWorkspace', args.slice(0, 2));
     reads += 1;
-    if (mode === 'real-shape-resume') {
+    if (mode === 'real-shape-resume' || mode === 'real-shape-run-restore') {
       const persisted = window.localStorage.getItem(persistedWorkspaceKey);
       if (persisted) {
         const parsed = JSON.parse(persisted);
@@ -55,6 +58,19 @@ const client = {
     if (mode === 'resume') return workspaceRead(4, resumedWorkspace);
     if (mode === 'conflict' && reads > 1) return workspaceRead(7, serverConflictWorkspace);
     return workspaceRead(0, null);
+  },
+  async getLatestPythonRun(...args) {
+    record('getLatestPythonRun', args.slice(0, 2));
+    const persistedWorkspace = window.localStorage.getItem(persistedWorkspaceKey);
+    const revision = persistedWorkspace ? JSON.parse(persistedWorkspace).revision : 4;
+    if (mode === 'real-shape-run-restore') {
+      const persistedRun = window.localStorage.getItem(persistedRunKey);
+      if (persistedRun) {
+        const parsed = JSON.parse(persistedRun);
+        return { itemId, workspaceRevision: revision, run: parsed.revision === revision ? parsed.run : null };
+      }
+    }
+    return { itemId, workspaceRevision: revision, run: null };
   },
   async savePythonWorkspace(...args) {
     record('savePythonWorkspace', args.slice(0, 5));
@@ -68,7 +84,7 @@ const client = {
       workspaceHash,
       updatedAt: '2026-09-14T12:00:00Z',
     };
-    if (mode === 'real-shape-resume') {
+    if (mode === 'real-shape-resume' || mode === 'real-shape-run-restore') {
       window.localStorage.setItem(persistedWorkspaceKey, JSON.stringify({
         revision: saved.revision,
         workspace: args[2],
@@ -78,9 +94,9 @@ const client = {
   },
   async requestPythonRun(...args) {
     record('requestPythonRun', args.slice(0, 4));
-    if (mode === 'output') {
+    if (mode === 'output' || mode === 'real-shape-run-restore') {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      return {
+      const run = {
         runId: '86000000-0000-4000-8000-000000000203',
         state: 'failed',
         terminalOutcome: 'failed',
@@ -92,6 +108,10 @@ const client = {
         createdAt: '2026-09-15T12:00:00Z',
         updatedAt: '2026-09-15T12:00:01Z',
       };
+      if (mode === 'real-shape-run-restore') {
+        window.localStorage.setItem(persistedRunKey, JSON.stringify({ revision: args[2], run }));
+      }
+      return run;
     }
     throw Object.assign(new Error('Python execution is not available yet.'), {
       code: 'executor_disabled',
@@ -195,7 +215,36 @@ function FormalLabHarness() {
   />;
 }
 
-createRoot(document.getElementById('root')).render(rendersPublishedShape
+function ReleasedReviewHarness() {
+  const statuses = [
+    ['Correct', 5, 5],
+    ['Partial', 3, 5],
+    ['Incorrect', 0, 5],
+    ['Unanswered', 0, 5],
+  ];
+  return (
+    <main>
+      <h1>Released executable review</h1>
+      {statuses.map(([status, earnedPoints, maxPoints], index) => (
+        <ReleasedExecutablePythonReview
+          item={{
+            itemId: `safe-item-${index}`,
+            questionNumber: index + 1,
+            questionType: 'executable-python-lab-v1',
+            status,
+            earnedPoints,
+            maxPoints,
+          }}
+          key={status}
+        />
+      ))}
+    </main>
+  );
+}
+
+createRoot(document.getElementById('root')).render(rendersReview
+  ? <ReleasedReviewHarness />
+  : rendersPublishedShape
   ? <FormalLabHarness />
   : <main>
       <h1>Issue 86 Python lab</h1>

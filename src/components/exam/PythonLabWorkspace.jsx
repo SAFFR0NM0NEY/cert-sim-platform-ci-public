@@ -3,6 +3,7 @@ import {
   createPythonLabWorkspaceController,
   isPythonRunCancellable,
 } from '../../lib/pythonLabWorkspace.js';
+import PythonCodeEditor from './PythonCodeEditor.jsx';
 
 const BUSY_PHASES = new Set([
   'loading', 'saving', 'requesting-run', 'loading-run', 'cancelling-run',
@@ -85,9 +86,10 @@ export default function PythonLabWorkspace({
         </section>
       )}
 
-      <div className="python-editor-layout">
+      <div className="python-editor-layout" aria-label="Python lab editor workspace">
         <nav className="python-file-list" aria-label="Python workspace files">
-          <p><strong>Files</strong></p>
+          <p className="python-explorer-title"><strong>Explorer</strong></p>
+          <p className="python-explorer-folder">LAB WORKSPACE</p>
           {current.workspace.files.map((file) => (
             <button
               aria-pressed={file.path === activeFile?.path}
@@ -97,24 +99,25 @@ export default function PythonLabWorkspace({
               onClick={() => setActivePath(file.path)}
               type="button"
             >
-              {file.path}{file.path === current.workspace.entryPoint ? ' · entry' : ''}
+              <span aria-hidden="true">PY</span>
+              <span>{file.path}{file.path === current.workspace.entryPoint ? ' · entry' : ''}</span>
             </button>
           ))}
         </nav>
         <div className="python-editor-pane">
-          <label htmlFor={`${itemId}-python-editor`}>
+          <div className="python-editor-tabbar" aria-hidden="true">
+            <span className="python-editor-tab active"><span>PY</span>{activeFile?.path ?? current.workspace.entryPoint}</span>
+          </div>
+          <label className="sr-only" htmlFor={`${itemId}-python-editor`}>
             Python source · {activeFile?.path ?? current.workspace.entryPoint}
           </label>
-          <textarea
-            aria-describedby={`${itemId}-python-editor-help`}
-            autoCapitalize="off"
-            autoCorrect="off"
+          <PythonCodeEditor
+            describedBy={`${itemId}-python-editor-help`}
             disabled={controlsDisabled || Boolean(current.conflict)}
             id={`${itemId}-python-editor`}
-            maxLength={64 * 1024}
-            onChange={(event) => controller.updateFile(activeFile.path, event.target.value)}
-            rows={20}
-            spellCheck="false"
+            key={activeFile?.path}
+            label={`Python source · ${activeFile?.path ?? current.workspace.entryPoint}`}
+            onChange={(content) => controller.updateFile(activeFile.path, content)}
             value={activeFile?.content ?? ''}
           />
           <p className="answer-helper" id={`${itemId}-python-editor-help`}>
@@ -164,7 +167,9 @@ export default function PythonLabWorkspace({
       </div>
 
       <section className="python-run-status" aria-label="Execution status and result" aria-live="polite">
-        <h4>Execution status</h4>
+        <h4>{current.run && current.runRevision
+          ? `Run result for Revision ${current.runRevision}`
+          : 'Execution status'}</h4>
         <p className={current.phase === 'error' || current.phase === 'auth-error' ? 'error-note' : 'status-note'}>
           {current.message}
         </p>
@@ -177,7 +182,7 @@ export default function PythonLabWorkspace({
               <div><dt>Disposal</dt><dd>{formatRunValue(current.run.disposalState)}</dd></div>
             </dl>
             <div className="python-console" aria-label="Program output">
-              <h5>Program output</h5>
+              <h5>Terminal · Program output</h5>
               <p className="python-console-label">stdout</p>
               <pre>{current.run.stdout || '(no output)'}</pre>
               {current.run.stderr && (

@@ -8,15 +8,19 @@ const migrationNames = (await readdir(migrationDirectory)).filter((name) => name
 const issue167Migrations = migrationNames.filter((name) => name.endsWith('_issue167_study_sandbox_lifecycle_recovery.sql'));
 const issue167HotfixMigrations = migrationNames.filter((name) => name.endsWith('_issue167_resume_rpc_volatility_fix.sql'));
 
-assert.equal(migrationNames.length, 86, 'Platform Owner access correction must move the checked-in migration count from 85 to 86');
+assert.equal(migrationNames.length, 90, 'Issue #133 Phase 5A must move the checked-in migration count from 89 to 90');
 assert.equal(issue167Migrations.length, 1, 'Issue #167 must contain exactly one lifecycle migration');
 assert.equal(issue167HotfixMigrations.length, 1, 'Issue #167 B4A must contain exactly one resume volatility hotfix migration');
-assert.equal(migrationNames.at(-6), issue167HotfixMigrations[0], 'Issue #167 B4A must remain immediately before the Issue #86 R5 migration');
-assert.equal(migrationNames.at(-5), '20260914120212_issue86_python_lab_orchestration.sql', 'Issue #86 R5 must remain immediately before the Modal integration migration');
-assert.equal(migrationNames.at(-4), '20260915063933_issue86_modal_execution_completion.sql', 'Issue #86 Modal integration must remain immediately before trusted grading completion');
-assert.equal(migrationNames.at(-3), '20260916103000_issue86_trusted_grading_completion.sql', 'Issue #86 trusted grading completion must remain immediately before release preparation');
-assert.equal(migrationNames.at(-2), '20260916155319_issue86_python_next_generation_release_prep.sql', 'Issue #86 release preparation must remain immediately before the access correction');
-assert.equal(migrationNames.at(-1), '20260917074357_platform_owner_protected_exam_bypass.sql', 'Platform Owner access correction must remain the exact migration tail');
+assert.equal(migrationNames.at(-10), issue167HotfixMigrations[0], 'Issue #167 B4A must remain immediately before the Issue #86 R5 migration');
+assert.equal(migrationNames.at(-9), '20260914120212_issue86_python_lab_orchestration.sql', 'Issue #86 R5 must remain immediately before the Modal integration migration');
+assert.equal(migrationNames.at(-8), '20260915063933_issue86_modal_execution_completion.sql', 'Issue #86 Modal integration must remain immediately before trusted grading completion');
+assert.equal(migrationNames.at(-7), '20260916103000_issue86_trusted_grading_completion.sql', 'Issue #86 trusted grading completion must remain immediately before release preparation');
+assert.equal(migrationNames.at(-6), '20260916155319_issue86_python_next_generation_release_prep.sql', 'Issue #86 release preparation must remain immediately before the access correction');
+assert.equal(migrationNames.at(-5), '20260917074357_platform_owner_protected_exam_bypass.sql', 'Platform Owner access correction must remain immediately before the submission semantics migration');
+assert.equal(migrationNames.at(-4), '20260917121244_issue86_executable_submission_run_restore.sql', 'Issue #86 submission semantics must remain immediately before live submission recovery');
+assert.equal(migrationNames.at(-3), '20260917185333_issue86_live_submit_recovery.sql', 'Issue #86 live submission recovery must remain immediately before Phase 4B');
+assert.equal(migrationNames.at(-2), '20260920124528_issue133_examops_phase4b.sql', 'Issue #133 Phase 4B must remain immediately before Phase 5A');
+assert.equal(migrationNames.at(-1), '20260921044626_issue133_phase5a_operator_readonly.sql', 'Issue #133 Phase 5A must remain the exact migration tail');
 
 const source = await readFile(new URL(`../supabase/migrations/${issue167Migrations[0]}`, import.meta.url), 'utf8');
 const lower = source.toLowerCase();

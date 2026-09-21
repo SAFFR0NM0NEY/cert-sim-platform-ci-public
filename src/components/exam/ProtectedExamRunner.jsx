@@ -12,6 +12,8 @@ import {
 } from '../../lib/protectedExamContract.js';
 import {
   createProtectedExamClient,
+  isRetrySafeResultLookupError,
+  isRetrySafeSubmissionError,
   submitProtectedAttemptWithRecovery,
 } from '../../lib/protectedExamClient.js';
 import { createProtectedAccessTokenProvider } from '../../lib/protectedAccessToken.js';
@@ -21,7 +23,7 @@ import { assertProtectedAttemptInventory, getProtectedItemSection } from '../../
 import useFullscreenMode from '../../utils/useFullscreenMode.js';
 import { getNormalizedDomainItems } from '../../lib/resultStorageMappers.js';
 import { resolvePracticeRequest } from '../../lib/protectedPracticeRequest.js';
-import ReleasedReviewAnswer from './ReleasedReviewAnswer.jsx';
+import ReleasedReviewWorkspace from './ReleasedReviewWorkspace.jsx';
 import { downloadProtectedResultSummaryPdf } from '../../lib/savedResultReportExport.js';
 import { getStructuredResponseState } from '../../lib/structuredResponse.js';
 import { getProtectedExitContract } from '../../lib/protectedLifecycle.js';
@@ -57,6 +59,7 @@ export default function ProtectedExamRunner({
     : '';
   const sessionRef = useRef(session);
   sessionRef.current = session;
+  const authenticatedUserId = session?.user?.id ?? '';
   const client = useMemo(() => {
     if (!session?.access_token) return null;
     return createProtectedExamClient({
@@ -110,6 +113,11 @@ export default function ProtectedExamRunner({
   const practiceRequestRef = useRef(effectivePracticeRequest);
   practiceRequestRef.current = effectivePracticeRequest;
   const submissionId = useRef('');
+  const submissionBinding = useRef({ attemptId: '', userId: '', submissionId: '', dispatched: false, resolved: false, submitRetryAllowed: false });
+  const submissionOperation = useRef({ controller: null, generation: 0 });
+  const submissionPreparationGeneration = useRef(0);
+  const attemptRef = useRef(attempt);
+  attemptRef.current = attempt;
   const starting = useRef(false);
   const submitting = useRef(false);
   const loadingPage = useRef(false);
@@ -124,10 +132,32 @@ export default function ProtectedExamRunner({
 
   useEffect(() => {
     operationController.current = new AbortController();
-    return () => operationController.current.abort();
+    return () => {
+      operationController.current.abort();
+      submissionOperation.current.controller?.abort();
+      submissionOperation.current.generation += 1;
+    };
   }, []);
 
+  useEffect(() => {
+    const binding = submissionBinding.current;
+    if (!binding.dispatched || binding.resolved) return;
+    if (binding.userId === authenticatedUserId && binding.attemptId === attempt?.attemptId) return;
+    submissionOperation.current.controller?.abort();
+    submissionOperation.current.generation += 1;
+    submissionPreparationGeneration.current += 1;
+    submitting.current = false;
+    if (binding.userId !== authenticatedUserId) {
+      setState('session-expired');
+      setMessage('The signed-in account changed while final submission was unresolved. Sign in with the original account before taking any further action.');
+    } else {
+      setState('safe-fatal-error');
+      setMessage('The protected attempt changed while final submission was unresolved. Completion could not be confirmed safely.');
+    }
+  }, [attempt?.attemptId, authenticatedUserId]);
+
   const loadAttempt = useCallback((payload) => {
+    resetSubmissionBinding();
     const nextItems = (payload?.items ?? []).map(toPresentationQuestion);
     const authoritativeComposition = normalizeProfileComposition(availabilityRef.current?.profileComposition);
     if (availabilityRef.current?.fixedProfileSize && authoritativeComposition) {
@@ -500,7 +530,7 @@ export default function ProtectedExamRunner({
   }
 
   function changeAnswer(itemId, value) {
-    if (lifecycleLock.current || discardSummary) return;
+    if (lifecycleLock.current || discardSummary || submitting.current || hasUnresolvedSubmission()) return;
     setAnswers((current) => ({ ...current, [itemId]: value }));
     setDirtyIds((current) => new Set(current).add(itemId));
     setSaveErrors((current) => ({ ...current, [itemId]: '' }));
@@ -526,7 +556,7 @@ export default function ProtectedExamRunner({
     });
   }, []);
 
-  async function saveItem(itemId) {
+  async function saveItem(itemId, { submissionPreparation = false, preparationContext = null } = {}) {
     const question = items.find((item) => item.id === itemId);
     if (isExecutablePythonLab(question)) {
       const registered = pythonWorkspaceSave.current;
@@ -538,6 +568,7 @@ export default function ProtectedExamRunner({
         return false;
       }
       const saved = await registered.save({ signal: operationController.current.signal });
+      if (preparationContext && !isCurrentSubmissionPreparation(preparationContext)) return false;
       if (saved) setSaveErrors((current) => ({ ...current, [itemId]: '' }));
       return saved;
     }
@@ -553,6 +584,7 @@ export default function ProtectedExamRunner({
         crypto.randomUUID(),
         { signal: operationController.current.signal },
       );
+      if (preparationContext && !isCurrentSubmissionPreparation(preparationContext)) return false;
       if (epoch !== requestEpoch.current) return false;
       setRevisions((current) => ({ ...current, [itemId]: saved.revision }));
       setDirtyIds((current) => {
@@ -560,10 +592,11 @@ export default function ProtectedExamRunner({
         next.delete(itemId);
         return next;
       });
-      setState('active');
+      if (!submissionPreparation) setState('active');
       return true;
     } catch (error) {
       if (operationController.current.signal.aborted) return false;
+      if (preparationContext && !isCurrentSubmissionPreparation(preparationContext)) return false;
       if (epoch !== requestEpoch.current) return false;
       setState(error.code === 'unauthenticated' ? 'session-expired' : 'save-failed');
       setSaveErrors((current) => ({ ...current, [itemId]: error.message }));
@@ -572,7 +605,7 @@ export default function ProtectedExamRunner({
   }
 
   async function navigate(nextIndex) {
-    if (lifecycleLock.current || discardSummary) return;
+    if (lifecycleLock.current || discardSummary || submitting.current || hasUnresolvedSubmission()) return;
     if (!(await saveItem(items[currentIndex].id))) return;
     if (nextIndex >= items.length && itemPage.hasMore) {
       if (loadingPage.current) return;
@@ -609,7 +642,7 @@ export default function ProtectedExamRunner({
   }
 
   async function saveAndExit() {
-    if (attempt?.purpose !== 'study_sandbox' || discardSummary || lifecycleLock.current || starting.current || submitting.current) return;
+    if (attempt?.purpose !== 'study_sandbox' || discardSummary || lifecycleLock.current || starting.current || submitting.current || hasUnresolvedSubmission()) return;
     lifecycleLock.current = true;
     setLifecycleOperation('save-exit');
     const currentItemId = items[currentIndex]?.id;
@@ -623,7 +656,7 @@ export default function ProtectedExamRunner({
   }
 
   async function prepareSandboxDiscard() {
-    if (attempt?.purpose !== 'study_sandbox' || discardSummary || lifecycleLock.current || starting.current || submitting.current) return;
+    if (attempt?.purpose !== 'study_sandbox' || discardSummary || lifecycleLock.current || starting.current || submitting.current || hasUnresolvedSubmission()) return;
     lifecycleLock.current = true;
     setLifecycleOperation('discard-preflight');
     setDiscardError('');
@@ -691,7 +724,7 @@ export default function ProtectedExamRunner({
   }
 
   async function terminalEndAndExit() {
-    if (attempt?.purpose === 'study_sandbox' || lifecycleLock.current || starting.current || submitting.current) return;
+    if (attempt?.purpose === 'study_sandbox' || lifecycleLock.current || starting.current || submitting.current || hasUnresolvedSubmission()) return;
     if (!window.confirm('End this attempt? It cannot be resumed. Your progress will be retained for audit, but no completed result will be created.')) return;
     lifecycleLock.current = true;
     setLifecycleOperation('ending');
@@ -718,7 +751,7 @@ export default function ProtectedExamRunner({
 
   const saveCurrentResponseBeforeNavigation = useCallback(async () => {
     if (navigationSave.current) return navigationSave.current;
-    if (state === 'saving' || state === 'submitting' || lifecycleLock.current || discardSummary) return false;
+    if (state === 'saving' || state === 'submission-preparing' || state === 'submitting' || lifecycleLock.current || discardSummary || submitting.current || hasUnresolvedSubmission()) return false;
     navigationSave.current = (async () => {
       const currentItemId = items[currentIndex]?.id;
       return currentItemId ? saveItem(currentItemId) : true;
@@ -736,7 +769,7 @@ export default function ProtectedExamRunner({
   }, [onRegisterNavigationGuard, saveCurrentResponseBeforeNavigation]);
 
   async function toggleFlag(itemId) {
-    if (lifecycleLock.current || discardSummary) return;
+    if (lifecycleLock.current || discardSummary || submitting.current || hasUnresolvedSubmission()) return;
     const flagged = !flaggedQuestionIds.includes(itemId);
     try {
       const payload = await client.setFlag(attempt.attemptId, itemId, flagged, crypto.randomUUID(), { signal: operationController.current.signal });
@@ -748,6 +781,7 @@ export default function ProtectedExamRunner({
 
   async function submitIssue(event) {
     event.preventDefault();
+    if (submitting.current || hasUnresolvedSubmission()) return;
     if (!issueMessage.trim()) { setIssueStatus('Describe the issue before sending it.'); return; }
     setIssueStatus('Sending issue report...');
     try {
@@ -757,6 +791,7 @@ export default function ProtectedExamRunner({
   }
 
   async function checkPracticeItem(itemId) {
+    if (submitting.current || hasUnresolvedSubmission()) return;
     const expectedRevision = (revisions[itemId] ?? 0) + (dirtyIds.has(itemId) ? 1 : 0);
     if (!(await saveItem(itemId))) return;
     try {
@@ -770,40 +805,245 @@ export default function ProtectedExamRunner({
   }
 
   async function submitAttempt() {
-    if (submitting.current) return;
+    if (submitting.current || navigationSave.current || state === 'saving' || pythonLabBusy || hasUnresolvedSubmission()) return;
+    const preparationContext = beginSubmissionPreparation();
+    if (!preparationContext.userId) {
+      setState('session-expired');
+      setMessage('Your signed-in account could not be verified for final submission. Sign in again before continuing.');
+      return;
+    }
     submitting.current = true;
-    setState('submitting');
+    setShowFinalSubmitReview(false);
+    setState('submission-preparing');
+    setMessage('Saving your latest work before final submission...');
     const currentItemId = items[currentIndex]?.id;
-    if (isExecutablePythonLab(items[currentIndex]) && !(await saveItem(currentItemId))) {
+    if (isExecutablePythonLab(items[currentIndex]) && !(await saveItem(currentItemId, {
+      submissionPreparation: true,
+      preparationContext,
+    }))) {
       submitting.current = false;
-      setState('save-failed');
+      if (isCurrentSubmissionPreparation(preparationContext)) setState('save-failed');
+      else failClosedForSubmissionPreparation(preparationContext);
       return;
     }
     for (const itemId of [...dirtyIds]) {
-      if (!(await saveItem(itemId))) {
+      if (!(await saveItem(itemId, { submissionPreparation: true, preparationContext }))) {
         submitting.current = false;
+        if (!isCurrentSubmissionPreparation(preparationContext)) {
+          failClosedForSubmissionPreparation(preparationContext);
+        }
         return;
       }
     }
+    if (!isCurrentSubmissionPreparation(preparationContext)) {
+      submitting.current = false;
+      failClosedForSubmissionPreparation(preparationContext);
+      return;
+    }
+    submissionId.current ||= crypto.randomUUID();
+    const binding = {
+      attemptId: preparationContext.attemptId,
+      userId: preparationContext.userId,
+      submissionId: submissionId.current,
+      dispatched: true,
+      resolved: false,
+      submitRetryAllowed: false,
+    };
+    submissionBinding.current = binding;
+    setMessage('Final submission was sent. Completion is not yet confirmed.');
+    await dispatchBoundSubmission(binding);
+  }
+
+  async function continueSubmission() {
+    if (submitting.current) return;
+    const binding = submissionBinding.current;
+    if (!isCurrentSubmissionBinding(binding) || !binding.submitRetryAllowed) {
+      failClosedForSubmissionIdentity(binding);
+      return;
+    }
+    submitting.current = true;
+    setMessage('Continuing the same final submission. Completion is not yet confirmed.');
+    await dispatchBoundSubmission(binding);
+  }
+
+  async function checkSubmissionResult() {
+    if (submitting.current) return;
+    const binding = submissionBinding.current;
+    if (!isCurrentSubmissionBinding(binding)) {
+      failClosedForSubmissionIdentity(binding);
+      return;
+    }
+    submitting.current = true;
+    setState('submission-checking');
+    setMessage('Checking for an authoritative result without submitting again...');
+    const operation = beginSubmissionOperation(binding);
     try {
-      submissionId.current ||= crypto.randomUUID();
-      const options = { signal: operationController.current.signal };
+      const submitted = await client.getResult(binding.attemptId, { signal: operation.signal });
+      if (!isCurrentSubmissionOperation(binding, operation)) return;
+      completeSubmissionWithResult(binding, submitted.result);
+    } catch (error) {
+      if (!isCurrentSubmissionOperation(binding, operation)) return;
+      if (error.code === 'attempt_not_found') {
+        preserveUnconfirmedResultLookup(binding, 'No authoritative result is available yet. Completion is not confirmed.');
+      } else if (isRetrySafeResultLookupError(error)) {
+        preserveUnconfirmedResultLookup(binding, 'Completion could not be checked because the result service is temporarily unavailable.');
+      } else {
+        setState(error.code === 'unauthenticated' ? 'session-expired' : 'safe-fatal-error');
+        setMessage(error.message);
+      }
+    } finally {
+      finishSubmissionOperation(operation);
+    }
+  }
+
+  async function dispatchBoundSubmission(binding) {
+    if (!isCurrentSubmissionBinding(binding)) {
+      failClosedForSubmissionIdentity(binding);
+      return;
+    }
+    setState('submitting');
+    const operation = beginSubmissionOperation(binding);
+    try {
+      const options = { signal: operation.signal };
       const { payload: submitted } = await submitProtectedAttemptWithRecovery(
         client,
-        attempt.attemptId,
-        submissionId.current,
+        binding.attemptId,
+        binding.submissionId,
         options,
       );
-      setResult(requireProtectedAuthoritativeResult(
-        submitted.result ?? (await client.getResult(attempt.attemptId, options)).result,
-      ));
-      setState('result-available');
+      if (!isCurrentSubmissionOperation(binding, operation)) return;
+      const authoritativeResult = submitted.result ?? (await client.getResult(binding.attemptId, options)).result;
+      if (!isCurrentSubmissionOperation(binding, operation)) return;
+      completeSubmissionWithResult(binding, authoritativeResult);
     } catch (error) {
-      setState(error.code === 'unauthenticated' ? 'session-expired' : 'safe-fatal-error');
-      setMessage(error.message);
+      if (!isCurrentSubmissionOperation(binding, operation)) return;
+      if (isRetrySafeSubmissionError(error)) {
+        binding.submitRetryAllowed = true;
+        setState('submission-recoverable');
+        setMessage(error.message);
+      } else if (isRetrySafeResultLookupError(error)) {
+        preserveUnconfirmedResultLookup(binding, 'Completion could not be checked because the result service is temporarily unavailable.');
+      } else if (error.code === 'attempt_not_found') {
+        preserveUnconfirmedResultLookup(binding, 'No authoritative result is available yet. Completion is not confirmed.');
+      } else {
+        setState(error.code === 'unauthenticated' ? 'session-expired' : 'safe-fatal-error');
+        setMessage(error.message);
+      }
     } finally {
-      submitting.current = false;
+      finishSubmissionOperation(operation);
     }
+  }
+
+  function beginSubmissionPreparation() {
+    submissionPreparationGeneration.current += 1;
+    return {
+      attemptId: attempt?.attemptId ?? '',
+      userId: getCurrentAuthenticatedUserId(),
+      generation: submissionPreparationGeneration.current,
+    };
+  }
+
+  function isCurrentSubmissionPreparation(context) {
+    return !operationController.current.signal.aborted &&
+      context.generation === submissionPreparationGeneration.current &&
+      context.attemptId === attemptRef.current?.attemptId &&
+      context.userId === getCurrentAuthenticatedUserId() &&
+      !hasUnresolvedSubmission();
+  }
+
+  function beginSubmissionOperation(binding) {
+    submissionOperation.current.controller?.abort();
+    const controller = new AbortController();
+    const generation = submissionOperation.current.generation + 1;
+    submissionOperation.current = { controller, generation };
+    return {
+      controller,
+      generation,
+      signal: AbortSignal.any([operationController.current.signal, controller.signal]),
+    };
+  }
+
+  function finishSubmissionOperation(operation) {
+    if (operation.generation !== submissionOperation.current.generation) return;
+    submissionOperation.current.controller = null;
+    submitting.current = false;
+  }
+
+  function isCurrentSubmissionOperation(binding, operation) {
+    return !operation.signal.aborted &&
+      operation.generation === submissionOperation.current.generation &&
+      isCurrentSubmissionBinding(binding);
+  }
+
+  function isCurrentSubmissionBinding(binding) {
+    return binding === submissionBinding.current &&
+      binding.dispatched &&
+      !binding.resolved &&
+      Boolean(binding.submissionId) &&
+      binding.submissionId === submissionId.current &&
+      binding.attemptId === attemptRef.current?.attemptId &&
+      binding.userId === getCurrentAuthenticatedUserId();
+  }
+
+  function completeSubmissionWithResult(binding, candidateResult) {
+    const authoritativeResult = requireProtectedAuthoritativeResult(candidateResult);
+    if (authoritativeResult.attemptId !== binding.attemptId) {
+      throw Object.assign(new Error('The protected result did not match this attempt.'), { code: 'binding_mismatch' });
+    }
+    binding.resolved = true;
+    setResult(authoritativeResult);
+    setMessage('');
+    setState('result-available');
+  }
+
+  function preserveUnconfirmedResultLookup(binding, reason) {
+    setState(binding.submitRetryAllowed ? 'submission-recoverable' : 'submission-result-check-recoverable');
+    setMessage(binding.submitRetryAllowed
+      ? `${reason} Continue the same submission or check the result again.`
+      : `${reason} Keep this page open and check the result again.`);
+  }
+
+  function failClosedForSubmissionIdentity(binding) {
+    submissionOperation.current.controller?.abort();
+    submissionOperation.current.generation += 1;
+    submitting.current = false;
+    if (binding?.userId && binding.userId !== getCurrentAuthenticatedUserId()) {
+      setState('session-expired');
+      setMessage('The signed-in account changed while final submission was unresolved. Sign in with the original account before taking any further action.');
+    } else {
+      setState('safe-fatal-error');
+      setMessage('The protected attempt or submission identity changed. Completion could not be confirmed safely.');
+    }
+  }
+
+  function failClosedForSubmissionPreparation(context) {
+    submissionPreparationGeneration.current += 1;
+    submitting.current = false;
+    if (context.userId !== getCurrentAuthenticatedUserId()) {
+      setState('session-expired');
+      setMessage('The signed-in account changed before final submission was sent. Sign in again before continuing.');
+    } else {
+      setState('safe-fatal-error');
+      setMessage('The protected attempt changed before final submission was sent. No final submission request was dispatched.');
+    }
+  }
+
+  function getCurrentAuthenticatedUserId() {
+    return sessionRef.current?.user?.id ?? '';
+  }
+
+  function hasUnresolvedSubmission() {
+    const binding = submissionBinding.current;
+    return binding.dispatched && !binding.resolved;
+  }
+
+  function resetSubmissionBinding() {
+    submissionOperation.current.controller?.abort();
+    submissionOperation.current.generation += 1;
+    submissionPreparationGeneration.current += 1;
+    submissionId.current = '';
+    submissionBinding.current = { attemptId: '', userId: '', submissionId: '', dispatched: false, resolved: false, submitRetryAllowed: false };
+    submitting.current = false;
   }
 
   async function loadReview() {
@@ -818,7 +1058,7 @@ export default function ProtectedExamRunner({
       if (operationController.current.signal.aborted) return;
       setReviewMessage(error.code === 'review_unavailable'
         ? 'Question review and answers are withheld for this attempt.'
-        : error.message);
+        : 'Released question review could not be loaded. Return to this result summary and try again.');
     }
   }
 
@@ -836,7 +1076,9 @@ export default function ProtectedExamRunner({
   }
 
   if (state === 'result-available') {
+    if (review) return <ReleasedReviewWorkspace review={review} onReturn={() => setReview(null)} />;
     const reviewWithheld = result?.reviewStatus === 'withheld';
+    const reviewReleased = result?.reviewStatus === 'released';
     const domainRows = getNormalizedDomainItems(result?.domainBreakdown ?? {});
     const percentage = result?.rawPercentage == null ? null : Number(result.rawPercentage);
     return (
@@ -876,36 +1118,42 @@ export default function ProtectedExamRunner({
           </p>
         )}
         <div className="exam-actions">
-          {!reviewWithheld && <button className="secondary-button" type="button" onClick={loadReview}>View released review</button>}
+          {reviewReleased && <button className="secondary-button" type="button" onClick={loadReview}>View released review</button>}
           <button className="secondary-button" disabled={pdfState.preparing} type="button" onClick={downloadResultPdf}>{pdfState.preparing ? 'Preparing PDF...' : 'Download PDF'}</button>
           <button className="primary-button" type="button" onClick={onExit}>Return home</button>
         </div>
         {reviewMessage && <p role="status">{reviewMessage}</p>}
-        {review && (
-          <section className="protected-review-list" aria-labelledby="protected-review-heading">
-            <h3 id="protected-review-heading">Released question review</h3>
-            <p role="status">{review.items.length} review items released by the server.</p>
-            {review.items.map((item) => (
-              <article className="selected-profile-panel" key={item.itemId}>
-                <p className="eyebrow">Question {item.questionNumber} · {item.questionId}</p>
-                <h4>{item.presentation?.stem ?? item.presentation?.prompt ?? item.presentation?.question ?? item.presentation?.title ?? 'Question review'}</h4>
-                <dl className="exam-stats compact">
-                  <div><dt>Result</dt><dd>{item.status ?? 'Recorded'}</dd></div>
-                  <div><dt>Points</dt><dd>{item.earnedPoints != null && item.maxPoints != null ? `${item.earnedPoints} / ${item.maxPoints}` : 'Not recorded'}</dd></div>
-                  <div><dt>Your response</dt><dd><ReleasedReviewAnswer presentation={item.presentation} questionType={item.questionType} value={item.response} /></dd></div>
-                  <div><dt>Correct answer</dt><dd><ReleasedReviewAnswer correct presentation={item.presentation} questionType={item.questionType} value={item.correctAnswer} /></dd></div>
-                </dl>
-                {item.explanation && <p><strong>Explanation:</strong> {item.explanation}</p>}
-                {item.remediation && <p><strong>Next step:</strong> {item.remediation}</p>}
-              </article>
-            ))}
-          </section>
-        )}
       </section>
     );
   }
 
-  if (!['active', 'saving', 'save-failed', 'submitting'].includes(state)) {
+  if (['submitting', 'submission-recoverable', 'submission-result-check-recoverable', 'submission-checking'].includes(state) && hasUnresolvedSubmission()) {
+    const operationActive = state === 'submitting' || state === 'submission-checking' || submitting.current;
+    const submitRetryAllowed = submissionBinding.current.submitRetryAllowed;
+    return (
+      <section className="exam-workspace protected-status" aria-live="polite" aria-labelledby="protected-submission-heading">
+        <p className="eyebrow">Protected final submission</p>
+        <h2 id="protected-submission-heading">
+          {['submission-recoverable', 'submission-result-check-recoverable'].includes(state) ? 'Final submission needs confirmation' : 'Final submission in progress'}
+        </h2>
+        <p>{message}</p>
+        <p>Your answers and Python workspace are locked. Any available continuation uses the same attempt and submission identity without saving them again.</p>
+        <p>Keep this page open. Leaving or reloading is not a supported recovery method.</p>
+        <div className="exam-actions">
+          {submitRetryAllowed && (
+            <button className="primary-button" disabled={operationActive} type="button" onClick={continueSubmission}>
+              {state === 'submitting' ? 'Continuing submission...' : 'Continue submission'}
+            </button>
+          )}
+          <button className="secondary-button" disabled={operationActive} type="button" onClick={checkSubmissionResult}>
+            {state === 'submission-checking' ? 'Checking result...' : 'Check result'}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!['active', 'saving', 'save-failed', 'submission-preparing'].includes(state)) {
     if (!['safe-fatal-error', 'session-expired'].includes(state)) {
       const selectedLanguage = configuredLanguage || codingLanguagePreference;
       const baseDisplayProfile = activeAttemptConfiguration?.profileKey
@@ -1044,7 +1292,7 @@ export default function ProtectedExamRunner({
     .filter(isExecutablePythonLab)
     .map((item) => [item.id, getProtectedQuestionState(item, answers, pythonWorkspaceProgress)]));
   const exitContract = getProtectedExitContract(attempt?.purpose);
-  const interactionLocked = Boolean(lifecycleOperation) || Boolean(discardSummary) || pythonLabBusy || state === 'saving' || state === 'submitting';
+  const interactionLocked = Boolean(lifecycleOperation) || Boolean(discardSummary) || pythonLabBusy || submitting.current || hasUnresolvedSubmission() || state === 'saving' || state === 'submission-preparing';
   const approvedExam = {
     ...examConfig,
     code: examConfig.code ?? examConfig.shortName,

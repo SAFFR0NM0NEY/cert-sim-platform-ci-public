@@ -42,6 +42,7 @@ import {
   mapStudySandboxRecovery,
   mapPythonWorkspace,
   mapPythonWorkspaceSave,
+  mapLatestPythonRun,
   mapPythonRun,
 } from "./responses.ts";
 import {
@@ -288,6 +289,14 @@ export async function handleProtectedExam(
         p_expected_revision: body.expectedRevision,
         p_request_id: assertUuid(body.requestId),
       };
+    } else if (matched.id === "pythonRunLatest") {
+      const u = new URL(request.url);
+      if ([...u.searchParams.keys()].length > 0) throw new SafeError("invalid_request");
+      args = {
+        p_actor_id: actorId,
+        p_attempt_id: assertUuid(matched.params.attemptId),
+        p_item_id: assertUuid(matched.params.itemId),
+      };
     } else if (matched.id === "pythonRunStatus") {
       const u = new URL(request.url);
       if ([...u.searchParams.keys()].length > 0) throw new SafeError("invalid_request");
@@ -436,6 +445,7 @@ export async function handleProtectedExam(
     else if (matched.id === "practiceRecover") mapped = mapStudySandboxRecovery(rpcData);
     else if (matched.id === "pythonWorkspaceGet") mapped = mapPythonWorkspace(rpcData);
     else if (matched.id === "pythonWorkspaceSave") mapped = mapPythonWorkspaceSave(rpcData);
+    else if (matched.id === "pythonRunLatest") mapped = mapLatestPythonRun(rpcData);
     else if (matched.id === "pythonRunRequest" || matched.id === "pythonRunStatus" || matched.id === "pythonRunCancel") mapped = mapPythonRun(rpcData);
     else if (matched.id === "start" || matched.id === "practiceStart" || matched.id === "practiceReplace" || matched.id === "resume" || matched.id === "current") {
       mapped = mapAttempt(rpcData);

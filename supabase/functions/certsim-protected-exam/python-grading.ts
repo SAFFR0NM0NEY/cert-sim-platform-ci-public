@@ -13,6 +13,8 @@ const GRADING_EVIDENCE_VERSION = "certsim.python-grading.evidence.v1";
 const GRADING_ENVELOPE_VERSION = "certsim.python-grading.evidence-envelope.v1";
 const GRADING_SIGNATURE_DOMAIN = "certsim.python-grading.evidence-signature.v1";
 const HMAC = "hmac-sha256";
+const ACTIVE_GRADING_STATES = new Set(["queued", "running", "cancel_requested"]);
+const MAX_SUBMISSION_PASSES = 2;
 
 type Obj = Record<string, unknown>;
 type AdminClient = {
@@ -247,18 +249,65 @@ async function cancelNamedExecution(
 
 async function reconcileFailedTransport(
   admin: AdminClient,
+  actorId: string,
+  attemptId: string,
+  submissionId: string,
   item: Obj,
   request: Obj,
   requestDigest: string,
   credentials: ReturnType<typeof readTrustedEnvironment>,
   fetchImpl: typeof fetch,
 ) {
+  await rpc(admin, "certsim_service_request_python_submission_grading_cancellation", {
+    p_actor_id: actorId,
+    p_attempt_id: attemptId,
+    p_submission_id: submissionId,
+    p_item_id: item.itemId,
+    p_run_id: item.runId,
+    p_request_id: item.runId,
+  });
   const runtimeRequest = { ...request, requestId: `request.${item.gradingSessionId}` };
   const [primary] = await Promise.all([
     cancelNamedExecution(request, credentials, fetchImpl),
     cancelNamedExecution(runtimeRequest, credentials, fetchImpl),
   ]);
   await persistTerminal(admin, String(item.runId), requestDigest, primary);
+}
+
+async function boundExecutionRequest(item: Obj) {
+  const request = pythonExecutionContract.createRequest(
+    item.workspace as Obj, String(item.executionRequestId),
+  );
+  const requestDigest = await pythonExecutionContract.sha256(
+    pythonExecutionContract.canonicalJson(request),
+  );
+  return { request, requestDigest };
+}
+
+async function reconcileActiveGeneration(
+  admin: AdminClient,
+  actorId: string,
+  attemptId: string,
+  submissionId: string,
+  item: Obj,
+  credentials: ReturnType<typeof readTrustedEnvironment>,
+  fetchImpl: typeof fetch,
+) {
+  if (!ACTIVE_GRADING_STATES.has(String(item.state))) {
+    throw new SafeError("grading_reconciliation_required");
+  }
+  const { request, requestDigest } = await boundExecutionRequest(item);
+  if (item.executionRequestDigest !== requestDigest) {
+    throw new SafeError("grading_reconciliation_required");
+  }
+  try {
+    await reconcileFailedTransport(
+      admin, actorId, attemptId, submissionId,
+      item, request, requestDigest, credentials, fetchImpl,
+    );
+  } catch {
+    throw new SafeError("grading_reconciliation_required");
+  }
 }
 
 async function gradeItem(
@@ -282,12 +331,7 @@ async function gradeItem(
       (item.gradingMaterial as Obj).maximumRawPoints !== item.maximumRawPoints) {
     throw new SafeError("grading_failed");
   }
-  const request = pythonExecutionContract.createRequest(
-    item.workspace as Obj, String(item.executionRequestId),
-  );
-  const requestDigest = await pythonExecutionContract.sha256(
-    pythonExecutionContract.canonicalJson(request),
-  );
+  const { request, requestDigest } = await boundExecutionRequest(item);
   const materialized = await rpc(admin, "certsim_service_materialize_python_submission_grading", {
     p_actor_id: actorId,
     p_attempt_id: attemptId,
@@ -319,11 +363,14 @@ async function gradeItem(
     );
   } catch {
     try {
-      await reconcileFailedTransport(admin, item, request, requestDigest, credentials, fetchImpl);
+      await reconcileFailedTransport(
+        admin, actorId, attemptId, submissionId,
+        item, request, requestDigest, credentials, fetchImpl,
+      );
     } catch {
       throw new SafeError("grading_reconciliation_required");
     }
-    throw new SafeError("grading_failed");
+    return "reconciled" as const;
   }
   const body = exact(responseBody, ["disposalConfirmed", "envelope", "evidence", "executionResult", "ok"]);
   if (body.ok !== true || body.disposalConfirmed !== true) throw new SafeError("grading_failed");
@@ -347,6 +394,7 @@ async function gradeItem(
     p_maximum_raw_points: evidence.maximumRawPoints,
     p_rule_points: evidence.rules,
   });
+  return "graded" as const;
 }
 
 async function runBounded(items: Obj[], limit: number, operation: (item: Obj) => Promise<void>) {
@@ -374,19 +422,35 @@ export async function submitProtectedAttemptWithPythonGrading({
   env?: Environment;
   fetchImpl?: typeof fetch;
 }): Promise<Obj> {
-  const prepared = await rpc(admin, "certsim_service_prepare_python_submission_grading", {
+  let prepared = await rpc(admin, "certsim_service_prepare_python_submission_grading", {
     p_actor_id: actorId, p_attempt_id: attemptId, p_submission_id: submissionId,
   });
-  const items = validateAuthority(prepared);
+  let items = validateAuthority(prepared);
   if (prepared.required === true && prepared.ready !== true) {
     const credentials = readTrustedEnvironment(env);
-    await runBounded(items.filter(({ state }) => state !== "graded"), 3, (item) =>
-      gradeItem(admin, actorId, attemptId, submissionId, item, credentials, fetchImpl));
-    const reconciled = await rpc(admin, "certsim_service_prepare_python_submission_grading", {
-      p_actor_id: actorId, p_attempt_id: attemptId, p_submission_id: submissionId,
-    });
-    validateAuthority(reconciled);
-    if (reconciled.ready !== true) throw new SafeError("grading_reconciliation_required");
+    for (let pass = 0; pass < MAX_SUBMISSION_PASSES && prepared.ready !== true; pass += 1) {
+      let recoverableGenerationFailure = false;
+      await runBounded(items.filter(({ state }) => state !== "graded"), 3, async (item) => {
+        if (item.state === "authorized") {
+          const outcome = await gradeItem(
+            admin, actorId, attemptId, submissionId, item, credentials, fetchImpl,
+          );
+          if (outcome === "reconciled") recoverableGenerationFailure = true;
+          return;
+        }
+        await reconcileActiveGeneration(
+          admin, actorId, attemptId, submissionId, item, credentials, fetchImpl,
+        );
+      });
+      if (recoverableGenerationFailure && pass === MAX_SUBMISSION_PASSES - 1) {
+        throw new SafeError("grading_failed");
+      }
+      prepared = await rpc(admin, "certsim_service_prepare_python_submission_grading", {
+        p_actor_id: actorId, p_attempt_id: attemptId, p_submission_id: submissionId,
+      });
+      items = validateAuthority(prepared);
+    }
+    if (prepared.ready !== true) throw new SafeError("grading_reconciliation_required");
   }
   return await rpc(admin, "certsim_protected_submit_attempt", {
     p_actor_id: actorId, p_attempt_id: attemptId, p_submission_id: submissionId,

@@ -11,6 +11,12 @@ import { sha256Canonical } from './canonical-json.mjs';
 const PRIVATE_OUTPUT_PATTERN = /(?:^|[\\/])(?:private|protected|vault)(?:[\\/]|$)/i;
 
 export async function loadExternalProtectedPackage(contentRoot, options = {}) {
+  const loaded = await loadExternalProtectedCandidate(contentRoot, options);
+  const validation = validateMultiExamPackageContract(loaded.contract);
+  return Object.freeze({ ...loaded, validation });
+}
+
+export async function loadExternalProtectedCandidate(contentRoot, options = {}) {
   if (typeof contentRoot !== 'string' || !contentRoot.trim()) {
     throw new Error('PROTECTED_CONTENT_ROOT_REQUIRED');
   }
@@ -24,8 +30,7 @@ export async function loadExternalProtectedPackage(contentRoot, options = {}) {
   if (options.packageVersion && contract.exam?.packageVersion !== options.packageVersion) {
     throw new Error('PROTECTED_PACKAGE_VERSION_MISMATCH');
   }
-  const validation = validateMultiExamPackageContract(contract);
-  return Object.freeze({ contract, validation, contentRoot: resolvedRoot });
+  return Object.freeze({ contract, contentRoot: resolvedRoot });
 }
 
 export function createExternalPackageSummary(loaded) {

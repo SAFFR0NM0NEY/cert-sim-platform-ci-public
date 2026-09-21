@@ -515,19 +515,41 @@ function indexPbqOptions(value, textKeys, { allowMissingText = false } = {}) {
 function createPbqCommandIndex(presentation, type, style) {
   const index = emptyPbqIndex();
   const assets = isPlainObject(presentation.assets) ? presentation.assets : {};
-  const addCommand = (id, text) => {
+  const labelSourceById = new Map();
+  const labelSource = Object.freeze({ fallback: 'fallback', explicit: 'explicit' });
+  const addCommand = (id, text, source = labelSource.fallback) => {
     const key = normalizePbqCommandId(id);
     const safeText = nonEmptyString(text);
     if (!key || !safeText) return false;
-    if (index.textById.has(key) && index.textById.get(key) !== safeText) return false;
-    if (!index.textById.has(key)) index.ids.push(key);
-    index.textById.set(key, safeText);
+
+    if (!index.textById.has(key)) {
+      index.ids.push(key);
+      index.textById.set(key, safeText);
+      labelSourceById.set(key, source);
+      return true;
+    }
+
+    const existingSource = labelSourceById.get(key);
+    const existingText = index.textById.get(key);
+    if (existingSource === labelSource.explicit && source === labelSource.explicit) {
+      return existingText === safeText;
+    }
+    if (existingSource === labelSource.fallback && source === labelSource.explicit) {
+      index.textById.set(key, safeText);
+      labelSourceById.set(key, source);
+      return true;
+    }
+    if (existingSource === labelSource.explicit && source === labelSource.fallback) {
+      return true;
+    }
+    if (normalizePbqCommandId(existingText) !== normalizePbqCommandId(safeText)) return false;
     return true;
   };
   const addRawCommands = (commands) => {
     if (commands === undefined || commands === null) return true;
     if (!Array.isArray(commands)) return false;
-    return commands.every((command) => typeof command === 'string' && addCommand(command, command.trim()));
+    return commands.every((command) => typeof command === 'string' &&
+      addCommand(command, command.trim(), labelSource.fallback));
   };
   const addTools = (tools, { deriveCommandFromId = false } = {}) => {
     if (tools === undefined || tools === null) return true;
@@ -538,9 +560,11 @@ function createPbqCommandIndex(presentation, type, style) {
       const command = nonEmptyString(
         tool.command ?? (deriveCommandFromId ? toolId.replace(/-/g, ' ') : toolId),
       );
-      const label = firstNonEmptyString(tool, ['label']) || command;
-      return command && label && addCommand(command, label) &&
-        (!tool.id || addCommand(tool.id, label));
+      const explicitLabel = firstNonEmptyString(tool, ['label']);
+      const label = explicitLabel || command;
+      const source = explicitLabel ? labelSource.explicit : labelSource.fallback;
+      return command && label && addCommand(command, label, source) &&
+        (!tool.id || addCommand(tool.id, label, source));
     });
   };
   const addHost = (host) => {
@@ -548,7 +572,8 @@ function createPbqCommandIndex(presentation, type, style) {
     if (!addRawCommands(host.allowedCommands)) return false;
     if (!addTools(host.tools)) return false;
     if (host.allowedCommands === undefined && host.tools === undefined && host.commandOutputs !== undefined) {
-      if (!isPlainObject(host.commandOutputs) || !Object.keys(host.commandOutputs).every((command) => addCommand(command, command))) return false;
+      if (!isPlainObject(host.commandOutputs) || !Object.keys(host.commandOutputs).every((command) =>
+        addCommand(command, command, labelSource.fallback))) return false;
     }
     return true;
   };
@@ -557,7 +582,8 @@ function createPbqCommandIndex(presentation, type, style) {
     if (!addRawCommands(presentation.allowedCommands)) return { status: 'invalid' };
     const terminal = isPlainObject(assets.terminal) ? assets.terminal : {};
     if (presentation.allowedCommands === undefined && terminal.commandOutputs !== undefined) {
-      if (!isPlainObject(terminal.commandOutputs) || !Object.keys(terminal.commandOutputs).every((command) => addCommand(command, command))) return { status: 'invalid' };
+      if (!isPlainObject(terminal.commandOutputs) || !Object.keys(terminal.commandOutputs).every((command) =>
+        addCommand(command, command, labelSource.fallback))) return { status: 'invalid' };
     }
   }
 

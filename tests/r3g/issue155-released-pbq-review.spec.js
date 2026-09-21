@@ -40,3 +40,19 @@ test('sanitized exact-whole-state answers render unavailable without raw state',
   await expect(page.getByText('No response recorded')).toHaveCount(0);
   await expect(page.getByText(/ready|true|displayUnavailable|exact-whole-state/)).toHaveCount(0);
 });
+
+test('live command-label collision prefers the explicit label and preserves an empty learner response', async ({ page }) => {
+  await page.goto('/tests/r3g/issue155-released-pbq-review-harness.html?mode=commandCollision');
+  await expect(page.getByText('No response recorded')).toHaveCount(1);
+  await expect(page.getByText('Containment action')).toHaveCount(1);
+  await expect(page.getByText('Isolate host')).toHaveCount(1);
+  await expect(page.getByText('Inspect server configuration', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('inspect server', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Answer details unavailable')).toHaveCount(0);
+});
+
+test('different explicit labels for one command identity remain unavailable', async ({ page }) => {
+  await page.goto('/tests/r3g/issue155-released-pbq-review-harness.html?mode=ambiguousCommand');
+  await expect(page.getByText('Answer details unavailable')).toHaveCount(2);
+  await expect(page.getByText(/Inspect server|Review server policy|ambiguous-action|ambiguous-isolate/)).toHaveCount(0);
+});

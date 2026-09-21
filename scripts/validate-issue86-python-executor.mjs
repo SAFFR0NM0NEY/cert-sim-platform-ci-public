@@ -308,7 +308,8 @@ assert.match(orchestrationContract, /generic CertSim\s+scorer/i);
 assert.match(orchestrationContract, /R4 cryptographic boundary/i);
 assert.match(orchestrationContract, /orchestration request digest/i);
 assert.match(orchestrationContract, /execution request digest/i);
-assert.match(orchestrationContract, /Missing executable evidence fails with `grading_incomplete`/);
+assert.match(orchestrationContract, /no saved workspace is intentionally `Unanswered`/i);
+assert.match(orchestrationContract, /missing or invalid evidence fails with `grading_incomplete`/i);
 assert.match(orchestrationContract, /all 49 tasks and all 423/);
 const docsIndex = await read('docs/README.md');
 assert.match(docsIndex, /\[Python executor security contract\]\(PYTHON_EXECUTOR_SECURITY_CONTRACT\.md\)/);
@@ -341,26 +342,50 @@ assert.deepEqual(
     '20260915063933_issue86_modal_execution_completion.sql',
     '20260916103000_issue86_trusted_grading_completion.sql',
     '20260916155319_issue86_python_next_generation_release_prep.sql',
+    '20260917121244_issue86_executable_submission_run_restore.sql',
+    '20260917185333_issue86_live_submit_recovery.sql',
   ],
-  'Issue #86 must retain R5/R8/trusted grading and its release-preparation migration',
+  'Issue #86 must retain R5/R8/trusted grading, release preparation, acceptance, and live-submit recovery',
 );
 const allMigrationNames = (await readdir(path.join(repositoryRoot, 'supabase', 'migrations')))
   .filter((name) => name.endsWith('.sql'))
   .sort();
 assert.equal(
-  allMigrationNames.at(-2),
+  allMigrationNames.at(-6),
   migrationNames[3],
   'Issue #86 release-preparation migration must immediately precede the Platform Owner access correction',
 );
 assert.equal(
-  allMigrationNames.at(-1),
+  allMigrationNames.at(-5),
   '20260917074357_platform_owner_protected_exam_bypass.sql',
-  'Platform Owner access correction must be the current migration tail',
+  'Platform Owner access correction must precede the live-acceptance correction',
+);
+assert.equal(
+  allMigrationNames.at(-4),
+  migrationNames[4],
+  'Issue #86 live-acceptance correction must precede live-submit recovery',
+);
+assert.equal(
+  allMigrationNames.at(-3),
+  migrationNames[5],
+  'Issue #86 live-submit recovery must immediately precede Issue #133 Phase 4B',
+);
+assert.equal(
+  allMigrationNames.at(-2),
+  '20260920124528_issue133_examops_phase4b.sql',
+  'Issue #133 Phase 4B must immediately precede Phase 5A',
+);
+assert.equal(
+  allMigrationNames.at(-1),
+  '20260921044626_issue133_phase5a_operator_readonly.sql',
+  'Issue #133 Phase 5A must be the current migration tail',
 );
 const orchestrationMigration = await read(`supabase/migrations/${migrationNames[0]}`);
 const completionMigration = await read(`supabase/migrations/${migrationNames[1]}`);
 const trustedCompletionMigration = await read(`supabase/migrations/${migrationNames[2]}`);
 const releasePreparationMigration = await read(`supabase/migrations/${migrationNames[3]}`);
+const acceptanceCorrectionMigration = await read(`supabase/migrations/${migrationNames[4]}`);
+const liveSubmitRecoveryMigration = await read(`supabase/migrations/${migrationNames[5]}`);
 for (const table of [
   'python_lab_workspaces',
   'python_lab_workspace_revisions',
@@ -497,6 +522,25 @@ assert.doesNotMatch(
   releasePreparationMigration,
   /insert into (?:exam_delivery\.(?:practice_policies|package_profile_defaults|exam_profile_activations)|public\.exam_catalog)/i,
 );
+for (const required of [
+  'get_latest_python_run',
+  'certsim_protected_get_latest_python_run',
+  "'status','Unanswered'",
+  "'ready', coalesce(v_ready, true)",
+  'python_submission_grading_runs submission_run',
+  'workspace.attempt_item_id is not null',
+]) assert.ok(acceptanceCorrectionMigration.includes(required), `missing acceptance correction invariant: ${required}`);
+assert.match(acceptanceCorrectionMigration, /not exists \([\s\S]*?python_submission_grading_runs[\s\S]*?submission_run\.run_id = run\.id/);
+assert.match(acceptanceCorrectionMigration, /revoke all on function public\.certsim_protected_get_latest_python_run/);
+assert.match(acceptanceCorrectionMigration, /grant execute on function public\.certsim_protected_get_latest_python_run[\s\S]*?to service_role/);
+assert.doesNotMatch(acceptanceCorrectionMigration, /insert into exam_delivery\.(?:package_versions|package_profiles|package_questions|practice_policies|exam_profile_activations)/i);
+assert.match(liveSubmitRecoveryMigration, /create or replace function exam_delivery\.authorize_attempt_continuation/);
+assert.match(liveSubmitRecoveryMigration, /p_operation='submit' and v_frozen_submission/);
+assert.match(liveSubmitRecoveryMigration, /session\.created_at < v\.expires_at/);
+assert.match(liveSubmitRecoveryMigration, /request_python_submission_grading_cancellation/);
+assert.match(liveSubmitRecoveryMigration, /state='cancel_requested'/);
+assert.match(liveSubmitRecoveryMigration, /cancellation_request_id=p_request_id/);
+assert.doesNotMatch(liveSubmitRecoveryMigration, /insert into exam_delivery\.(?:package_versions|package_profiles|package_questions|practice_policies|exam_profile_activations)/i);
 const releaseIntegration = await read('scripts/test-issue86-release-configuration-integration.mjs');
 assert.match(releaseIntegration, /exam_delivery\.configure_exam_release_stage/);
 assert.match(releaseIntegration, /'noLabAcceptance'/);
@@ -518,7 +562,7 @@ const edgeFiles = {
   gradingTests: await read('supabase/functions/certsim-protected-exam/tests/python_grading_test.ts'),
   transport: await read('supabase/functions/tests/integration_test.ts'),
 };
-for (const operation of ['pythonWorkspaceGet', 'pythonWorkspaceSave', 'pythonRunRequest', 'pythonRunStatus', 'pythonRunCancel']) {
+for (const operation of ['pythonWorkspaceGet', 'pythonWorkspaceSave', 'pythonRunRequest', 'pythonRunLatest', 'pythonRunStatus', 'pythonRunCancel']) {
   assert.match(edgeFiles.routes, new RegExp(operation));
   assert.match(edgeFiles.handler, new RegExp(operation));
 }
@@ -530,6 +574,7 @@ assert.match(edgeFiles.handler, /p_actor_id: actorId/);
 assert.match(edgeFiles.errors, /executor_disabled: 503/);
 assert.match(edgeFiles.responses, /mapPythonWorkspace/);
 assert.match(edgeFiles.responses, /mapPythonRun/);
+assert.match(edgeFiles.responses, /mapLatestPythonRun/);
 assert.match(edgeFiles.tests, /server-disabled without configuration/);
 assert.match(edgeFiles.transport, /python_execution_runs/);
 const edgeExecution = await read('supabase/functions/certsim-protected-exam/python-execution.ts');
@@ -546,13 +591,22 @@ for (const required of [
   'certsim_service_prepare_python_submission_grading',
   'certsim_service_materialize_python_submission_grading',
   'certsim_service_persist_verified_python_grading_evidence',
+  'certsim_service_request_python_submission_grading_cancellation',
   'certsim_protected_submit_attempt',
   'verifyEvidence',
   'runBounded',
   'reconcileFailedTransport',
+  'reconcileActiveGeneration',
+  'recoverableGenerationFailure',
+  'MAX_SUBMISSION_PASSES',
 ]) assert.ok(edgeGrading.includes(required), `missing Edge trusted grading invariant: ${required}`);
 assert.match(edgeFiles.gradingTests, /invalid R4 signature/);
-assert.match(edgeFiles.gradingTests, /cancels primary and deterministic runtime executions/);
+assert.match(edgeFiles.gradingTests, /stops after one reconciled replacement generation/);
+assert.match(edgeFiles.gradingTests, /fresh two-workspace submit replaces one reconciled live provider failure/);
+assert.match(edgeFiles.gradingTests, /learner_nonzero_exit/);
+assert.match(edgeFiles.gradingTests, /invalid grading material remains terminal/);
+assert.match(edgeFiles.gradingTests, /grading binding mismatch remains terminal/);
+assert.match(edgeFiles.gradingTests, /reconciles one stranded generation and reuses existing evidence/);
 assert.match(edgeFiles.gradingTests, /ready submission replay/);
 assert.doesNotMatch(edgeGrading, /console\.(?:log|error)|(?:hiddenTests?|modelSolution|answerKey)/i);
 
@@ -562,6 +616,8 @@ const frontendText = (await Promise.all(frontendFiles
   .map((file) => readFile(file, 'utf8')))).join('\n');
 const pythonWorkspace = await read('src/lib/pythonLabWorkspace.js');
 const pythonComponent = await read('src/components/exam/PythonLabWorkspace.jsx');
+const pythonEditor = await read('src/components/exam/PythonCodeEditor.jsx');
+const executableReview = await read('src/components/exam/ReleasedExecutablePythonReview.jsx');
 const protectedContract = await read('src/lib/protectedExamContract.js');
 const protectedClient = await read('src/lib/protectedExamClient.js');
 const protectedRunner = await read('src/components/exam/ProtectedExamRunner.jsx');
@@ -575,15 +631,24 @@ assert.match(protectedContract, /'executable-python-lab-v1'/);
 assert.match(pythonWorkspace, /PYTHON_LAB_INTERACTION_VERSION = 'executable-python-lab-v1'/);
 for (const boundary of [
   'normalizePythonLabPresentation', 'normalizePythonWorkspace',
-  'normalizePythonRunDto', 'createPythonLabWorkspaceController',
+  'normalizePythonRunDto', 'normalizeLatestPythonRunDto', 'createPythonLabWorkspaceController',
 ]) assert.match(pythonWorkspace, new RegExp(`export function ${boundary}\\b`));
 for (const method of [
   'getPythonWorkspace', 'savePythonWorkspace', 'requestPythonRun',
-  'getPythonRun', 'cancelPythonRun',
+  'getLatestPythonRun', 'getPythonRun', 'cancelPythonRun',
 ]) assert.match(protectedClient, new RegExp(`${method}:`));
 for (const route of [
   '/python/workspace', '/python/runs', '/cancel',
 ]) assert.ok(protectedClient.includes(route), `missing R6 protected client route: ${route}`);
+assert.match(protectedClient, /SUBMISSION_TIMEOUT_MS = 120_000/);
+assert.match(protectedClient, /PYTHON_RUN_TIMEOUT_MS = 60_000/);
+assert.match(protectedClient, /requestPythonRun:[\s\S]*?timeoutMs: PYTHON_RUN_TIMEOUT_MS/);
+assert.match(protectedClient, /export function isRetrySafeSubmissionError\(error\)/);
+assert.match(protectedClient, /return RETRY_SAFE_GRADING_CODES\.has\(error\?\.code\)/);
+assert.match(protectedClient, /export function isRetrySafeResultLookupError\(error\)/);
+assert.match(protectedClient, /if \(isRetrySafeSubmissionError\(submitError\)\) throw submitError/);
+assert.match(protectedClient, /lookupError\?\.code === 'attempt_not_found'[\s\S]*?'submission_in_progress'/);
+assert.match(protectedClient, /if \(isRetrySafeResultLookupError\(lookupError\)\) throw lookupError/);
 assert.match(workspacePresentation, /<PythonLabWorkspace/);
 assert.match(workspacePresentation, /isExecutablePythonLab\(currentQuestion\)/);
 assert.match(protectedRunner, /pythonWorkspaceSave\.current/);
@@ -603,14 +668,32 @@ assert.match(pythonComponent, /No execution result is available\./);
 assert.match(pythonComponent, /Revision \$\{current\.serverRevision\}/);
 assert.match(pythonComponent, /Use server version/);
 assert.match(pythonComponent, /Keep my edits/);
+assert.match(pythonComponent, /Run result for Revision/);
+assert.doesNotMatch(pythonComponent, /<textarea/);
+for (const editorInvariant of [
+  /@codemirror\/lang-python/,
+  /lineNumbers\(\)/,
+  /highlightActiveLine\(\)/,
+  /bracketMatching\(\)/,
+  /indentWithTab/,
+  /aria-label/,
+]) assert.match(pythonEditor, editorInvariant);
+assert.match(executableReview, /Python coding task/);
+assert.doesNotMatch(executableReview, /Correct answer|Your response|correctAnswer|response/);
 assert.match(pythonWorkspace, /GENERIC_PYTHON_TASK_HEADING = 'Python coding task'/);
+assert.match(pythonWorkspace, /MAX_RUN_REQUEST_ATTEMPTS = 2/);
+assert.match(pythonWorkspace, /The Run outcome could not be confirmed\. Your code is saved\. Retry Run to reconcile the same request\./);
 assert.match(pythonWorkspace, /value\.allowedFilenames \?\? value\.editableFiles/);
 assert.match(frontendTest, /published Python Next Generation presentation adapts/);
 assert.match(frontendTest, /invalid_python_lab_starter_workspace/);
+assert.match(frontendTest, /learner Run uses a dedicated timeout that accepts the live 21\.5 second case/);
+assert.match(frontendTest, /ambiguous learner Run automatically reconciles once with the same request identity/);
+assert.match(frontendTest, /two ambiguous Run transports stop safely and retain source plus request identity/);
+assert.match(frontendTest, /server-authoritative terminal Run failure remains a normal rendered result/);
 assert.match(frontendBrowserTest, /real published presentation shape/);
 assert.match(frontendBrowserTest, /reload resumes the same formal Lab attempt/);
-assert.equal([...frontendTest.matchAll(/\btest\('/g)].length, 17);
-assert.equal([...frontendBrowserTest.matchAll(/\btest\('/g)].length, 6);
+assert.equal([...frontendTest.matchAll(/\btest\('/g)].length, 29);
+assert.equal([...frontendBrowserTest.matchAll(/\btest\('/g)].length, 8);
 assert.match(orchestrationContract, /## Learner workspace integration/);
 assert.match(orchestrationContract, /never stores\s+source as an ordinary answer response/i);
 assert.match(securityContract, /## R8\.1 Modal proof result/);
@@ -641,10 +724,10 @@ console.log(JSON.stringify({
   executionRuntimeImports: 0,
   edgeServiceImports: 1,
   learnerWorkspaceIntegrated: true,
-  frontendFocusedTests: 17,
-  migration: migrationNames[3],
+  frontendFocusedTests: 32,
+  migration: migrationNames[5],
   orchestrationTables: 7,
-  protectedOperations: 5,
+  protectedOperations: 6,
   trustedSubmissionOperations: 3,
   providerCalls: 0,
   learnerExecution: 'protected-modal-path-disabled-by-default',

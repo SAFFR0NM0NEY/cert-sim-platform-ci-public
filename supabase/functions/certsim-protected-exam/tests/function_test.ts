@@ -10,7 +10,7 @@ import { corsHeaders } from "../cors.ts";
 import { SafeError, translateRpcFailure } from "../errors.ts";
 import { handleProtectedExam } from "../handler.ts";
 import { matchRoute } from "../routes.ts";
-import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapAttemptLifecycleSummary, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapPracticeAvailability, mapPracticeCheck, mapPythonRun, mapPythonWorkspace, mapPythonWorkspaceSave, mapQuestionIssue, mapRecoverableStudySandboxes, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffLearnerDetail, mapStaffScopeOptions, mapStudySandboxRecovery, mapWeakAreaOptions } from "../responses.ts";
+import { assertNoProtectedPreReview, assertPracticeFeedbackSafe, mapAttempt, mapAttemptLifecycleSummary, mapCurrentAttemptBindings, mapFlag, mapFlags, mapHistory, mapHistorySummary, mapLatestPythonRun, mapPracticeAvailability, mapPracticeCheck, mapPythonRun, mapPythonWorkspace, mapPythonWorkspaceSave, mapQuestionIssue, mapRecoverableStudySandboxes, mapResult, mapReview, mapStaffAnalytics, mapStaffDashboardQuery, mapStaffDashboardScope, mapStaffHistory, mapStaffLearnerDetail, mapStaffScopeOptions, mapStudySandboxRecovery, mapWeakAreaOptions } from "../responses.ts";
 import {
   MAX_BODY_BYTES,
   readJsonBody,
@@ -440,11 +440,13 @@ Deno.test("Issue 86 Python orchestration routes are exact and method-bound", () 
   assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`)).id, "pythonWorkspaceGet");
   assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`, { method: "PUT", body: "{}" })).id, "pythonWorkspaceSave");
   assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs`, { method: "POST", body: "{}" })).id, "pythonRunRequest");
+  assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/latest`)).id, "pythonRunLatest");
   assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}`)).id, "pythonRunStatus");
   assertEquals(matchRoute(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}/cancel`, { method: "POST", body: "{}" })).id, "pythonRunCancel");
   for (const [path, method] of [
     [`/attempts/${ATTEMPT}/items/${ITEM}/python/workspace`, "POST"],
     [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs`, "GET"],
+    [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/latest`, "POST"],
     [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}`, "PUT"],
     [`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/${runId}/cancel`, "GET"],
   ]) assertThrows(() => matchRoute(request(path, { method })), SafeError);
@@ -552,6 +554,60 @@ Deno.test("Issue 86 run status and cancellation DTOs exclude provider and gradin
   assertThrows(() => mapPythonRun({ ...value, providerExecutionId: "blocked" }), SafeError);
   assertThrows(() => mapPythonWorkspace({ ok: true, itemId: ITEM, exists: false, revision: 0, workspaceHash: null, workspace: null, updatedAt: null, gradingMaterial: "blocked" }), SafeError);
   assertThrows(() => mapPythonWorkspaceSave({ ok: true, itemId: ITEM, revision: 1, workspaceHash: "a".repeat(64), updatedAt: "now", ownerId: ACTOR }), SafeError);
+});
+
+Deno.test("Issue 86 latest run read is exact-revision, actor-injected, and bounded", async () => {
+  const run = {
+    runId: "15000000-0000-4000-8000-000000000001",
+    state: "completed",
+    terminalOutcome: "completed",
+    stdout: "safe output\n",
+    stderr: "",
+    exitCode: 0,
+    cancellationRequestedAt: null,
+    disposalState: "confirmed",
+    createdAt: "2026-09-17T12:00:00Z",
+    updatedAt: "2026-09-17T12:00:01Z",
+  };
+  const d = deps({ ok: true, itemId: ITEM, workspaceRevision: 4, run });
+  const response = await handleProtectedExam(request(`/attempts/${ATTEMPT}/items/${ITEM}/python/runs/latest`), d.value);
+  assertEquals(response.status, 200);
+  assertEquals(d.calls[0], {
+    name: "certsim_protected_get_latest_python_run",
+    args: { p_actor_id: ACTOR, p_attempt_id: ATTEMPT, p_item_id: ITEM },
+  });
+  assertEquals(await response.json(), { itemId: ITEM, workspaceRevision: 4, run });
+  assertThrows(() => mapLatestPythonRun({
+    ok: true, itemId: ITEM, workspaceRevision: 4,
+    run: { ...run, providerExecutionId: "blocked" },
+  }), SafeError);
+});
+
+Deno.test("Issue 86 released executable review omits response and protected answer fields", () => {
+  const mapped = mapReview({
+    review: { items: [{
+      itemId: ITEM,
+      questionId: "internal-question-id",
+      questionType: "executable-python-lab-v1",
+      domain: "internal-domain",
+      section: "internal-section",
+      presentation: { interactionVersion: "executable-python-lab-v1", task: "Safe coding task" },
+      response: { source: "blocked learner source" },
+      status: "Partial",
+      earnedPoints: 3,
+      maxPoints: 5,
+      correctAnswer: { modelSolution: "blocked" },
+      explanation: "blocked",
+      remediation: "blocked",
+    }] },
+  });
+  const item = (mapped.review as { items: Array<Record<string, unknown>> }).items[0];
+  assertEquals(Object.keys(item).sort(), [
+    "earnedPoints", "itemId", "maxPoints", "presentation", "questionNumber", "questionType", "status",
+  ]);
+  assertEquals(item.status, "Partial");
+  assertEquals(JSON.stringify(item).includes("blocked"), false);
+  assertEquals(JSON.stringify(item).includes("internal-question-id"), false);
 });
 
 Deno.test("Issue 86 cross-owner denials retain anti-enumerating HTTP status", async () => {

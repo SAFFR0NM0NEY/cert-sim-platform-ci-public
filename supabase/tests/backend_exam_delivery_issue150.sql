@@ -64,6 +64,18 @@ insert into exam_delivery.package_profiles(
   '15000000-0000-0000-0000-000000000251','15000000-0000-0000-0000-000000000250',
   'full','Issue 150 fixture',1,60,'{}'
 );
+insert into exam_delivery.practice_policies(
+  canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,
+  maximum_completed_attempts,maximum_session_items,immediate_feedback,
+  review_release_policy,answer_release_policy
+)
+select 'az204','issue150-fixture','full',purpose::exam_delivery.attempt_purpose,
+  'production_authorized',true,null,40,purpose='study_sandbox',
+  case when purpose='study_sandbox' then 'immediate_study_feedback' else 'after_submission' end,
+  case when purpose='study_sandbox' then 'immediate_study_feedback' else 'after_submission' end
+from unnest(array[
+  'self_directed_exam','study_sandbox','targeted_domain','weak_area','pbq_practice'
+]) purpose;
 
 insert into public.exam_assignments(
   id,organisation_id,campus_id,group_id,exam_key,profile_id,title,assigned_by,

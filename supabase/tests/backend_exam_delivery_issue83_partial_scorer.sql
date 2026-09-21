@@ -56,7 +56,7 @@ select is(round(100*4::numeric/6,4),66.6667::numeric,'percentage normalization u
 select ok(round(100*4::numeric/6,4)*10<700,'normalized synthetic score fails a 700 pass mark');
 select is((exam_delivery.score_selected_response_partial('multi-select',presentation,scoring,'{"answer":["a"]}',true)->>'status'),'Partial','review DTO source status supports partial') from issue83_fixture where kind='two';
 select ok((select prosrc like '%score_package_v2_response_for_scorer(v_attempt.scorer_version%' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='submit_attempt_v2_with_assessment_gate'),'submission totals dispatch from stored scorer identity');
-select ok((select prosrc like '%score_package_v2_response_for_scorer(v.scorer_version%' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='check_practice_item'),'practice feedback dispatches from stored scorer identity');
+select ok((select prosrc ~ 'score_package_v2_response_for_scorer\s*\(\s*v\.scorer_version' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='check_practice_item'),'practice feedback dispatches from stored scorer identity');
 
 select * from finish();
 rollback;

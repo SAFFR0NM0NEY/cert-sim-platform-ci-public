@@ -76,9 +76,15 @@ runSql(`
     canonical_exam_key,package_version,profile_key,purpose,access_mode,enabled,
     maximum_completed_attempts,maximum_session_items,immediate_feedback,
     review_release_policy,answer_release_policy
-  ) values
-    ('issue167fixture','1.0.0','standard-profile','study_sandbox','production_authorized',true,null,40,true,'immediate_study_feedback','immediate_study_feedback'),
-    ('issue167fixture','2.0.0','standard-profile','study_sandbox','production_authorized',true,null,40,true,'immediate_study_feedback','immediate_study_feedback');
+  )
+  select 'issue167fixture',package_version,'standard-profile',purpose::exam_delivery.attempt_purpose,
+    'production_authorized',true,null,40,purpose='study_sandbox',
+    case when purpose='study_sandbox' then 'immediate_study_feedback' else 'after_submission' end,
+    case when purpose='study_sandbox' then 'immediate_study_feedback' else 'after_submission' end
+  from unnest(array['1.0.0','2.0.0','3.0.0']) package_version
+  cross join unnest(array[
+    'self_directed_exam','study_sandbox','targeted_domain','weak_area','pbq_practice'
+  ]) purpose;
 `);
 
 const attempts = new Map();

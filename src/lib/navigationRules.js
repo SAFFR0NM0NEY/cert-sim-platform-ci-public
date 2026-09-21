@@ -4,6 +4,7 @@ export const TOP_LEVEL_SCREENS = [
   'account',
   'saved-results',
   'admin-organisations',
+  'admin-exam-operations',
   'trainer-dashboard',
   'developer-dashboard',
   'reception-placement',

@@ -23,6 +23,7 @@ assert.equal(resolveReleasedMatchingPairs(presentation, { answer: { 'left-a': 'r
 
 const component = fs.readFileSync(new URL('../src/components/exam/ReleasedReviewAnswer.jsx', import.meta.url), 'utf8');
 const runner = fs.readFileSync(new URL('../src/components/exam/ProtectedExamRunner.jsx', import.meta.url), 'utf8');
+const workspace = fs.readFileSync(new URL('../src/components/exam/ReleasedReviewWorkspace.jsx', import.meta.url), 'utf8');
 const pdf = fs.readFileSync(new URL('../src/lib/savedResultReportExport.js', import.meta.url), 'utf8');
 assert.match(component, /resolveReleasedMatchingPairs/);
 assert.match(component, /released-matching-pairs/);
@@ -30,6 +31,7 @@ assert.match(component, /Answer details unavailable/);
 assert.match(component, /No response recorded/);
 assert.doesNotMatch(component, /JSON\.stringify/);
 assert.match(runner, /reviewWithheld &&/);
-assert.match(runner, /!reviewWithheld && <button[^>]+>View released review/);
+assert.match(runner, /reviewReleased && <button[^>]+>View released review/);
+assert.match(workspace, /<ReleasedReviewAnswer/);
 assert.doesNotMatch(pdf, /correctPairs|ReleasedReviewAnswer/);
 console.log('Issue #113 readable matching review validation passed.');

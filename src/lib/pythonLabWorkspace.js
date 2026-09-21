@@ -16,6 +16,8 @@ const DISPOSAL_STATES = new Set(['not_requested', 'pending', 'confirmed', 'faile
 const CANCELLABLE_RUN_STATES = new Set(['authorized', 'queued', 'running']);
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const GENERIC_PYTHON_TASK_HEADING = 'Python coding task';
+const MAX_RUN_REQUEST_ATTEMPTS = 2;
+const RUN_OUTCOME_UNCONFIRMED_MESSAGE = 'The Run outcome could not be confirmed. Your code is saved. Retry Run to reconcile the same request.';
 
 export function isExecutablePythonLab(question) {
   return question?.interactionVersion === PYTHON_LAB_INTERACTION_VERSION;
@@ -135,6 +137,22 @@ export function normalizePythonRunDto(value) {
   });
 }
 
+export function normalizeLatestPythonRunDto(value, expectedItemId, expectedRevision) {
+  assertPlainObject(value, 'invalid_python_latest_run');
+  assertOnlyKeys(value, ['itemId', 'workspaceRevision', 'run'], 'invalid_python_latest_run');
+  if (
+    value.itemId !== expectedItemId ||
+    !Number.isSafeInteger(value.workspaceRevision) ||
+    value.workspaceRevision !== expectedRevision ||
+    (value.run !== null && (typeof value.run !== 'object' || Array.isArray(value.run)))
+  ) throw contractError('invalid_python_latest_run');
+  return Object.freeze({
+    itemId: value.itemId,
+    workspaceRevision: value.workspaceRevision,
+    run: value.run === null ? null : normalizePythonRunDto(value.run),
+  });
+}
+
 export function isPythonRunCancellable(run) {
   return Boolean(run && CANCELLABLE_RUN_STATES.has(run.state));
 }
@@ -152,7 +170,7 @@ export function createPythonLabWorkspaceController({
   }
   for (const method of [
     'getPythonWorkspace', 'savePythonWorkspace', 'requestPythonRun',
-    'getPythonRun', 'cancelPythonRun',
+    'getLatestPythonRun', 'getPythonRun', 'cancelPythonRun',
   ]) {
     if (typeof client?.[method] !== 'function') throw contractError('invalid_python_lab_client');
   }
@@ -173,6 +191,7 @@ export function createPythonLabWorkspaceController({
     errorCode: '',
     conflict: null,
     run: null,
+    runRevision: null,
     availability: null,
   });
 
@@ -188,17 +207,26 @@ export function createPythonLabWorkspaceController({
       const payload = await client.getPythonWorkspace(attemptId, itemId, options);
       const restored = normalizeWorkspaceReadDto(payload, itemId, safePresentation.allowedFilenames);
       if (restored.exists) {
+        const latest = normalizeLatestPythonRunDto(
+          await client.getLatestPythonRun(attemptId, itemId, options),
+          itemId,
+          restored.revision,
+        );
         emit({
           phase: 'ready', workspace: restored.workspace,
           serverRevision: restored.revision, workspaceHash: restored.workspaceHash,
           persisted: true, dirty: false, conflict: null,
-          message: `Restored saved workspace revision ${restored.revision}.`, errorCode: '',
+          run: latest.run, runRevision: latest.run ? latest.workspaceRevision : null,
+          message: latest.run
+            ? `Restored saved workspace revision ${restored.revision} and its latest run result.`
+            : `Restored saved workspace revision ${restored.revision}. Current revision has not been run yet.`,
+          errorCode: '',
         });
       } else {
         emit({
           phase: 'ready', workspace: safePresentation.starterWorkspace,
           serverRevision: 0, workspaceHash: null, persisted: false,
-          dirty: false, conflict: null,
+          dirty: false, conflict: null, run: null, runRevision: null,
           message: 'Starter workspace is ready and has not been saved.', errorCode: '',
         });
       }
@@ -254,11 +282,17 @@ export function createPythonLabWorkspaceController({
         pendingSaveRequestId, options,
       );
       const saved = normalizeWorkspaceSaveDto(payload, itemId, state.serverRevision);
+      const revisionChanged = saved.revision !== state.runRevision;
       pendingSaveRequestId = '';
       emit({
         phase: 'ready', serverRevision: saved.revision,
         workspaceHash: saved.workspaceHash, persisted: true, dirty: false,
-        message: `Saved revision ${saved.revision}.`, errorCode: '', availability: null,
+        run: revisionChanged ? null : state.run,
+        runRevision: revisionChanged ? null : state.runRevision,
+        message: revisionChanged
+          ? `Saved revision ${saved.revision}. Current revision has not been run yet.`
+          : `Saved revision ${saved.revision}.`,
+        errorCode: '', availability: null,
       });
       return true;
     } catch (error) {
@@ -306,14 +340,14 @@ export function createPythonLabWorkspaceController({
       emit({
         phase: 'ready', workspace: conflict.workspace,
         serverRevision: conflict.revision, workspaceHash: conflict.workspaceHash,
-        persisted: true, dirty: false, conflict: null,
-        message: `Restored server revision ${conflict.revision}.`, errorCode: '',
+        persisted: true, dirty: false, conflict: null, run: null, runRevision: null,
+        message: `Restored server revision ${conflict.revision}. Current revision has not been run yet.`, errorCode: '',
       });
     } else {
       emit({
         phase: 'ready', serverRevision: conflict.revision,
         workspaceHash: conflict.workspaceHash, persisted: true,
-        dirty: true, conflict: null,
+        dirty: true, conflict: null, run: null, runRevision: null,
         message: `Kept local edits over server revision ${conflict.revision}. Save when ready.`,
         errorCode: '',
       });
@@ -330,30 +364,56 @@ export function createPythonLabWorkspaceController({
   async function performRunRequest(options) {
     if ((state.dirty || !state.persisted) && !(await save(options))) return false;
     pendingRunRequestId ||= createRequestId();
+    const runRequestId = pendingRunRequestId;
+    const runRevision = state.serverRevision;
+    let requestAttempt = 0;
     emit({ phase: 'requesting-run', message: 'Running...', errorCode: '', availability: null });
-    try {
-      const run = normalizePythonRunDto(await client.requestPythonRun(
-        attemptId, itemId, state.serverRevision, pendingRunRequestId, options,
-      ));
-      pendingRunRequestId = '';
-      emit({ phase: 'ready', run, message: `Execution state: ${formatState(run.state)}.`, errorCode: '' });
-      return true;
-    } catch (error) {
-      if (wasAborted(options, error)) return false;
-      if (error?.code === 'executor_disabled') {
+    while (requestAttempt < MAX_RUN_REQUEST_ATTEMPTS) {
+      try {
+        requestAttempt += 1;
+        const run = normalizePythonRunDto(await client.requestPythonRun(
+          attemptId, itemId, runRevision, runRequestId, options,
+        ));
         pendingRunRequestId = '';
         emit({
-          phase: 'executor-disabled', run: null,
-          availability: Object.freeze({ code: 'executor_disabled' }),
-          message: 'Python execution is not available yet. Your saved workspace is retained.',
-          errorCode: 'executor_disabled',
+          phase: 'ready', run, runRevision,
+          message: `Execution state: ${formatState(run.state)}.`, errorCode: '',
         });
+        return true;
+      } catch (error) {
+        if (wasAborted(options, error)) return false;
+        if (error?.code === 'executor_disabled') {
+          pendingRunRequestId = '';
+          emit({
+            phase: 'executor-disabled', run: null, runRevision: null,
+            availability: Object.freeze({ code: 'executor_disabled' }),
+            message: 'Python execution is not available yet. Your saved workspace is retained.',
+            errorCode: 'executor_disabled',
+          });
+          return false;
+        }
+        if (isAmbiguousMutation(error)) {
+          if (requestAttempt < MAX_RUN_REQUEST_ATTEMPTS) {
+            emit({
+              phase: 'requesting-run',
+              message: 'Confirming the saved Run outcome...',
+              errorCode: '',
+            });
+            continue;
+          }
+          emit({
+            phase: 'error',
+            message: RUN_OUTCOME_UNCONFIRMED_MESSAGE,
+            errorCode: 'run_state_ambiguous',
+          });
+          return false;
+        }
+        pendingRunRequestId = '';
+        emitFailure(error, 'The Python run could not be requested.');
         return false;
       }
-      if (!isAmbiguousMutation(error)) pendingRunRequestId = '';
-      emitFailure(error, 'The Python run could not be requested.');
-      return false;
     }
+    return false;
   }
 
   async function refreshRun(options) {
