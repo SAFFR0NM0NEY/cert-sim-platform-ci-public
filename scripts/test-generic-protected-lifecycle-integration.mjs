@@ -4,9 +4,9 @@ import { spawnSync } from 'node:child_process';
 import { sha256Canonical } from './backend-exam-publication/canonical-json.mjs';
 
 const url=required('SUPABASE_URL'),anon=required('SUPABASE_ANON_KEY'),service=required('SUPABASE_SERVICE_ROLE_KEY'),database=required('SUPABASE_DB_URL');
-const admin=client(service),owner=await createUser('owner'),learner=await createUser('learner'),assignedLearner=await createUser('assigned'),purchaseLearner=await createUser('purchase'),legacyWeakLearner=await createUser('legacy-weak'),activationLearner=await createUser('activation'),liveV2Learner=await createUser('live-v2'),other=await createUser('other');
+const admin=client(service),owner=await createUser('owner'),learner=await createUser('learner'),policyBlockedLearner=await createUser('policy-blocked'),assignedLearner=await createUser('assigned'),purchaseLearner=await createUser('purchase'),legacyWeakLearner=await createUser('legacy-weak'),activationLearner=await createUser('activation'),liveV2Learner=await createUser('live-v2'),other=await createUser('other');
 const org=crypto.randomUUID();
-sql(`insert into public.organisations(id,name,organisation_type,status) values ('${org}','Generic lifecycle fixture','internal','active'); insert into public.memberships(user_id,organisation_id,role,status) values ('${owner.id}','${org}','platform_owner','active'),('${learner.id}','${org}','student','active'),('${assignedLearner.id}','${org}','student','active'),('${purchaseLearner.id}','${org}','student','active'),('${legacyWeakLearner.id}','${org}','student','active'),('${activationLearner.id}','${org}','student','active'),('${liveV2Learner.id}','${org}','student','active'); insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values ('sample400','sample400','Synthetic Sample','test','certification');`);
+sql(`insert into public.organisations(id,name,organisation_type,status) values ('${org}','Generic lifecycle fixture','internal','active'); insert into public.memberships(user_id,organisation_id,role,status) values ('${owner.id}','${org}','platform_owner','active'),('${learner.id}','${org}','student','active'),('${policyBlockedLearner.id}','${org}','student','active'),('${assignedLearner.id}','${org}','student','active'),('${purchaseLearner.id}','${org}','student','active'),('${legacyWeakLearner.id}','${org}','student','active'),('${activationLearner.id}','${org}','student','active'),('${liveV2Learner.id}','${org}','student','active'); insert into public.exam_catalog(exam_key,slug,title,lifecycle,exam_type) values ('sample400','sample400','Synthetic Sample','test','certification');`);
 
 const payload={
   packageSchemaVersion:'certsim-protected-package-v2',validationContractVersion:'certsim-protected-multi-exam-validation-v1',
@@ -103,7 +103,9 @@ sql(`update exam_delivery.exam_access_policies set require_assignment=true where
 insert into exam_delivery.exam_profile_activations(package_version_id,package_profile_id,enabled,activation_kind,enabled_at,created_by)
 select pv.id,pp.id,true,'production',now(),'${owner.id}' from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id where pv.exam_key='sample400' and pv.package_version='1.0.0' and pp.profile_key='sectioned';
 insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,learner_id,enabled,valid_from,reason_code,created_by)
-select pv.id,pp.id,'learner','${learner.id}',true,now()-interval '1 minute','integration_fixture','${owner.id}' from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id where pv.exam_key='sample400' and pv.package_version='1.0.0' and pp.profile_key='sectioned';`);
+select pv.id,pp.id,'learner','${learner.id}',true,now()-interval '1 minute','integration_fixture','${owner.id}' from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id where pv.exam_key='sample400' and pv.package_version='1.0.0' and pp.profile_key='sectioned';
+insert into exam_delivery.exam_entitlements(package_version_id,package_profile_id,target_type,learner_id,enabled,valid_from,reason_code,created_by)
+select pv.id,pp.id,'learner','${policyBlockedLearner.id}',true,now()-interval '1 minute','policy_blocked_fixture','${owner.id}' from exam_delivery.package_versions pv join exam_delivery.package_profiles pp on pp.package_version_id=pv.id where pv.exam_key='sample400' and pv.package_version='1.0.0' and pp.profile_key='sectioned';`);
 
 sql(`insert into exam_delivery.package_profile_defaults(canonical_exam_key,profile_key,purpose,package_version_id,package_profile_id,configured_by)
 select 'sample400','sectioned',purpose.purpose,pv.id,pp.id,'${owner.id}'
@@ -217,15 +219,27 @@ const replayedSave=await admin.rpc('certsim_protected_save_response',firstPracti
 if(replayedSave.error||replayedSave.data?.revision!==1) fail('PRACTICE_SAVE_REPLAY_FAILED');
 const crossPractice=await admin.rpc('certsim_protected_resume_attempt',{p_actor_id:other.id,p_attempt_id:practiceAttemptId});
 expectReason(crossPractice,'attempt_not_found');
+const practiceIdentityBeforePolicyDisable=sqlValue(`select jsonb_build_object('attemptId',a.id,'packageVersionId',a.package_version_id,'packageProfileId',a.package_profile_id,'canonicalFormId',a.canonical_form_id,'canonicalFormCycle',a.canonical_form_cycle,'formQuestionIds',(select jsonb_agg(item.package_question_id order by item.presented_question_number) from exam_delivery.attempt_items item where item.attempt_id=a.id))::text from exam_delivery.attempts a where a.id='${practiceAttemptId}'::uuid`);
+const practiceContractBeforePolicyDisable=sqlValue(`select to_jsonb(contract)::text from exam_delivery.attempt_continuation_contracts contract where contract.attempt_id='${practiceAttemptId}'::uuid`);
+if(!practiceIdentityBeforePolicyDisable||!practiceContractBeforePolicyDisable) fail('PRACTICE_CONTINUATION_CONTRACT_MISSING');
 sql(`update exam_delivery.practice_policies set enabled=false,access_mode='disabled' where canonical_exam_key='sample400' and purpose='self_directed_exam';`);
-const blockedDiscovery=await admin.rpc('certsim_protected_discover_current_attempt',currentPracticeArgs);
-expectReason(blockedDiscovery,'practice_unavailable');
-const blockedContinuation=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:practiceAttemptId,p_item_id:practiceItems[1].itemId,p_response:responseFor(practiceItems[1]),p_expected_revision:0,p_request_id:crypto.randomUUID()});
-expectReason(blockedContinuation,'practice_unavailable');
+const discoveredWhilePolicyDisabled=await admin.rpc('certsim_protected_discover_current_attempt',currentPracticeArgs);
+if(discoveredWhilePolicyDisabled.error||discoveredWhilePolicyDisabled.data?.attempt?.attemptId!==practiceAttemptId) fail('PRACTICE_DISABLED_POLICY_DISCOVERY_FAILED');
+const resumedWhilePolicyDisabled=await admin.rpc('certsim_protected_resume_attempt',{p_actor_id:learner.id,p_attempt_id:practiceAttemptId});
+if(resumedWhilePolicyDisabled.error||resumedWhilePolicyDisabled.data?.attempt?.attemptId!==practiceAttemptId) fail('PRACTICE_DISABLED_POLICY_RESUME_FAILED');
+const continuedWhilePolicyDisabled=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:practiceAttemptId,p_item_id:practiceItems[1].itemId,p_response:responseFor(practiceItems[1]),p_expected_revision:0,p_request_id:crypto.randomUUID()});
+if(continuedWhilePolicyDisabled.error||continuedWhilePolicyDisabled.data?.revision!==1) fail('PRACTICE_DISABLED_POLICY_SAVE_FAILED');
+const deniedNewStart=await admin.rpc('certsim_protected_start_practice',{p_actor_id:policyBlockedLearner.id,p_request:{...practiceRequest,clientRequestId:crypto.randomUUID()}});
+expectReason(deniedNewStart,'practice_unavailable');
+const practiceIdentityWhilePolicyDisabled=sqlValue(`select jsonb_build_object('attemptId',a.id,'packageVersionId',a.package_version_id,'packageProfileId',a.package_profile_id,'canonicalFormId',a.canonical_form_id,'canonicalFormCycle',a.canonical_form_cycle,'formQuestionIds',(select jsonb_agg(item.package_question_id order by item.presented_question_number) from exam_delivery.attempt_items item where item.attempt_id=a.id))::text from exam_delivery.attempts a where a.id='${practiceAttemptId}'::uuid`);
+const practiceContractWhilePolicyDisabled=sqlValue(`select to_jsonb(contract)::text from exam_delivery.attempt_continuation_contracts contract where contract.attempt_id='${practiceAttemptId}'::uuid`);
+if(practiceIdentityWhilePolicyDisabled!==practiceIdentityBeforePolicyDisable) fail('PRACTICE_DISABLED_POLICY_IDENTITY_CHANGED');
+if(practiceContractWhilePolicyDisabled!==practiceContractBeforePolicyDisable) fail('PRACTICE_DISABLED_POLICY_CONTRACT_CHANGED');
+sql(`select 1/((count(*)=1)::integer) from exam_delivery.attempts where owner_id='${learner.id}'::uuid and package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and purpose='self_directed_exam'; select 1/((count(*)=1)::integer) from exam_delivery.attempt_continuation_contracts where attempt_id='${practiceAttemptId}'::uuid; select 1/((count(*)=0)::integer) from exam_delivery.attempt_replacements where replaced_attempt_id='${practiceAttemptId}'::uuid or replacement_attempt_id='${practiceAttemptId}'::uuid; select 1/((count(*)=0)::integer) from exam_delivery.attempts where owner_id='${policyBlockedLearner.id}'::uuid and package_version_id='${samplePackageId}'::uuid and package_profile_id='${sampleProfileId}'::uuid and purpose='self_directed_exam';`);
 sql(`update exam_delivery.practice_policies set enabled=true,access_mode='controlled_beta' where canonical_exam_key='sample400' and purpose='self_directed_exam';`);
 const rediscoveredPractice=await admin.rpc('certsim_protected_discover_current_attempt',currentPracticeArgs);
 if(rediscoveredPractice.error||rediscoveredPractice.data?.attempt?.attemptId!==practiceAttemptId) fail('PRACTICE_CURRENT_REENABLE_FAILED');
-for(const item of practiceItems.slice(1)){
+for(const item of practiceItems.slice(2)){
   const weakSeedResponse=item.questionType==='single-choice'?{answer:'b'}:responseFor(item);
   const saved=await admin.rpc('certsim_protected_save_response',{p_actor_id:learner.id,p_attempt_id:practiceAttemptId,p_item_id:item.itemId,p_response:weakSeedResponse,p_expected_revision:0,p_request_id:crypto.randomUUID()});
   if(saved.error||saved.data?.revision!==1) fail('PRACTICE_CONTINUATION_SAVE_FAILED');

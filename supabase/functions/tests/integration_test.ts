@@ -8,20 +8,80 @@ const pythonAttemptId = "15000000-0000-4000-8000-000000000086";
 const pythonItemId = "15000000-0000-4000-8000-000000000088";
 const outsiderAttemptId = "15000000-0000-4000-8000-000000000091";
 const outsiderItemId = "15000000-0000-4000-8000-000000000093";
+const allowedOrigin = "http://localhost:5173";
+const disallowedOrigin = "http://127.0.0.1:5174";
+const allowedErrorCodes = new Set([
+  "attempt_not_found",
+  "executor_disabled",
+  "invalid_request",
+  "origin_not_allowed",
+  "review_unavailable",
+  "revision_conflict",
+  "stale_response",
+  "unauthenticated",
+]);
 const headers = {
   authorization: `Bearer ${token}`,
   apikey: anon,
   "content-type": "application/json",
-  origin: "http://localhost:5173",
+  origin: allowedOrigin,
 };
-async function call(path: string, method = "GET", body?: unknown) {
+type HttpResult = {
+  response: Response;
+  data: Awaited<ReturnType<Response["json"]>>;
+};
+async function call(
+  path: string,
+  method = "GET",
+  body?: unknown,
+  origin = allowedOrigin,
+): Promise<HttpResult> {
   const response = await fetch(base + path, {
     method,
-    headers,
+    headers: { ...headers, origin },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = await response.json();
+  const data = await safeJson(response);
   return { response, data };
+}
+async function safeJson(response: Response): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+function errorCode(data: unknown): string {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return "UNKNOWN_ERROR_CODE";
+  }
+  const value = data as { code?: unknown; error?: { code?: unknown } };
+  const code = typeof value.error?.code === "string"
+    ? value.error.code
+    : typeof value.code === "string"
+    ? value.code
+    : "";
+  return allowedErrorCodes.has(code) ? code : "UNKNOWN_ERROR_CODE";
+}
+function assertStatus(label: string, result: HttpResult, expected: number) {
+  if (result.response.status !== expected) {
+    throw new Error(
+      `HTTP_CASE_${label}_STATUS_${result.response.status}_CODE_${
+        errorCode(result.data)
+      }`,
+    );
+  }
+}
+function assertErrorCode(label: string, result: HttpResult, expected: string) {
+  const actual = errorCode(result.data);
+  if (actual !== expected) {
+    throw new Error(
+      `HTTP_CASE_${label}_STATUS_${result.response.status}_CODE_${actual}`,
+    );
+  }
+}
+function assertOutcome(label: string, value: boolean) {
+  if (!value) throw new Error(`HTTP_CASE_${label}_OUTCOME_FALSE`);
 }
 function noProtected(value: unknown) {
   const text = JSON.stringify(value).toLowerCase();
@@ -60,9 +120,66 @@ async function scalar(statement: string) {
   return new TextDecoder().decode(result.stdout).trim();
 }
 
+Deno.test("disposable origin and authentication boundary", async () => {
+  const preflightResponse = await fetch(base + "/eligibility", {
+    method: "OPTIONS",
+    headers: {
+      origin: allowedOrigin,
+      "access-control-request-method": "GET",
+      "access-control-request-headers": "authorization, apikey, content-type",
+    },
+  });
+  const preflight = {
+    response: preflightResponse,
+    data: await safeJson(preflightResponse),
+  };
+  assertStatus("ALLOWED_ORIGIN_PREFLIGHT", preflight, 204);
+  assertOutcome(
+    "ALLOWED_ORIGIN_PREFLIGHT_CORS",
+    preflight.response.headers.get("access-control-allow-origin") ===
+      allowedOrigin,
+  );
+
+  const unauthResponse = await fetch(
+    base +
+      "/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment",
+    { headers: { apikey: anon, origin: allowedOrigin } },
+  );
+  const unauth = {
+    response: unauthResponse,
+    data: await safeJson(unauthResponse),
+  };
+  assertStatus("ALLOWED_ORIGIN_UNAUTHENTICATED", unauth, 401);
+  assertErrorCode("ALLOWED_ORIGIN_UNAUTHENTICATED", unauth, "unauthenticated");
+
+  const eligible = await call(
+    "/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment",
+  );
+  assertStatus("ALLOWED_ORIGIN_AUTHENTICATED", eligible, 200);
+  assertOutcome(
+    "ALLOWED_ORIGIN_AUTHENTICATED_ELIGIBLE",
+    Boolean((eligible.data as { eligible?: unknown } | null)?.eligible),
+  );
+
+  const deniedOrigin = await call(
+    "/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment",
+    "GET",
+    undefined,
+    disallowedOrigin,
+  );
+  assertStatus("DISALLOWED_ORIGIN_AUTHENTICATED", deniedOrigin, 403);
+  assertErrorCode(
+    "DISALLOWED_ORIGIN_AUTHENTICATED",
+    deniedOrigin,
+    "origin_not_allowed",
+  );
+});
+
 Deno.test("Issue 86 disposable authenticated workspace and disabled-run HTTP lifecycle", async () => {
-  const empty = await call(`/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`);
-  assertEquals(empty.response.status, 200);
+  const empty = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
+  );
+  assertStatus("WORKSPACE_EMPTY", empty, 200);
   assertEquals(empty.data, {
     itemId: pythonItemId,
     exists: false,
@@ -90,7 +207,7 @@ Deno.test("Issue 86 disposable authenticated workspace and disabled-run HTTP lif
     "PUT",
     saveBody,
   );
-  assertEquals(saved.response.status, 200);
+  assertStatus("WORKSPACE_SAVE", saved, 200);
   assertEquals(saved.data.itemId, pythonItemId);
   assertEquals(saved.data.revision, 1);
   assert(/^[0-9a-f]{64}$/.test(saved.data.workspaceHash));
@@ -101,13 +218,18 @@ Deno.test("Issue 86 disposable authenticated workspace and disabled-run HTTP lif
     "PUT",
     saveBody,
   );
-  assertEquals(replay.response.status, 200);
+  assertStatus("WORKSPACE_SAVE_REPLAY", replay, 200);
   assertEquals(replay.data, saved.data);
 
-  const loaded = await call(`/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`);
-  assertEquals(loaded.response.status, 200);
+  const loaded = await call(
+    `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
+  );
+  assertStatus("WORKSPACE_LOAD", loaded, 200);
   assertEquals(loaded.data.revision, 1);
-  assertEquals(loaded.data.workspace.files.map((file: { path: string }) => file.path), ["main.py", "util.py"]);
+  assertEquals(
+    loaded.data.workspace.files.map((file: { path: string }) => file.path),
+    ["main.py", "util.py"],
+  );
   noProtected(loaded.data);
 
   const stale = await call(
@@ -115,52 +237,67 @@ Deno.test("Issue 86 disposable authenticated workspace and disabled-run HTTP lif
     "PUT",
     { ...saveBody, requestId: crypto.randomUUID() },
   );
-  assertEquals(stale.response.status, 409);
-  assertEquals(stale.data.error.code, "revision_conflict");
+  assertStatus("WORKSPACE_STALE_SAVE", stale, 409);
+  assertErrorCode("WORKSPACE_STALE_SAVE", stale, "revision_conflict");
 
   const invalid = await call(
     `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/workspace`,
     "PUT",
     {
-      workspace: { entryPoint: "../main.py", files: [{ path: "../main.py", content: "print(1)" }] },
+      workspace: {
+        entryPoint: "../main.py",
+        files: [{ path: "../main.py", content: "print(1)" }],
+      },
       expectedRevision: 1,
       requestId: crypto.randomUUID(),
     },
   );
-  assertEquals(invalid.response.status, 400);
-  assertEquals(invalid.data.error.code, "invalid_request");
+  assertStatus("WORKSPACE_INVALID_SAVE", invalid, 400);
+  assertErrorCode("WORKSPACE_INVALID_SAVE", invalid, "invalid_request");
 
-  const denied = await call(`/attempts/${outsiderAttemptId}/items/${outsiderItemId}/python/workspace`);
-  assertEquals(denied.response.status, 404);
-  assertEquals(denied.data.error.code, "attempt_not_found");
+  const denied = await call(
+    `/attempts/${outsiderAttemptId}/items/${outsiderItemId}/python/workspace`,
+  );
+  assertStatus("WORKSPACE_CROSS_USER", denied, 404);
+  assertErrorCode("WORKSPACE_CROSS_USER", denied, "attempt_not_found");
 
   const run = await call(
     `/attempts/${pythonAttemptId}/items/${pythonItemId}/python/runs`,
     "POST",
     { expectedRevision: 1, requestId: crypto.randomUUID() },
   );
-  assertEquals(run.response.status, 503);
-  assertEquals(run.data.error.code, "executor_disabled");
+  assertStatus("PYTHON_RUN_DISABLED", run, 503);
+  assertErrorCode("PYTHON_RUN_DISABLED", run, "executor_disabled");
   noProtected(run.data);
   assertEquals(
-    await scalar(`select count(*) from exam_delivery.python_execution_runs where attempt_id='${pythonAttemptId}'`),
+    await scalar(
+      `select count(*) from exam_delivery.python_execution_runs where attempt_id='${pythonAttemptId}'`,
+    ),
     "0",
   );
 });
 
 Deno.test("disposable authenticated HTTP lifecycle", async () => {
-  let unauth: Response | undefined;
+  let unauth: HttpResult | undefined;
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    unauth = await fetch(base + "/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment", {
-      headers: { apikey: anon, origin: "http://localhost:5173" },
-    });
-    if (unauth.status !== 502) break;
+    const response = await fetch(
+      base +
+        "/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment",
+      {
+        headers: { apikey: anon, origin: "http://localhost:5173" },
+      },
+    );
+    unauth = { response, data: await safeJson(response) };
+    if (response.status !== 502) break;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   assert(unauth);
-  assertEquals(unauth.status, 401);
-  const eligible = await call("/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment");
-  assertEquals(eligible.response.status, 200);
+  assertStatus("LIFECYCLE_UNAUTHENTICATED", unauth, 401);
+  assertErrorCode("LIFECYCLE_UNAUTHENTICATED", unauth, "unauthenticated");
+  const eligible = await call(
+    "/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment",
+  );
+  assertStatus("LIFECYCLE_ELIGIBILITY", eligible, 200);
   assertEquals(eligible.data.eligible, true);
   noProtected(eligible.data);
   const requestId = crypto.randomUUID();
@@ -170,13 +307,15 @@ Deno.test("disposable authenticated HTTP lifecycle", async () => {
     clientRequestId: requestId,
   };
   const started = await call("/attempts", "POST", startBody);
-  assertEquals(started.response.status, 201);
+  assertStatus("LIFECYCLE_START", started, 201);
   noProtected(started.data);
   const attemptId = started.data.attempt.attemptId,
     itemId = started.data.items[0].itemId;
   assertEquals(started.data.attempt.assignmentId ?? null, null);
-  const current = await call("/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable");
-  assertEquals(current.response.status, 200, JSON.stringify({ code: current.data?.code ?? current.data?.error ?? "unknown" }));
+  const current = await call(
+    "/attempts/current?examKey=ai-901&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment&language=not_applicable",
+  );
+  assertStatus("LIFECYCLE_CURRENT", current, 200);
   assertEquals(current.data.attempt.attemptId, attemptId);
   noProtected(current.data);
   const replay = await call("/attempts", "POST", startBody);
@@ -184,7 +323,7 @@ Deno.test("disposable authenticated HTTP lifecycle", async () => {
   assertEquals(replay.data.attempt.attemptId, attemptId);
   noProtected(replay.data);
   const resumed = await call(`/attempts/${attemptId}`);
-  assertEquals(resumed.response.status, 200);
+  assertStatus("LIFECYCLE_RESUME", resumed, 200);
   noProtected(resumed.data);
   const saved = await call(
     `/attempts/${attemptId}/items/${itemId}/response`,
@@ -195,7 +334,7 @@ Deno.test("disposable authenticated HTTP lifecycle", async () => {
       requestId: crypto.randomUUID(),
     },
   );
-  assertEquals(saved.response.status, 200);
+  assertStatus("LIFECYCLE_SAVE", saved, 200);
   const stale = await call(
     `/attempts/${attemptId}/items/${itemId}/response`,
     "PUT",
@@ -205,25 +344,25 @@ Deno.test("disposable authenticated HTTP lifecycle", async () => {
       requestId: crypto.randomUUID(),
     },
   );
-  assertEquals(stale.response.status, 409);
-  assertEquals(stale.data.error.code, "stale_response");
+  assertStatus("LIFECYCLE_STALE_SAVE", stale, 409);
+  assertErrorCode("LIFECYCLE_STALE_SAVE", stale, "stale_response");
   const submissionId = crypto.randomUUID();
   const submitted = await call(`/attempts/${attemptId}/submit`, "POST", {
     submissionId,
   });
-  assertEquals(submitted.response.status, 200);
+  assertStatus("LIFECYCLE_SUBMIT", submitted, 200);
   noProtected(submitted.data);
   const submitReplay = await call(`/attempts/${attemptId}/submit`, "POST", {
     submissionId,
   });
-  assertEquals(submitReplay.response.status, 200);
+  assertStatus("LIFECYCLE_SUBMIT_REPLAY", submitReplay, 200);
   noProtected(submitReplay.data);
   const result = await call(`/attempts/${attemptId}/result`);
-  assertEquals(result.response.status, 200);
+  assertStatus("LIFECYCLE_RESULT", result, 200);
   noProtected(result.data);
   const review = await call(`/attempts/${attemptId}/review`);
-  assertEquals(review.response.status, 403);
-  assertEquals(review.data.error.code, "review_unavailable");
+  assertStatus("LIFECYCLE_REVIEW_WITHHELD", review, 403);
+  assertErrorCode("LIFECYCLE_REVIEW_WITHHELD", review, "review_unavailable");
   const second = await call("/attempts", "POST", {
     ...startBody,
     clientRequestId: crypto.randomUUID(),
