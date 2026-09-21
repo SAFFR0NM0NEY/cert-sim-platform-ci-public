@@ -193,7 +193,7 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/issue203-expected-migrations.txt")" -eq 90
           echo '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300  supabase/migrations/20260920124528_issue133_examops_phase4b.sql' | sha256sum -c -
           echo 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725  supabase/migrations/20260921044626_issue133_phase5a_operator_readonly.sql' | sha256sum -c -
-          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
           docker ps --format '{{.Names}}\t{{.Image}}' | awk '$1 ~ /^supabase_db_/ {print "DISPOSABLE_DATABASE_IMAGE=" $2}'
           npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
           set -a
@@ -301,7 +301,7 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/issue203-edge-expected-migrations.txt")" -eq 90
           echo '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300  supabase/migrations/20260920124528_issue133_examops_phase4b.sql' | sha256sum -c -
           echo 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725  supabase/migrations/20260921044626_issue133_phase5a_operator_readonly.sql' | sha256sum -c -
-          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
           docker ps --format '{{.Names}}\t{{.Image}}' | awk '$1 ~ /^supabase_(db|edge_runtime)_/ {print "DISPOSABLE_RUNTIME_IMAGE=" $2}'
           npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
           set -a
@@ -322,7 +322,7 @@ jobs:
           echo "::add-mask::$CERTSIM_ACTOR_ID"
           unset AUTH_RESPONSE
           psql "$DB_URL" -v ON_ERROR_STOP=1 -v actor_id="$CERTSIM_ACTOR_ID" -f supabase/functions/tests/edge_fixture.sql >/dev/null
-          printf 'CERTSIM_ALLOWED_ORIGINS=http://localhost:5173\nCERTSIM_RUNTIME_MODE=disposable-local\nCERTSIM_PROTECTED_RUNTIME_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\nSUPABASE_SECRET_KEY=%s\n' "$SERVICE_ROLE_KEY" "$ANON_KEY" "$SERVICE_ROLE_KEY" > "$edge_env"
+          printf 'CERTSIM_ALLOWED_ORIGINS=http://localhost:5173\nCERTSIM_RUNTIME_MODE=disposable-local\nCERTSIM_PROTECTED_RUNTIME_SECRET_KEY=%s\n' "$SERVICE_ROLE_KEY" > "$edge_env"
           case "$edge_env" in /*) echo 'EDGE_ENV_FILE_ABSOLUTE=PASS';; *) exit 1;; esac
           test "$(grep -cFx 'CERTSIM_ALLOWED_ORIGINS=http://localhost:5173' "$edge_env")" -eq 1
           test "$(grep -c '^CERTSIM_ALLOWED_ORIGINS=' "$edge_env")" -eq 1
