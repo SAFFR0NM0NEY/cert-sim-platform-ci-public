@@ -3,7 +3,7 @@ name: Issue 203 Phase E CLI 2.114.0 supplemental validation
 on:
   push:
     branches:
-      - "supplemental/issue203-8f509e3-cli2114"
+      - "supplemental/issue203-88b5b8a-cli2114"
 
 permissions:
   contents: read
@@ -14,10 +14,10 @@ concurrency:
 
 env:
   EXPECTED_REPOSITORY: SAFFR0NM0NEY/cert-sim-platform-ci-public
-  EXPECTED_BRANCH: supplemental/issue203-8f509e3-cli2114
-  EXPECTED_PUBLIC_BASE_SHA: 7e8fbc16ea0edf8fdbf16adb15eb400b67511043
-  EXPECTED_PRIVATE_SHA: 8f509e3f6000c3389bd6240cc3f68704d78ed7fd
-  EXPECTED_MANIFEST_SHA256: efbeeea76c3cc2012124c3dc1f541740ae536886d4bd61cbf796ee62e5915cfd
+  EXPECTED_BRANCH: supplemental/issue203-88b5b8a-cli2114
+  EXPECTED_PUBLIC_BASE_SHA: 9ef075519825a11c23c5f73a2132d899963814ba
+  EXPECTED_PRIVATE_SHA: 88b5b8a3ea1df09e48a2358d07362d6d0ebeb291
+  EXPECTED_MANIFEST_SHA256: 4feb01235dc7ea723b6e817403ca8e9d1691c38cb2dd5dd2fbe5c9816a775f72
   SUPABASE_CLI_VERSION: 2.114.0
 
 jobs:
@@ -254,7 +254,7 @@ jobs:
       - run: deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --frozen supabase/functions/certsim-protected-exam/tests
 
   edge-disposable-integration:
-    name: CLI 2.114.0 disposable Edge HTTP lifecycle diagnostic
+    name: CLI 2.114.0 disposable Edge HTTP lifecycle
     needs: provenance
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -270,7 +270,7 @@ jobs:
         with:
           path: ~/.npm
           key: ${{ runner.os }}-issue203-phasee-supabase-cli-2.114.0-edge
-      - name: Disposable local Edge lifecycle diagnostic
+      - name: Disposable local Edge lifecycle
         shell: bash
         run: |
           set -euo pipefail
@@ -301,7 +301,7 @@ jobs:
           test "$(wc -l < "$RUNNER_TEMP/issue203-edge-expected-migrations.txt")" -eq 90
           echo '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300  supabase/migrations/20260920124528_issue133_examops_phase4b.sql' | sha256sum -c -
           echo 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725  supabase/migrations/20260921044626_issue133_phase5a_operator_readonly.sql' | sha256sum -c -
-          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
           docker ps --format '{{.Names}}\t{{.Image}}' | awk '$1 ~ /^supabase_(db|edge_runtime)_/ {print "DISPOSABLE_RUNTIME_IMAGE=" $2}'
           npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
           set -a
@@ -328,30 +328,87 @@ jobs:
           test "$(grep -c '^CERTSIM_ALLOWED_ORIGINS=' "$edge_env")" -eq 1
           echo 'EDGE_ALLOWED_ORIGIN=http://localhost:5173'
           echo 'EDGE_WORKDIR_FUNCTION=PASS'
-          echo 'EDGE_START_ORDER=STACK_THEN_SERVE'
+          echo 'EDGE_START_ORDER=STACK_WITHOUT_EDGE_THEN_SERVE'
           npx --yes supabase@2.114.0 --workdir "$workdir" functions serve certsim-protected-exam --env-file "$edge_env" >"$edge_log" 2>&1 &
           edge_pid=$!
           ready=0
           for attempt in {1..60}; do
-            status="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54321/functions/v1/certsim-protected-exam/eligibility || true)"
+            kill -0 "$edge_pid" >/dev/null 2>&1 || break
+            status="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H 'Origin: http://localhost:5173' \
+              -H "apikey: $ANON_KEY" \
+              'http://127.0.0.1:54321/functions/v1/certsim-protected-exam/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment' || true)"
             if [ "$status" = 401 ]; then ready=1; break; fi
             sleep 1
           done
           test "$ready" = 1
-          if kill -0 "$edge_pid" >/dev/null 2>&1; then
-            echo 'INTENDED_SERVE_PROCESS_ALIVE=YES'
-            echo 'READINESS_PRECEDED_INTENDED_SERVE=NO'
-          else
-            echo 'INTENDED_SERVE_PROCESS_ALIVE=NO'
-            echo 'READINESS_PRECEDED_INTENDED_SERVE=YES'
-            if grep -Eqi 'already running|address already in use|port is already allocated|container.*running' "$edge_log"; then
-              echo 'SERVE_EXIT_CLASS=EXISTING_RUNTIME_OR_PORT'
-            else
-              echo 'SERVE_EXIT_CLASS=UNKNOWN'
-            fi
-          fi
+          kill -0 "$edge_pid" >/dev/null 2>&1
+          echo 'INTENDED_SERVE_PROCESS_ALIVE=YES'
+          echo 'EDGE_ALLOWED_ORIGIN_READINESS=PASS'
+          CERTSIM_EDGE_URL=http://127.0.0.1:54321/functions/v1/certsim-protected-exam CERTSIM_USER_JWT="$CERTSIM_USER_JWT" CERTSIM_ANON_KEY="$ANON_KEY" node --input-type=module <<'NODE'
+          const base = process.env.CERTSIM_EDGE_URL;
+          const token = process.env.CERTSIM_USER_JWT;
+          const anon = process.env.CERTSIM_ANON_KEY;
+          const allowedOrigin = 'http://localhost:5173';
+          const disallowedOrigin = 'http://127.0.0.1:5174';
+          const eligibility = '/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment';
+          const allowedCodes = new Set(['origin_not_allowed', 'unauthenticated']);
+          const safeJson = async (response) => {
+            try { return await response.json(); } catch { return null; }
+          };
+          const errorCode = (data) => {
+            const candidate = data && typeof data === 'object' && !Array.isArray(data)
+              ? (typeof data.error?.code === 'string' ? data.error.code : data.code)
+              : '';
+            return allowedCodes.has(candidate) ? candidate : 'UNKNOWN_ERROR_CODE';
+          };
+          const requireCase = (label, response, data, expectedStatus, expectedCode) => {
+            const actualCode = errorCode(data);
+            if (response.status !== expectedStatus || (expectedCode && actualCode !== expectedCode)) {
+              throw new Error(`EDGE_BOUNDARY_${label}_STATUS_${response.status}_CODE_${actualCode}`);
+            }
+            console.log(`EDGE_BOUNDARY_${label}=PASS`);
+          };
+          const preflight = await fetch(base + '/eligibility', {
+            method: 'OPTIONS',
+            headers: {
+              origin: allowedOrigin,
+              'access-control-request-method': 'GET',
+              'access-control-request-headers': 'authorization, apikey, content-type',
+            },
+          });
+          const preflightData = await safeJson(preflight);
+          requireCase('ALLOWED_PREFLIGHT', preflight, preflightData, 200);
+          if (preflight.headers.get('access-control-allow-origin') !== allowedOrigin) {
+            throw new Error('EDGE_BOUNDARY_ALLOWED_PREFLIGHT_CORS_MISMATCH');
+          }
+          console.log('EDGE_BOUNDARY_ALLOWED_PREFLIGHT_CORS=PASS');
+          const unauthenticated = await fetch(base + eligibility, {
+            headers: { apikey: anon, origin: allowedOrigin },
+          });
+          const unauthenticatedData = await safeJson(unauthenticated);
+          requireCase('ALLOWED_UNAUTHENTICATED', unauthenticated, unauthenticatedData, 401, 'unauthenticated');
+          const authHeaders = {
+            authorization: `Bearer ${token}`,
+            apikey: anon,
+            origin: allowedOrigin,
+          };
+          const authenticated = await fetch(base + eligibility, { headers: authHeaders });
+          const authenticatedData = await safeJson(authenticated);
+          requireCase('ALLOWED_AUTHENTICATED', authenticated, authenticatedData, 200);
+          if (!authenticatedData || typeof authenticatedData !== 'object' || authenticatedData.eligible !== true) {
+            throw new Error('EDGE_BOUNDARY_ALLOWED_AUTHENTICATED_ELIGIBILITY_FALSE');
+          }
+          console.log('EDGE_BOUNDARY_ALLOWED_AUTHENTICATED_ELIGIBILITY=PASS');
+          const disallowed = await fetch(base + eligibility, {
+            headers: { ...authHeaders, origin: disallowedOrigin },
+          });
+          const disallowedData = await safeJson(disallowed);
+          requireCase('DISALLOWED_AUTHENTICATED', disallowed, disallowedData, 403, 'origin_not_allowed');
+          NODE
           CERTSIM_EDGE_URL=http://127.0.0.1:54321/functions/v1/certsim-protected-exam CERTSIM_USER_JWT="$CERTSIM_USER_JWT" CERTSIM_ACTOR_ID="$CERTSIM_ACTOR_ID" CERTSIM_ANON_KEY="$ANON_KEY" CERTSIM_DB_URL="$DB_URL" deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --allow-net=127.0.0.1:54321 --allow-run=psql --frozen supabase/functions/tests/integration_test.ts
           echo 'EDGE_HTTP_INTEGRATION_EXECUTED=1'
+          echo 'REAL_PROVIDER_CALLS=0'
       - name: Verify disposable Edge cleanup
         if: always()
         shell: bash
