@@ -1,0 +1,353 @@
+name: Issue 203 CLI 2.114.0 supplemental validation
+
+on:
+  push:
+    branches:
+      - "supplemental/issue203-e539ebd-cli2114"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue203-cli2114-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPECTED_REPOSITORY: SAFFR0NM0NEY/cert-sim-platform-ci-public
+  EXPECTED_BRANCH: supplemental/issue203-e539ebd-cli2114
+  EXPECTED_PUBLIC_BASE_SHA: 1102e7100fcaa5fbfb6d8518ea727fef102419ae
+  EXPECTED_PRIVATE_SHA: e539ebd454c2371b4fa1976582efadb8e60665a2
+  EXPECTED_MANIFEST_SHA256: b73a311d55dcb0f3e878234e267be31f968cf42e55e1c9edf5ed14a5d1b3e43c
+  SUPABASE_CLI_VERSION: 2.114.0
+
+jobs:
+  provenance:
+    name: Frozen candidate provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify exact base, one-file delta, and export manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow_path='.github/workflows/issue203-cli2114-validation.yml'
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPOSITORY"
+          test "$GITHUB_EVENT_NAME" = 'push'
+          test "$GITHUB_REF_NAME" = "$EXPECTED_BRANCH"
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PUBLIC_BASE_SHA"
+          git merge-base --is-ancestor "$EXPECTED_PUBLIC_BASE_SHA" "$GITHUB_SHA"
+          mapfile -t changed_paths < <(git diff --name-only "$EXPECTED_PUBLIC_BASE_SHA" "$GITHUB_SHA")
+          test "${#changed_paths[@]}" -eq 1
+          test "${changed_paths[0]}" = "$workflow_path"
+          test "$(tr -d '\r\n' < CI_SOURCE_SHA.txt)" = "$EXPECTED_PRIVATE_SHA"
+          EXPECTED_PUBLIC_BASE_SHA="$EXPECTED_PUBLIC_BASE_SHA" \
+          EXPECTED_PRIVATE_SHA="$EXPECTED_PRIVATE_SHA" \
+          EXPECTED_MANIFEST_SHA256="$EXPECTED_MANIFEST_SHA256" \
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { execFileSync } = require('node:child_process');
+
+          const base = process.env.EXPECTED_PUBLIC_BASE_SHA;
+          const expectedPrivate = process.env.EXPECTED_PRIVATE_SHA;
+          const expectedManifestHash = process.env.EXPECTED_MANIFEST_SHA256;
+          const manifestPath = 'CI_EXPORT_MANIFEST.tsv';
+          const mixedEolMaps = Object.freeze({
+            'scripts/test-issue86-python-lab-frontend.mjs': '/wf+/////////////////////////////////////////////////////////////////////////////////////3///wcAAPh//wEAAA==',
+            'scripts/validate-issue86-python-executor.mjs': '//////////////////////////////////////////////////////////////////////////////////////////////////////////8f+P////+//////z8=',
+            'src/components/exam/ProtectedExamRunner.jsx': '/w/8/////8f///////8A/w8AACD+////////////////////////////////////////////////////////////5///P//h+/EDP//////v//v/////////v/////3/8x///D8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAID////f//////9/AAAA8P////////////////////+///////////////////////////////////8P',
+            'src/lib/protectedExamClient.js': '//////9f+f/////////////////////////////////f//0D4ADg/wE=',
+            'tests/r3g/exam-library.spec.js': '/z9/98//P/7///3/Dw==',
+            'tests/r3g/protected-runner-harness.jsx': '//9/Aw==',
+          });
+          const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+          const blob = (path) => execFileSync(
+            'git',
+            ['cat-file', 'blob', `${base}:${path}`],
+            { maxBuffer: 64 * 1024 * 1024 },
+          );
+          const withCrlf = (bytes) => {
+            const output = [];
+            for (let index = 0; index < bytes.length; index += 1) {
+              if (bytes[index] === 10 && (index === 0 || bytes[index - 1] !== 13)) output.push(13);
+              output.push(bytes[index]);
+            }
+            return Buffer.from(output);
+          };
+          const withMixedEol = (bytes, encodedMap) => {
+            const bits = Buffer.from(encodedMap, 'base64');
+            const output = [];
+            let lineIndex = 0;
+            for (const byte of bytes) {
+              if (byte === 10) {
+                const useCrlf = (bits[Math.floor(lineIndex / 8)] & (1 << (lineIndex % 8))) !== 0;
+                if (useCrlf) output.push(13);
+                lineIndex += 1;
+              }
+              output.push(byte);
+            }
+            if (lineIndex > bits.length * 8) throw new Error('Mixed-EOL map is too short.');
+            return Buffer.from(output);
+          };
+
+          const manifestBlob = blob(manifestPath);
+          const exportedManifest = withCrlf(manifestBlob);
+          if (sha256(exportedManifest) !== expectedManifestHash) {
+            throw new Error('Original manifest SHA-256 mismatch.');
+          }
+          const lines = manifestBlob.toString('utf8').trimEnd().split(/\r?\n/);
+          if (lines.shift() !== 'path\tsize\tsha256') throw new Error('Unexpected manifest header.');
+          const manifestPaths = [];
+          const counts = { raw: 0, crlf: 0, mixed: 0 };
+          for (const line of lines) {
+            const [path, sizeText, expectedHash] = line.split('\t');
+            if (!path || path.startsWith('/') || path.split('/').includes('..')) {
+              throw new Error('Unsafe manifest path.');
+            }
+            const expectedSize = Number(sizeText);
+            const sourceBlob = blob(path);
+            const candidates = [['raw', sourceBlob], ['crlf', withCrlf(sourceBlob)]];
+            if (mixedEolMaps[path]) candidates.push(['mixed', withMixedEol(sourceBlob, mixedEolMaps[path])]);
+            const match = candidates.find(([, bytes]) => (
+              bytes.length === expectedSize && sha256(bytes) === expectedHash
+            ));
+            if (!match) throw new Error(`Manifest entry mismatch: ${path}`);
+            counts[match[0]] += 1;
+            manifestPaths.push(path);
+          }
+          if (manifestPaths.length !== 512 || counts.raw !== 19 || counts.crlf !== 487 || counts.mixed !== 6) {
+            throw new Error(`Unexpected manifest verification inventory: ${JSON.stringify(counts)}`);
+          }
+          const treePaths = execFileSync(
+            'git',
+            ['ls-tree', '-r', '--name-only', base],
+            { encoding: 'utf8' },
+          ).trimEnd().split(/\r?\n/);
+          const expectedTreePaths = [...manifestPaths, manifestPath].sort();
+          if (JSON.stringify(treePaths.sort()) !== JSON.stringify(expectedTreePaths)) {
+            throw new Error('Frozen candidate contains an unmanifested or missing path.');
+          }
+          if (blob('CI_SOURCE_SHA.txt').toString('utf8').trim() !== expectedPrivate) {
+            throw new Error('Frozen private SHA mismatch.');
+          }
+          console.log(`PROVENANCE_ENTRIES=${manifestPaths.length}`);
+          console.log(`PROVENANCE_EXPORT_BYTES=raw:${counts.raw},crlf:${counts.crlf},mixed:${counts.mixed}`);
+          console.log(`ORIGINAL_MANIFEST_SHA256=${expectedManifestHash}`);
+          NODE
+          workflow_sha256="$(sha256sum "$workflow_path" | awk '{print $1}')"
+          test -n "$workflow_sha256"
+          echo "SUPPLEMENTAL_WORKFLOW_SHA256=$workflow_sha256"
+
+  database-validation:
+    name: CLI 2.114.0 database validation
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-issue203-supabase-cli-2.114.0-database
+      - run: npm ci --prefer-offline
+      - name: Confirm pinned Supabase CLI commands
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(npx --yes supabase@2.114.0 --version)" = "$SUPABASE_CLI_VERSION"
+          npx --yes supabase@2.114.0 start --help >/dev/null
+          npx --yes supabase@2.114.0 db reset --help >/dev/null
+          npx --yes supabase@2.114.0 migration list --help >/dev/null
+          npx --yes supabase@2.114.0 test db --help >/dev/null
+          npx --yes supabase@2.114.0 status --help >/dev/null
+          npx --yes supabase@2.114.0 db lint --help >/dev/null
+          npx --yes supabase@2.114.0 db advisors --help >/dev/null
+          npx --yes supabase@2.114.0 stop --help >/dev/null
+          echo "SUPABASE_CLI_VERSION=$SUPABASE_CLI_VERSION"
+      - name: Static database validation
+        run: |
+          npm run validate:db-operations
+          npm run validate:db-assignment
+          node scripts/validate-issue65-untimed-practice.mjs
+      - name: Full disposable migration chain and pgTAP
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-database"
+          cleanup() {
+            exit_code=$?
+            trap - EXIT
+            npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup >/dev/null 2>&1 || true
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          find "$GITHUB_WORKSPACE/supabase/migrations" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort > "$RUNNER_TEMP/issue203-expected-migrations.txt"
+          find "$workdir/supabase/migrations" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort > "$RUNNER_TEMP/issue203-prepared-migrations.txt"
+          diff -u "$RUNNER_TEMP/issue203-expected-migrations.txt" "$RUNNER_TEMP/issue203-prepared-migrations.txt"
+          test "$(wc -l < "$RUNNER_TEMP/issue203-expected-migrations.txt")" -eq 90
+          echo '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300  supabase/migrations/20260920124528_issue133_examops_phase4b.sql' | sha256sum -c -
+          echo 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725  supabase/migrations/20260921044626_issue133_phase5a_operator_readonly.sql' | sha256sum -c -
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          docker ps --format '{{.Names}}\t{{.Image}}' | awk '$1 ~ /^supabase_db_/ {print "DISPOSABLE_DATABASE_IMAGE=" $2}'
+          npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
+          set -a
+          eval "$(npx --yes supabase@2.114.0 --workdir "$workdir" status -o env)"
+          set +a
+          for disposable_secret in "$ANON_KEY" "$SERVICE_ROLE_KEY" "$DB_URL"; do echo "::add-mask::$disposable_secret"; done
+          echo "DISPOSABLE_POSTGRES_VERSION=$(psql "$DB_URL" -Atqc 'show server_version')"
+          sed 's/_.*//' "$RUNNER_TEMP/issue203-expected-migrations.txt" > "$RUNNER_TEMP/issue203-expected-versions.txt"
+          psql "$DB_URL" -Atqc 'select version from supabase_migrations.schema_migrations order by version' > "$RUNNER_TEMP/issue203-applied-versions.txt"
+          diff -u "$RUNNER_TEMP/issue203-expected-versions.txt" "$RUNNER_TEMP/issue203-applied-versions.txt"
+          grep -Fx '20260920124528' "$RUNNER_TEMP/issue203-applied-versions.txt"
+          grep -Fx '20260921044626' "$RUNNER_TEMP/issue203-applied-versions.txt"
+          npx --yes supabase@2.114.0 --workdir "$workdir" migration list --local
+          for suite in \
+            backend_exam_delivery_assignment.sql \
+            backend_exam_delivery_multi_exam.sql \
+            backend_exam_delivery_generic_lifecycle.sql \
+            backend_exam_delivery_practice_history.sql \
+            backend_exam_delivery_r3e_scope.sql \
+            backend_exam_delivery_runner.sql \
+            backend_exam_delivery_legacy_compatibility.sql \
+            backend_exam_delivery_issue59.sql
+          do
+            npx --yes supabase@2.114.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/$suite"
+          done
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-generic-protected-lifecycle-integration.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-protected-access-history-integration.mjs
+          npx --yes supabase@2.114.0 --workdir "$workdir" db lint --local --level warning
+          npx --yes supabase@2.114.0 --workdir "$workdir" db advisors --local --type security --level info --fail-on error
+          npx --yes supabase@2.114.0 --workdir "$workdir" db advisors --local --type performance --level info --fail-on error
+      - name: Verify disposable database cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-database"
+          npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup >/dev/null 2>&1 || true
+          if docker ps -a --format '{{.Names}}' | grep -Eq '_certsim-backend-exam-delivery-validation$'; then
+            echo 'Disposable database containers remain after cleanup.'
+            exit 1
+          fi
+          echo 'DISPOSABLE_DATABASE_CLEANUP=PASS'
+
+  edge-unit-static:
+    name: CLI 2.114.0 Edge static and unit
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+      - run: deno check --config supabase/functions/certsim-protected-exam/deno.json supabase/functions/certsim-protected-exam/index.ts
+      - run: deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --frozen supabase/functions/certsim-protected-exam/tests
+
+  edge-disposable-integration:
+    name: CLI 2.114.0 disposable Edge HTTP lifecycle
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-issue203-supabase-cli-2.114.0-edge
+      - name: Disposable local Edge lifecycle
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-edge"
+          edge_env="$RUNNER_TEMP/certsim-edge.env"
+          edge_log="$RUNNER_TEMP/certsim-edge.log"
+          edge_pid=''
+          cleanup() {
+            exit_code=$?
+            trap - EXIT
+            if [ -n "$edge_pid" ]; then
+              kill "$edge_pid" >/dev/null 2>&1 || true
+              wait "$edge_pid" >/dev/null 2>&1 || true
+            fi
+            rm -f "$edge_env" "$edge_log"
+            npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup >/dev/null 2>&1 || true
+            exit "$exit_code"
+          }
+          trap cleanup EXIT
+          test "$(npx --yes supabase@2.114.0 --version)" = "$SUPABASE_CLI_VERSION"
+          npx --yes supabase@2.114.0 functions serve --help >/dev/null
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          cp -R supabase/functions "$workdir/supabase/functions"
+          find "$GITHUB_WORKSPACE/supabase/migrations" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort > "$RUNNER_TEMP/issue203-edge-expected-migrations.txt"
+          find "$workdir/supabase/migrations" -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort > "$RUNNER_TEMP/issue203-edge-prepared-migrations.txt"
+          diff -u "$RUNNER_TEMP/issue203-edge-expected-migrations.txt" "$RUNNER_TEMP/issue203-edge-prepared-migrations.txt"
+          test "$(wc -l < "$RUNNER_TEMP/issue203-edge-expected-migrations.txt")" -eq 90
+          echo '7e5068539d566184e62f7de04057762a987860a4ac7fe9864347d87edeb98300  supabase/migrations/20260920124528_issue133_examops_phase4b.sql' | sha256sum -c -
+          echo 'f9f90265adf431c1e2a2f606a7827ec9099a60e7e9c18426a56ad7411bc6f725  supabase/migrations/20260921044626_issue133_phase5a_operator_readonly.sql' | sha256sum -c -
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
+          docker ps --format '{{.Names}}\t{{.Image}}' | awk '$1 ~ /^supabase_(db|edge_runtime)_/ {print "DISPOSABLE_RUNTIME_IMAGE=" $2}'
+          npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
+          set -a
+          eval "$(npx --yes supabase@2.114.0 --workdir "$workdir" status -o env)"
+          set +a
+          for disposable_secret in "$ANON_KEY" "$SERVICE_ROLE_KEY" "$DB_URL"; do echo "::add-mask::$disposable_secret"; done
+          echo "DISPOSABLE_POSTGRES_VERSION=$(psql "$DB_URL" -Atqc 'show server_version')"
+          sed 's/_.*//' "$RUNNER_TEMP/issue203-edge-expected-migrations.txt" > "$RUNNER_TEMP/issue203-edge-expected-versions.txt"
+          psql "$DB_URL" -Atqc 'select version from supabase_migrations.schema_migrations order by version' > "$RUNNER_TEMP/issue203-edge-applied-versions.txt"
+          diff -u "$RUNNER_TEMP/issue203-edge-expected-versions.txt" "$RUNNER_TEMP/issue203-edge-applied-versions.txt"
+          grep -Fx '20260920124528' "$RUNNER_TEMP/issue203-edge-applied-versions.txt"
+          grep -Fx '20260921044626' "$RUNNER_TEMP/issue203-edge-applied-versions.txt"
+          npx --yes supabase@2.114.0 --workdir "$workdir" migration list --local
+          AUTH_RESPONSE="$(curl -sS -X POST "$API_URL/auth/v1/signup" -H "apikey: $ANON_KEY" -H 'content-type: application/json' --data '{"email":"edge-ci@example.invalid","password":"Synthetic-only-password-65!"}')"
+          CERTSIM_USER_JWT="$(AUTH_RESPONSE="$AUTH_RESPONSE" node -e "const v=JSON.parse(process.env.AUTH_RESPONSE);if(!v.access_token)process.exit(1);process.stdout.write(v.access_token)")"
+          CERTSIM_ACTOR_ID="$(AUTH_RESPONSE="$AUTH_RESPONSE" node -e "const v=JSON.parse(process.env.AUTH_RESPONSE);if(!v.user?.id)process.exit(1);process.stdout.write(v.user.id)")"
+          echo "::add-mask::$CERTSIM_USER_JWT"
+          echo "::add-mask::$CERTSIM_ACTOR_ID"
+          unset AUTH_RESPONSE
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -v actor_id="$CERTSIM_ACTOR_ID" -f supabase/functions/tests/edge_fixture.sql >/dev/null
+          printf 'CERTSIM_ALLOWED_ORIGINS=http://localhost:5173\nCERTSIM_RUNTIME_MODE=disposable-local\nCERTSIM_PROTECTED_RUNTIME_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\nSUPABASE_SECRET_KEY=%s\n' "$SERVICE_ROLE_KEY" "$ANON_KEY" "$SERVICE_ROLE_KEY" > "$edge_env"
+          npx --yes supabase@2.114.0 --workdir "$workdir" functions serve certsim-protected-exam --env-file "$edge_env" >"$edge_log" 2>&1 &
+          edge_pid=$!
+          ready=0
+          for attempt in {1..60}; do
+            status="$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54321/functions/v1/certsim-protected-exam/eligibility || true)"
+            if [ "$status" = 401 ]; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          CERTSIM_EDGE_URL=http://127.0.0.1:54321/functions/v1/certsim-protected-exam CERTSIM_USER_JWT="$CERTSIM_USER_JWT" CERTSIM_ACTOR_ID="$CERTSIM_ACTOR_ID" CERTSIM_ANON_KEY="$ANON_KEY" CERTSIM_DB_URL="$DB_URL" deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --allow-net=127.0.0.1:54321 --allow-run=psql --frozen supabase/functions/tests/integration_test.ts
+          echo 'EDGE_HTTP_INTEGRATION_EXECUTED=1'
+      - name: Verify disposable Edge cleanup
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-edge"
+          rm -f "$RUNNER_TEMP/certsim-edge.env" "$RUNNER_TEMP/certsim-edge.log"
+          npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup >/dev/null 2>&1 || true
+          if docker ps -a --format '{{.Names}}' | grep -Eq '_certsim-backend-exam-delivery-validation$'; then
+            echo 'Disposable Edge containers remain after cleanup.'
+            exit 1
+          fi
+          if pgrep -f '[s]upabase@2.114.0.*functions serve.*certsim-protected-exam' >/dev/null; then
+            echo 'Disposable Edge serve process remains after cleanup.'
+            exit 1
+          fi
+          echo 'DISPOSABLE_EDGE_CLEANUP=PASS'
