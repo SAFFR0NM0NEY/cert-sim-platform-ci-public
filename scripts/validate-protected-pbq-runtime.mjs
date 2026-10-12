@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { applyPBQReviewPolicy, scorePBQResponse, simulateTerminalCommand, validateAndCanonicalizePBQResponse } from './backend-exam-publication/pbq-runtime.mjs';
+
+const definition = { responseAllowlist: { targetIds: ['target-a', 'target-b'], answerIdsByTarget: [{ targetId: 'target-a', answerIds: ['one', 'two'] }, { targetId: 'target-b', answerIds: ['one', 'two'] }], orderIds: ['first', 'second'], answerIds: ['host-a'], commandIds: ['inspect a'] } };
+const mapped = validateAndCanonicalizePBQResponse(definition, { selectedAnswers: { 'target-b': 'two', 'target-a': 'one' }, revision: 2 });
+assert.equal(mapped.canonical, '{"revision":2,"selectedAnswers":{"target-a":"one","target-b":"two"}}');
+assert.deepEqual(scorePBQResponse({ strategy: 'per-component-map', expectedMap: { 'target-a': 'one', 'target-b': 'one' } }, mapped.canonical), { status: 'Partial', earnedPoints: 1, maxPoints: 2, scoringStrategy: 'per-component-map' });
+assert.throws(() => validateAndCanonicalizePBQResponse(definition, { arbitrary: true }), /PBQ_RESPONSE_UNKNOWN_KEY/);
+assert.throws(() => validateAndCanonicalizePBQResponse(definition, { selectedOrder: ['first', 'first'] }), /PBQ_RESPONSE_DUPLICATE_ORDER_ID/);
+assert.throws(() => validateAndCanonicalizePBQResponse(definition, { selectedAnswers: { foreign: 'one' } }), /PBQ_RESPONSE_FOREIGN_TARGET/);
+assert.throws(() => validateAndCanonicalizePBQResponse(definition, { executedCommands: ['rm -rf fixture'] }), /PBQ_RESPONSE_COMMAND_NOT_ALLOWLISTED/);
+assert.equal(simulateTerminalCommand('rm -rf fixture', { allowedCommands: [] }).status, 'rejected');
+const result = { status: 'Correct', earnedPoints: 1, maxPoints: 1 };
+assert.equal(Object.hasOwn(applyPBQReviewPolicy(result, { rationale: 'fixture' }, 'never', 'completed'), 'review'), false);
+assert.equal(Object.hasOwn(applyPBQReviewPolicy(result, { rationale: 'fixture' }, 'after_submission', 'active'), 'review'), false);
+assert.equal(Object.hasOwn(applyPBQReviewPolicy(result, { rationale: 'fixture' }, 'after_submission', 'completed'), 'review'), true);
+const runtimeSource = fs.readFileSync(new URL('./backend-exam-publication/pbq-runtime.mjs', import.meta.url), 'utf8');
+assert.doesNotMatch(runtimeSource, /\beval\s*\(|new\s+Function|child_process|execSync|spawnSync|Deno\.Command/);
+console.log('PASS protected PBQ runtime (sanitized fixtures only)');
