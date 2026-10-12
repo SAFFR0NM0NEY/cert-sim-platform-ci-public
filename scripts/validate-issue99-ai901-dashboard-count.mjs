@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { getProtectedDashboardMetadata, protectedProfileMetadata } from '../src/exams/protectedProfileMetadata.js';
+import { ai901ExamDefinition, examRegistry, sc200ExamDefinition } from '../src/exams/examRegistry.protected.js';
+
+const registrySource = await readFile(new URL('../src/exams/examRegistry.protected.js', import.meta.url), 'utf8');
+const profileSource = await readFile(new URL('../src/exams/protectedProfileMetadata.js', import.meta.url), 'utf8');
+assert.equal(ai901ExamDefinition.protectedPackageVersion, '3.0.0');
+assert.equal(ai901ExamDefinition.questionCount, 334);
+assert.equal(protectedProfileMetadata.ai901.inventoryCount, 334);
+assert.deepEqual(protectedProfileMetadata.ai901.profiles.map(({ id, totalScoredQuestions, timeLimitMinutes }) => [id, totalScoredQuestions, timeLimitMinutes]), [['ai901-controlled-beta-compact', 25, 25], ['ai901-controlled-beta-full', 50, 45]]);
+assert.doesNotMatch(registrySource, /questionCount:\s*234\b/);
+assert.doesNotMatch(registrySource, /questionCount:\s*334\b/);
+assert.match(registrySource, /getProtectedDashboardMetadata\(item\.id\)/);
+assert.match(registrySource, /questionCount:\s*packageMetadata\.questionCount/);
+const futureSource = Object.freeze({ ai901: Object.freeze({ packageVersion: '4.0.0', inventoryCount: 401, profiles: Object.freeze([]) }) });
+assert.deepEqual(getProtectedDashboardMetadata('ai901', futureSource), { packageVersion: '4.0.0', questionCount: 401 });
+assert.equal(getProtectedDashboardMetadata('missing', futureSource), null);
+assert.equal(sc200ExamDefinition.protectedPackageVersion, '1.1.0');
+assert.equal(sc200ExamDefinition.questionCount, 300);
+assert.deepEqual(Object.fromEntries(examRegistry.map(({ id, questionCount }) => [id, questionCount])), { inf303: 276, sc200: 300, az204: 287, 'security-plus-sy0-701': 370, az400: 433, ai901: 334, pythonnextgeneration: 283 });
+for (const forbidden of ['correctAnswer', 'correctOptionIds', 'explanation', 'canonicalFormMembership']) assert.doesNotMatch(profileSource, new RegExp(forbidden, 'i'));
+console.log(JSON.stringify({ ok: true, issue: 99, packageVersion: '3.0.0', questionCount: 334, versionAware: true, protectedContentFields: 0 }));
