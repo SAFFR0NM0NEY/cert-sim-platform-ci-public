@@ -1,0 +1,128 @@
+name: Issue201 trusted Python expiry authority
+on:
+  push:
+    branches: [supplemental/issue201-python-ce63838-cli2114]
+permissions:
+  contents: read
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Exact-source provenance and one-file supplemental boundary
+        env:
+          EXPECTED_PUBLIC_BASE_SHA: ddd422daa87b38acee83527d36ab6b9971c2484c
+          EXPECTED_PRIVATE_SHA: ce638387e7d19a01e9f035850b13dc6e4e47d2af
+          EXPECTED_MANIFEST_SHA256: 2ee95de37cdbafb90a56927ef112182f8e5d3308a109d08f47e0b7c530d7e530
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = SAFFR0NM0NEY/cert-sim-platform-ci-public
+          test "$GITHUB_REF_NAME" = supplemental/issue201-python-ce63838-cli2114
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_PUBLIC_BASE_SHA"
+          test "$(git diff --name-only "$EXPECTED_PUBLIC_BASE_SHA" HEAD)" = .github/workflows/issue201-cli2114-validation.yml
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { execFileSync } = require('node:child_process');
+
+          const base = process.env.EXPECTED_PUBLIC_BASE_SHA;
+          const expectedPrivate = process.env.EXPECTED_PRIVATE_SHA;
+          const expectedManifestHash = process.env.EXPECTED_MANIFEST_SHA256;
+          const manifestPath = 'CI_EXPORT_MANIFEST.tsv';
+          const mixedEolMaps = Object.freeze({});
+          const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+          const blob = (path) => execFileSync(
+            'git',
+            ['cat-file', 'blob', `${base}:${path}`],
+            { maxBuffer: 64 * 1024 * 1024 },
+          );
+          const withCrlf = (bytes) => {
+            const output = [];
+            for (let index = 0; index < bytes.length; index += 1) {
+              if (bytes[index] === 10 && (index === 0 || bytes[index - 1] !== 13)) output.push(13);
+              output.push(bytes[index]);
+            }
+            return Buffer.from(output);
+          };
+          const withMixedEol = (bytes, encodedMap) => {
+            const bits = Buffer.from(encodedMap, 'base64');
+            const output = [];
+            let lineIndex = 0;
+            for (const byte of bytes) {
+              if (byte === 10) {
+                const useCrlf = (bits[Math.floor(lineIndex / 8)] & (1 << (lineIndex % 8))) !== 0;
+                if (useCrlf) output.push(13);
+                lineIndex += 1;
+              }
+              output.push(byte);
+            }
+            if (lineIndex > bits.length * 8) throw new Error('Mixed-EOL map is too short.');
+            return Buffer.from(output);
+          };
+
+          const manifestBlob = blob(manifestPath);
+          if (sha256(manifestBlob) !== expectedManifestHash) {
+            throw new Error('Candidate manifest SHA-256 mismatch.');
+          }
+          const lines = manifestBlob.toString('utf8').trimEnd().split(/\r?\n/);
+          if (lines.shift() !== 'path\tsize\tsha256') throw new Error('Unexpected manifest header.');
+          const manifestPaths = [];
+          const counts = { raw: 0, crlf: 0, mixed: 0 };
+          for (const line of lines) {
+            const [path, sizeText, expectedHash] = line.split('\t');
+            if (!path || path.startsWith('/') || path.split('/').includes('..')) {
+              throw new Error('Unsafe manifest path.');
+            }
+            const expectedSize = Number(sizeText);
+            const sourceBlob = blob(path);
+            const candidates = [['raw', sourceBlob], ['crlf', withCrlf(sourceBlob)]];
+            if (mixedEolMaps[path]) candidates.push(['mixed', withMixedEol(sourceBlob, mixedEolMaps[path])]);
+            const match = candidates.find(([, bytes]) => (
+              bytes.length === expectedSize && sha256(bytes) === expectedHash
+            ));
+            if (!match) throw new Error(`Manifest entry mismatch: ${path}`);
+            counts[match[0]] += 1;
+            manifestPaths.push(path);
+          }
+          if (manifestPaths.length !== 526) {
+            throw new Error(`Unexpected manifest verification inventory: ${JSON.stringify(counts)}`);
+          }
+          const treePaths = execFileSync(
+            'git',
+            ['ls-tree', '-r', '--name-only', base],
+            { encoding: 'utf8' },
+          ).trimEnd().split(/\r?\n/);
+          const expectedTreePaths = [...manifestPaths, manifestPath].sort();
+          if (JSON.stringify(treePaths.sort()) !== JSON.stringify(expectedTreePaths)) {
+            throw new Error('Candidate contains an unmanifested or missing path.');
+          }
+          if (blob('CI_SOURCE_SHA.txt').toString('utf8').trim() !== expectedPrivate) {
+            throw new Error('Private SHA mismatch.');
+          }
+          console.log(`PROVENANCE_ENTRIES=${manifestPaths.length}`);
+          console.log(`PROVENANCE_EXPORT_BYTES=raw:${counts.raw},crlf:${counts.crlf},mixed:${counts.mixed}`);
+          console.log(`CANDIDATE_MANIFEST_SHA256=${expectedManifestHash}`);
+          NODE
+  database:
+    needs: provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --prefer-offline
+      - name: Worker replay, upgrades, SQL and actual HTTP acceptance
+        run: bash scripts/run-issue201-python-expiry-disposable.sh
+      - name: Verify cleanup
+        if: always()
+        run: |
+          npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-issue201-worker" stop --no-backup >/dev/null 2>&1 || true
+          if docker ps -a --format '{{.Names}}' | grep -Eq '_certsim-backend-exam-delivery-validation$'; then exit 1; fi
+          echo WORKER_DISPOSABLE_CLEANUP=PASS
