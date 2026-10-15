@@ -1,0 +1,35 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(24);
+
+select has_function('public','certsim_protected_publish_package',array['jsonb'],'public publication wrapper exists');
+select has_function('exam_delivery','publish_package',array['jsonb'],'private publication operation exists');
+select is((select prosecdef::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_publish_package'),'false','wrapper is invoker');
+select is((select prosecdef::text from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='publish_package'),'true','private operation is definer');
+select is((select proconfig[1] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_publish_package'),'search_path=""','wrapper search path empty');
+select ok((select proconfig @> array['search_path=""'] from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='exam_delivery' and p.proname='publish_package'),'private search path empty');
+select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where p.proname='certsim_protected_publish_package'),1,'wrapper not overloaded');
+select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like 'certsim_protected_publish%' and p.prosecdef),0,'no public publication definer function added');
+select ok((select proacl::text !~ '(^|,)=[^,]*X' from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='certsim_protected_publish_package'),'PUBLIC denied wrapper');
+select ok(not pg_has_role('anon','authenticated','member'),'anon does not inherit authenticated');
+select ok(not pg_has_role('service_role','authenticated','member'),'service role does not inherit authenticated');
+select ok(has_function_privilege('authenticated','public.certsim_protected_publish_package(jsonb)','execute'),'authenticated can invoke wrapper');
+select ok(not has_function_privilege('anon','public.certsim_protected_publish_package(jsonb)','execute'),'anon denied wrapper');
+select ok(not has_function_privilege('service_role','public.certsim_protected_publish_package(jsonb)','execute'),'service role denied wrapper');
+select ok(has_function_privilege('authenticated','exam_delivery.publish_package(jsonb)','execute'),'authenticated has narrow private execution');
+select ok(not has_function_privilege('service_role','exam_delivery.publish_package(jsonb)','execute'),'service role denied private operation');
+select is((select count(*)::integer from information_schema.role_table_grants where grantee='authenticated' and table_schema='exam_delivery'),0,'authenticated has no private table grants');
+select is((select count(*)::integer from information_schema.role_table_grants where grantee='anon' and table_schema='exam_delivery'),0,'anon has no private table grants');
+select is((select count(*)::integer from information_schema.role_table_grants where grantee='service_role' and table_schema='exam_delivery'),0,'runtime has no private table grants');
+select throws_ok($$select exam_delivery.publish_package('{}'::jsonb)$$,'42501','publication_auth_required','missing auth denied');
+set local role anon;
+select throws_ok($$select public.certsim_protected_publish_package('{}'::jsonb)$$,'42501',null,'anon denied');
+reset role;
+set local role service_role;
+select throws_ok($$select public.certsim_protected_publish_package('{}'::jsonb)$$,'42501',null,'service role denied');
+reset role;
+select is((select count(*)::integer from exam_delivery.package_versions),0,'catalogue remains empty');
+select is((select count(*)::integer from exam_delivery.publication_runs),0,'publication runs remain empty');
+
+select * from finish();
+rollback;
