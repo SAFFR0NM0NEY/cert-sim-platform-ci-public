@@ -1,0 +1,17 @@
+{
+  "name": "@certsim/python-executor-modal",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "modal": "0.10.1"
+  },
+  "devDependencies": {}
+}
