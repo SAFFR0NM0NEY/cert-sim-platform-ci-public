@@ -1,0 +1,191 @@
+name: Backend exam-delivery Edge validation
+
+on:
+  push:
+    branches:
+      [
+        'candidate/**',
+        main,
+        feat/backend-exam-delivery-pilot,
+        feat/multi-exam-backend-delivery,
+        feat/site-wide-maintenance-boundary,
+        feat/ai901-package-v2-successor,
+        feat/protected-access-history-ai901-v2,
+        fix/production-authorized-access-contract,
+        integration/protected-production-cutover,
+        feat/r3a-protected-production-audit,
+        feat/performance-dashboard-assignment-scope,
+      ]
+    paths:
+      - .github/workflows/backend-exam-delivery-edge-validation.yml
+      - scripts/supabase-migration-validation/**
+      - scripts/validate-actions-cost-controls.mjs
+      - scripts/validate-protected-exam-edge-function.mjs
+      - supabase/config.toml
+      - supabase/functions/certsim-protected-exam/**
+  pull_request:
+    paths:
+      - .github/workflows/backend-exam-delivery-edge-validation.yml
+      - scripts/supabase-migration-validation/**
+      - scripts/validate-actions-cost-controls.mjs
+      - scripts/validate-protected-exam-edge-function.mjs
+      - supabase/config.toml
+      - supabase/functions/certsim-protected-exam/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+concurrency:
+  group: edge-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  edge-unit-static:
+    name: Edge unit and static tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Validate Actions routing and cost controls
+        run: node scripts/validate-actions-cost-controls.mjs
+      - name: Verify exact private source and complete export manifest
+        run: node ci/verify-export.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+      - name: Confirm pinned tools
+        run: deno --version
+      - name: Run static validation
+        run: deno check --config supabase/functions/certsim-protected-exam/deno.json supabase/functions/certsim-protected-exam/index.ts
+      - name: Run Edge unit tests with the committed lockfile
+        run: deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --frozen supabase/functions/certsim-protected-exam/tests
+
+  edge-disposable-integration:
+    name: Disposable Edge HTTP lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact private source and complete export manifest
+        run: node ci/verify-export.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.5
+      - name: Restore pinned Supabase CLI download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-supabase-cli-2.114.0
+      - name: Prepare isolated protected-assignment project
+        run: |
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$RUNNER_TEMP/certsim-edge"
+          cp -R supabase/functions "$RUNNER_TEMP/certsim-edge/supabase/functions"
+      - name: Start and exercise disposable stack
+        shell: bash
+        env:
+          EDGE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EDGE_SOURCE_SHA"
+          test "$(npx --yes supabase@2.114.0 --version)" = 2.114.0
+          cleanup() { npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-edge" stop --no-backup || true; }
+          trap cleanup EXIT
+          npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-edge" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-edge" db reset --local --no-seed
+          set -a
+          eval "$(npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-edge" status -o env)"
+          set +a
+          for secret in "$DB_URL" "$ANON_KEY" "$SERVICE_ROLE_KEY"; do echo "::add-mask::$secret"; done
+          node --input-type=module <<'NODE'
+          import { assertDisposableTargets } from './scripts/assert-disposable-targets.mjs';
+          import { SOURCE_MIGRATIONS } from './scripts/supabase-migration-validation/prepare-migrations.mjs';
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import { execFileSync } from 'node:child_process';
+          assertDisposableTargets(process.env.API_URL, process.env.DB_URL);
+          const sql = query => execFileSync('psql',[process.env.DB_URL,'-XAtq','-v','ON_ERROR_STOP=1','-c',query],{encoding:'utf8'}).trim();
+          const expected = SOURCE_MIGRATIONS.map(name=>name.split('_')[0]);
+          const actual = sql('select version from supabase_migrations.schema_migrations order by version').split('\n');
+          if (JSON.stringify(actual)!==JSON.stringify(expected)) throw Error('EDGE_MIGRATION_LEDGER_MISMATCH');
+          const hashes = {};
+          for (const name of SOURCE_MIGRATIONS) {
+            const source=readFileSync('supabase/migrations/'+name), prepared=readFileSync(process.env.RUNNER_TEMP+'/certsim-edge/supabase/migrations/'+name);
+            if (!source.equals(prepared)) throw Error('EDGE_MIGRATION_RAW_BYTES_CHANGED');
+            if (['20260920124528','20261123085509'].includes(name.split('_')[0])) hashes[name]=createHash('sha256').update(source).digest('hex');
+          }
+          const contracts = sql(`select to_regclass('exam_delivery.attempt_continuation_contracts') is not null
+            and exists(select 1 from pg_trigger where tgname='create_attempt_continuation_contract_after_insert' and tgrelid='exam_delivery.attempts'::regclass and tgenabled='O')
+            and to_regprocedure('exam_delivery.examops_initial_configuration_is_empty(text)') is not null
+            and position('else coalesce(group_role=''atomic-pbq'',false) end) pbq' in pg_get_functiondef('exam_delivery.materialize_attempt_items_issue21_unrotated_base(uuid,uuid,integer)'::regprocedure))>0
+            and to_regprocedure('public.certsim_serverplus_publish_with_intent(jsonb)') is not null`);
+          if (contracts!=='t') throw Error('EDGE_MIGRATION_CONTRACT_MISSING');
+          writeFileSync(process.env.RUNNER_TEMP+'/edge-migration-proof.json',JSON.stringify({sourceSha:process.env.EDGE_SOURCE_SHA,sourceTree:execFileSync('git',['rev-parse','HEAD^{tree}'],{encoding:'utf8'}).trim(),cliVersion:'2.114.0',migrationCount:actual.length,first:actual[0],last:actual.at(-1),ledgerExact:true,allPreparedBytesExact:true,hashes,contractsPresent:true,productionActions:0}));
+          NODE
+          # PostgreSQL control: a naked LOCK must fail; an explicit transaction
+          # retains the same lock through subsequent DDL, matching the 2.114 runner.
+          if psql "$DB_URL" -Xq -v VERBOSITY=sqlstate -c 'lock table exam_delivery.attempts in share row exclusive mode nowait' >"$RUNNER_TEMP/edge-lock-control.log" 2>&1; then exit 1; fi
+          grep -q 25P01 "$RUNNER_TEMP/edge-lock-control.log"
+          psql "$DB_URL" -Xq -v ON_ERROR_STOP=1 <<'SQL'
+          begin;
+          lock table exam_delivery.attempts in share row exclusive mode nowait;
+          create temporary table certsim_edge_lock_control(id integer);
+          do $$begin
+            if not exists(select 1 from pg_locks where pid=pg_backend_pid() and relation='exam_delivery.attempts'::regclass and mode='ShareRowExclusiveLock' and granted) then raise exception 'EDGE_TRANSACTION_LOCK_NOT_RETAINED'; end if;
+          end$$;
+          rollback;
+          SQL
+          echo EDGE_EXPLICIT_TRANSACTION_LOCK_CONTROL=PASS
+          AUTH_RESPONSE="$(curl -sS -X POST "$API_URL/auth/v1/signup" -H "apikey: $ANON_KEY" -H 'content-type: application/json' --data '{"email":"edge-pilot@example.invalid","password":"Synthetic-only-password-17E2B!"}')"
+          CERTSIM_USER_JWT="$(AUTH_RESPONSE="$AUTH_RESPONSE" node -e "const v=JSON.parse(process.env.AUTH_RESPONSE);if(!v.access_token)process.exit(1);process.stdout.write(v.access_token)")"
+          CERTSIM_ACTOR_ID="$(AUTH_RESPONSE="$AUTH_RESPONSE" node -e "const v=JSON.parse(process.env.AUTH_RESPONSE);if(!v.user?.id)process.exit(1);process.stdout.write(v.user.id)")"
+          unset AUTH_RESPONSE
+          echo "::add-mask::$CERTSIM_USER_JWT"
+          echo "::add-mask::$CERTSIM_ACTOR_ID"
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -v actor_id="$CERTSIM_ACTOR_ID" -f supabase/functions/tests/edge_fixture.sql >/dev/null
+          printf 'CERTSIM_ALLOWED_ORIGINS=http://localhost:5173\nCERTSIM_RUNTIME_MODE=disposable-local\nCERTSIM_PROTECTED_RUNTIME_SECRET_KEY=%s\nSUPABASE_PUBLISHABLE_KEY=%s\nSUPABASE_SECRET_KEY=%s\n' "$SERVICE_ROLE_KEY" "$ANON_KEY" "$SERVICE_ROLE_KEY" > "$RUNNER_TEMP/certsim-edge.env"
+          npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-edge" functions serve --env-file "$RUNNER_TEMP/certsim-edge.env" >"$RUNNER_TEMP/edge.log" 2>&1 &
+          serve_pid=$!
+          ready=0
+          for attempt in {1..60}; do
+            if ! kill -0 "$serve_pid" 2>/dev/null; then echo EDGE_SERVE_EXITED_BEFORE_READY; exit 1; fi
+            # start/reset can leave an unconfigured runtime serving401 already.
+            # Require this serve process and its configured origin/auth context.
+            if ! grep -q 'Serving functions on' "$RUNNER_TEMP/edge.log"; then sleep 1; continue; fi
+            endpoint='http://127.0.0.1:54321/functions/v1/certsim-protected-exam/eligibility?examKey=ai-901&packageVersion=1.0.0&profileId=ai901-controlled-beta-compact&purpose=assigned_assessment'
+            status="$(curl -sS -o /dev/null -w '%{http_code}' -H 'origin: http://localhost:5173' -H "apikey: $ANON_KEY" "$endpoint" || true)"
+            authenticated="$(curl -sS -o /dev/null -w '%{http_code}' -H 'origin: http://localhost:5173' -H "apikey: $ANON_KEY" -H "authorization: Bearer $CERTSIM_USER_JWT" "$endpoint" || true)"
+            if [ "$status" = 401 ] && [ "$authenticated" = 200 ]; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "$ready" != "1" ]; then echo EDGE_CONFIGURED_RUNTIME_NOT_READY; exit 1; fi
+          CERTSIM_EDGE_URL=http://127.0.0.1:54321/functions/v1/certsim-protected-exam CERTSIM_USER_JWT="$CERTSIM_USER_JWT" CERTSIM_ACTOR_ID="$CERTSIM_ACTOR_ID" CERTSIM_ANON_KEY="$ANON_KEY" CERTSIM_DB_URL="$DB_URL" deno test --config supabase/functions/certsim-protected-exam/deno.json --allow-env --allow-net=127.0.0.1:54321 --allow-run=psql --frozen supabase/functions/tests/integration_test.ts
+      - name: Stop and remove disposable stack
+        if: always()
+        run: npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-edge" stop --no-backup
+      - name: Independently verify disposable cleanup
+        if: always()
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -aq --filter label=com.supabase.cli.project=certsim-backend-exam-delivery-validation)"
+          test -z "$remaining"
+          remaining="$(docker volume ls -q --filter label=com.supabase.cli.project=certsim-backend-exam-delivery-validation)"
+          test -z "$remaining"
+          printf '%s\n' '{"independentCleanup":true,"containersAbsent":true,"volumesAbsent":true,"productionActions":0}' > "$RUNNER_TEMP/edge-cleanup-proof.json"
+      - name: Sanitized migration and cleanup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-disposable-evidence
+          path: |
+            ${{ runner.temp }}/edge-migration-proof.json
+            ${{ runner.temp }}/edge-cleanup-proof.json

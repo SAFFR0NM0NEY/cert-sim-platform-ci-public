@@ -1,0 +1,118 @@
+.ns-annotation-controls {
+  flex-shrink: 0;
+  padding: 12px;
+  border-bottom: 1px solid #2b3c55;
+  background: #142239;
+  color: #cad9e9;
+  font-size: 12px;
+}
+.ns-drawing-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ns-annotation-controls p {
+  color: #9db3cc;
+  line-height: 1.5;
+}
+.ns-annotation-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ns-annotation-controls input,
+.ns-annotation-controls select,
+.ns-annotation-controls textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px;
+  color: #dbe9f8;
+  background: #101c2e;
+  border: 1px solid #40516b;
+  border-radius: 6px;
+  font: inherit;
+}
+.ns-annotation-controls input[type="color"] {
+  height: 34px;
+  padding: 3px;
+}
+.ns-annotation-editor {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.ns-annotation-editor .ns-note-text {
+  grid-column: 1/-1;
+}
+.ns-annotation-editor .ns-fill-toggle {
+  flex-direction: row;
+  align-items: center;
+}
+.ns-fill-toggle input {
+  width: auto;
+}
+.ns-note-text textarea {
+  min-height: 65px;
+  resize: vertical;
+}
+.ns-annotation-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+.ns-annotation-layer.editing {
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 2;
+  cursor: crosshair;
+}
+.ns-annotation-layer.editing g {
+  cursor: move;
+}
+.ns-annotation-shape {
+  pointer-events: all;
+}
+.ns-annotation-layer:not(.editing) .ns-annotation-shape {
+  pointer-events: none;
+}
+.ns-annotation-hit {
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+}
+.ns-annotation-layer:not(.editing) .ns-annotation-hit {
+  pointer-events: none;
+}
+.ns-annotation-selection {
+  stroke: #e8c77b;
+  stroke-width: 1;
+  stroke-dasharray: 5 4;
+  fill: none;
+  pointer-events: none;
+}
+.ns-annotation-layer g:focus {
+  outline: none;
+}
+.ns-annotation-layer g:focus .ns-annotation-selection {
+  stroke: #fff;
+  stroke-width: 2;
+}
+@media (max-width: 600px) {
+  .ns-center.ns-drawing {
+    height: auto;
+  }
+  .ns-drawing .ns-canvas-scroll {
+    min-height: 350px;
+    flex: none;
+  }
+  .ns-annotation-editor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ns-annotation-controls .ns-button {
+    white-space: normal;
+  }
+}

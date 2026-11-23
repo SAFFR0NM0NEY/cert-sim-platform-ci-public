@@ -1,0 +1,268 @@
+name: Backend exam-delivery database validation
+# Exact-source export includes the shared read-only query builder used by release tests.
+
+on:
+  push:
+    branches:
+      - 'candidate/**'
+      - main
+      - feat/backend-exam-delivery-pilot
+      - feat/multi-exam-backend-delivery
+      - feat/site-wide-maintenance-boundary
+      - feat/ai901-package-v2-successor
+      - feat/protected-access-history-ai901-v2
+      - fix/production-authorized-access-contract
+      - integration/protected-production-cutover
+      - feat/r3a-protected-production-audit
+      - feat/performance-dashboard-assignment-scope
+    paths: &database_paths
+      - .github/workflows/backend-exam-delivery-db-validation.yml
+      - scripts/supabase-migration-validation/**
+      - scripts/validate-supabase-migration-ci.mjs
+      - scripts/validate-actions-cost-controls.mjs
+      - scripts/validate-protected-exam-delivery-operations.mjs
+      - scripts/validate-protected-exam-publication.mjs
+      - scripts/validate-protected-exam-assignment.mjs
+      - scripts/validate-multi-exam-protected-foundation.mjs
+      - scripts/validate-generic-protected-lifecycle.mjs
+      - scripts/validate-generic-protected-privileges.mjs
+      - scripts/backend-exam-publication/**
+      - scripts/serverplus-publication/**
+      - scripts/serverplus-publish-once.mjs
+      - scripts/test-serverplus-authority*.mjs
+      - scripts/publish-protected-package.mjs
+      - scripts/test-protected-assignment-integration.mjs
+      - scripts/test-generic-protected-lifecycle-integration.mjs
+      - scripts/test-issue167-study-sandbox-lifecycle-integration.mjs
+      - scripts/test-issue167-resume-postgrest-integration.mjs
+      - scripts/test-issue86-python-orchestration-integration.mjs
+      - scripts/test-issue86-release-configuration-integration.mjs
+      - scripts/test-issue133-phase4b-integration.mjs
+      - scripts/test-issue133-phase4b-upgrade.mjs
+      - scripts/validate-issue133-examops-phase4b.mjs
+      - scripts/test-issue133-phase5a-integration.mjs
+      - scripts/validate-issue133-examops-phase5a.mjs
+      - scripts/validate-issue167-study-sandbox-lifecycle.mjs
+      - src/lib/examAssignmentService.js
+      - src/lib/protectedExamClient.js
+      - src/lib/authService.js
+      - src/lib/supabaseClient.js
+      - scripts/assert-disposable-targets.mjs
+      - scripts/test-sc100-compact-lifecycle.mjs
+      - scripts/sc100-compatibility/**
+      - scripts/test-protected-access-history-integration.mjs
+      - supabase/config.toml
+      - supabase/migrations/**
+      - supabase/tests/backend_exam_delivery_*.sql
+      - package-lock.json
+  pull_request:
+    paths: *database_paths
+  workflow_dispatch:
+    inputs:
+      common_only:
+        description: Run only the reusable synthetic lifecycle/access matrix
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database-validation:
+    name: Isolated migration and lifecycle suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      npm_config_prefer_offline: true
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Verify exact private source and complete export manifest
+        run: node ci/verify-export.mjs
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install repository dependencies once
+        run: npm ci --prefer-offline
+      - name: Confirm pinned Supabase CLI once
+        run: npx --yes supabase@2.115.0 --version
+      - name: Safe exact-source database static contracts
+        run: |
+          node scripts/validate-multi-exam-protected-foundation.mjs
+          node scripts/validate-external-protected-package.mjs
+          node scripts/validate-protected-pbq-runtime.mjs
+          node scripts/validate-package-v2-ordering-scoring.mjs
+          node scripts/validate-generic-protected-privileges.mjs
+          npm run validate:db-ci
+          npm run validate:db-operations
+          npm run validate:db-assignment
+      - name: Baseline migrations 0001-0012
+        if: ${{ !inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-baseline"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set baseline --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,inbucket,storage-api,postgrest,kong,gotrue,edge-runtime,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          npx --yes supabase@2.115.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/backend_exam_delivery_baseline.sql"
+
+      - name: Protected-delivery foundation 0001-0013
+        if: ${{ !inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-foundation"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set foundation --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,inbucket,storage-api,postgrest,kong,gotrue,edge-runtime,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          npx --yes supabase@2.115.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/backend_exam_delivery_foundation.sql"
+
+      - name: Protected-delivery operations 0001-0014
+        if: ${{ !inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-operations"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set operations --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,inbucket,storage-api,postgrest,kong,gotrue,edge-runtime,realtime,logflare,vector,supavisor >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          npx --yes supabase@2.115.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/backend_exam_delivery_operations.sql"
+
+      - name: Protected publication 0001-0015
+        if: ${{ !inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-publication"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set publication --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          npx --yes supabase@2.115.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/backend_exam_delivery_publication.sql"
+
+      - name: Issue 59 CRLF production-shape migration chain
+        if: ${{ !inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-assignment"
+          cleanup() { npx --yes supabase@2.115.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set issue59-preflight --output "$workdir"
+          npx --yes supabase@2.115.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.115.0 --workdir "$workdir" db reset --local --no-seed
+          npx --yes supabase@2.115.0 --workdir "$workdir" db query --local --file "$GITHUB_WORKSPACE/scripts/supabase-migration-validation/issue59-crlf-production-shape.sql"
+          cp "$GITHUB_WORKSPACE/supabase/migrations/20260903120000_issue59_function_definition_line_ending_preflight.sql" "$workdir/supabase/migrations/"
+          cp "$GITHUB_WORKSPACE/supabase/migrations/20260903161929_issue_59_functional_recovery.sql" "$workdir/supabase/migrations/"
+          npx --yes supabase@2.115.0 --workdir "$workdir" db push --local --yes
+          npx --yes supabase@2.115.0 --workdir "$workdir" db query --local --file "$GITHUB_WORKSPACE/scripts/supabase-migration-validation/issue59-crlf-postcheck.sql"
+          # Full issue59 assertions require later migrations and run in the full-chain suite below.
+
+      - name: Protected assignments, recovery, and multi-exam policy 0001-0055
+        if: ${{ !inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-assignment"
+          cleanup() { npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
+          for suite in \
+            backend_exam_delivery_assignment.sql \
+            backend_exam_delivery_multi_exam.sql \
+            backend_exam_delivery_generic_lifecycle.sql \
+            backend_exam_delivery_practice_history.sql \
+            backend_exam_delivery_r3e_scope.sql \
+            backend_exam_delivery_runner.sql \
+            backend_exam_delivery_legacy_compatibility.sql \
+            backend_exam_delivery_issue59.sql \
+            backend_exam_delivery_issue21.sql \
+            backend_exam_delivery_issue21_compatibility.sql \
+            backend_exam_delivery_issue83_partial_scorer.sql \
+            backend_exam_delivery_issue83_successor_cutover.sql \
+            backend_exam_delivery_issue101.sql \
+            backend_exam_delivery_issue101_learner_progress.sql \
+            backend_exam_delivery_python_standard.sql \
+            backend_exam_delivery_issue150.sql \
+            backend_exam_delivery_issue85_publication_contract.sql \
+            backend_exam_delivery_issue85_python_forms.sql \
+            backend_exam_delivery_issue85_successor_cutover.sql \
+            backend_exam_delivery_issue124.sql \
+            backend_exam_delivery_issue127.sql \
+            backend_exam_delivery_issue147.sql \
+            backend_exam_delivery_issue160.sql \
+            backend_exam_delivery_issue167.sql \
+            backend_exam_delivery_issue86.sql \
+            backend_exam_delivery_issue86_release_prep.sql \
+            backend_exam_delivery_issue133_phase4b.sql \
+            backend_exam_delivery_issue133_phase5a.sql
+          do
+            npx --yes supabase@2.114.0 --workdir "$workdir" test db --local "$GITHUB_WORKSPACE/supabase/tests/$suite"
+          done
+          set -a
+          eval "$(npx --yes supabase@2.114.0 --workdir "$workdir" status -o env)"
+          set +a
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-generic-protected-lifecycle-integration.mjs
+          SUPABASE_DB_URL="$DB_URL" node scripts/test-issue167-study-sandbox-lifecycle-integration.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-issue167-resume-postgrest-integration.mjs
+          SUPABASE_DB_URL="$DB_URL" node scripts/test-issue86-python-orchestration-integration.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-issue21-canonical-form-lifecycle.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-protected-access-history-integration.mjs
+          SUPABASE_DB_URL="$DB_URL" node scripts/test-issue133-phase4b-integration.mjs
+          SUPABASE_DB_URL="$DB_URL" node scripts/test-issue133-phase5a-integration.mjs
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-sc100-compact-lifecycle.mjs
+          npx --yes supabase@2.114.0 --workdir "$workdir" db lint --local --level warning
+          npx --yes supabase@2.114.0 --workdir "$workdir" db advisors --local --type security --level info --fail-on error
+          npx --yes supabase@2.114.0 --workdir "$workdir" db advisors --local --type performance --level info --fail-on error
+
+      - name: Reusable synthetic lifecycle and group-access matrix
+        if: ${{ inputs.common_only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-assignment"
+          cleanup() { npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup || true; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --output "$workdir"
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
+          set -a
+          eval "$(npx --yes supabase@2.114.0 --workdir "$workdir" status -o env)"
+          set +a
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" npm run test:release-common:db
+          SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" SUPABASE_DB_URL="$DB_URL" node scripts/test-sc100-compact-lifecycle.mjs
+
+      - name: Final disposable cleanup guard
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          for project in baseline foundation operations publication assignment; do
+            npx --yes supabase@2.114.0 --workdir "$RUNNER_TEMP/certsim-$project" stop --no-backup || true
+          done
+          remaining="$(docker ps -aq --filter label=com.supabase.cli.project=certsim-backend-exam-delivery-validation)"
+          test -z "$remaining"
+          remaining="$(docker volume ls -q --filter label=com.supabase.cli.project=certsim-backend-exam-delivery-validation)"
+          test -z "$remaining"
+          printf '%s\n' '{"independentCleanup":true,"containersAbsent":true,"volumesAbsent":true,"productionActions":0}' > "$RUNNER_TEMP/database-cleanup-proof.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-cleanup-proof
+          path: ${{ runner.temp }}/database-cleanup-proof.json

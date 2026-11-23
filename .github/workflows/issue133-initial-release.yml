@@ -1,0 +1,76 @@
+name: Phase4B initial release boundary
+on:
+  push:
+    branches: ['candidate/**']
+  pull_request:
+    paths:
+      - supabase/migrations/**
+      - scripts/test-issue133-initial-release.mjs
+      - scripts/test-issue133-phase4b-integration.mjs
+      - scripts/supabase-migration-validation/**
+      - .github/workflows/issue133-initial-release.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: initial-release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  initial-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CERTSIM_SOURCE_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact private source and complete export manifest
+        run: node ci/verify-export.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --prefer-offline
+      - name: Isolated 99-to-100 initial and successor release proof
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$RUNNER_TEMP/certsim-initial-release"
+          cleanup() { npx --yes supabase@2.114.0 --workdir "$workdir" stop --no-backup; }
+          trap cleanup EXIT
+          node scripts/supabase-migration-validation/prepare-migrations.mjs --set assignment --through 20261028202918 --output "$workdir"
+          sed -i 's/^project_id = .*/project_id = "certsim-initial-release"/' "$workdir/supabase/config.toml"
+          npx --yes supabase@2.114.0 --version
+          npx --yes supabase@2.114.0 --workdir "$workdir" start --exclude studio,imgproxy,mailpit,storage-api,realtime,logflare,vector,supavisor,edge-runtime >/dev/null
+          npx --yes supabase@2.114.0 --workdir "$workdir" db reset --local --no-seed
+          set -a
+          eval "$(npx --yes supabase@2.114.0 --workdir "$workdir" status -o env)"
+          set +a
+          export SUPABASE_DB_URL="$DB_URL"
+          node scripts/test-issue133-phase4b-integration.mjs --seed-only
+          node scripts/test-issue133-initial-release.mjs --before
+          cp supabase/migrations/20261104062621_issue133_initial_exam_release.sql "$workdir/supabase/migrations/"
+          npx --yes supabase@2.114.0 --workdir "$workdir" db push --local --yes
+          node scripts/test-issue133-initial-release.mjs --after
+          node scripts/test-issue133-phase4b-integration.mjs --reuse-fixture > "$RUNNER_TEMP/successor-release-proof.json"
+          cleanup
+          trap - EXIT
+          remaining="$(docker ps -aq --filter label=com.supabase.cli.project=certsim-initial-release)"
+          test -z "$remaining"
+      - name: Independent disposable cleanup verification
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          remaining="$(docker ps -aq --filter label=com.supabase.cli.project=certsim-initial-release)"
+          test -z "$remaining"
+          remaining="$(docker volume ls -q --filter label=com.supabase.cli.project=certsim-initial-release)"
+          test -z "$remaining"
+          printf '%s\n' '{"independentCleanup":true,"productionActions":0}' > "$RUNNER_TEMP/initial-cleanup-proof.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: initial-release-proof
+          path: |
+            ${{ runner.temp }}/initial-release-proof.json
+            ${{ runner.temp }}/successor-release-proof.json
+            ${{ runner.temp }}/initial-cleanup-proof.json

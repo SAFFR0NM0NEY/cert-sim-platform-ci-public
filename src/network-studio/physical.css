@@ -1,0 +1,248 @@
+.ns-workspace-views {
+  display: flex;
+  gap: 4px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #2b3b51;
+  background: #101d30;
+  flex-shrink: 0;
+}
+.ns-workspace-views button {
+  border: 0;
+  background: transparent;
+  color: #8ba4bf;
+  padding: 5px 13px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+.ns-workspace-views button[aria-pressed="true"] {
+  background: #213a51;
+  color: #7dd3fc;
+}
+.ns-physical-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+  background:
+    radial-gradient(circle at top left, #1a344b55, transparent 70%), #111f32;
+  font-size: 11px;
+  scrollbar-width: thin;
+  scrollbar-color: #3b526a #101d30;
+}
+.ns-physical-panel nav {
+  margin-bottom: 14px;
+  font-size: 10px;
+}
+.ns-physical-panel h2 {
+  margin: 3px 0 0;
+  font-size: 20px;
+  font-weight: 550;
+}
+.ns-physical-panel h3 {
+  font-size: 12px;
+  color: #adc7df;
+  margin: 16px 0 8px;
+}
+.ns-physical-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.ns-physical-title > span {
+  color: #7e9ab8;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.ns-location-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 9px;
+  margin: 13px 0;
+}
+.ns-location-edit label {
+  flex: 1;
+  min-width: 110px;
+}
+.ns-location-edit .ns-button {
+  font-size: 10px;
+  padding: 8px;
+}
+.ns-location-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 10px;
+}
+.ns-location-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 6px;
+  border: 1px solid #34516a;
+  background: #1a2c42;
+  color: #c2d8ec;
+  padding: 14px;
+  border-radius: 9px;
+}
+.ns-location-card > span {
+  font-size: 26px;
+  color: #7dd3fc;
+}
+.ns-location-card strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.ns-location-card small {
+  font-size: 9px;
+  color: #7f9cba;
+}
+.ns-location-card:hover {
+  border-color: #38bdf8;
+}
+.ns-rack {
+  margin: 12px 0;
+  border: 1px solid #3c4d65;
+  background: #0b1728;
+  border-radius: 7px;
+  padding: 10px;
+}
+.ns-rack-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #30445e;
+  padding: 4px 8px;
+  min-height: 35px;
+  margin: 3px 0;
+  border-radius: 4px;
+}
+.ns-rack-row > span {
+  font:
+    10px ui-monospace,
+    monospace;
+  color: #7892ae;
+  width: 28px;
+  flex-shrink: 0;
+}
+.ns-rack-row > small {
+  color: #4f6885;
+  font-size: 10px;
+}
+.ns-physical-device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: 0;
+  color: #89d6ed;
+  text-align: left;
+  padding: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.ns-physical-device strong {
+  font-size: 11px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.ns-physical-device small {
+  font-size: 9px;
+  color: #7898b2;
+  margin-left: auto;
+}
+.ns-floor-devices {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ns-floor-devices > div {
+  display: flex;
+  align-items: center;
+  border: 1px solid #3c4d65;
+  border-radius: 7px;
+  padding: 8px;
+  min-width: 150px;
+  background: #14253b;
+}
+.ns-physical-cables {
+  border-top: 1px solid #2c425b;
+  margin-top: 18px;
+  padding-top: 12px;
+}
+.ns-physical-cables > summary {
+  cursor: pointer;
+  color: #7dd3fc;
+  padding: 6px 0;
+  font-size: 11px;
+}
+.ns-physical-cables > .ns-panel-note {
+  margin: 9px 0;
+}
+.ns-physical-cables fieldset {
+  margin: 10px 0;
+  padding: 12px;
+}
+.ns-cable-length {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: end;
+}
+.ns-cable-length .ns-button {
+  font-size: 10px;
+  padding: 8px;
+}
+.ns-cable-length p,
+.ns-cable-length > small {
+  grid-column: 1/-1;
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.7;
+}
+.ns-cable-length > small {
+  color: #6f8ba7;
+}
+.ns-link-state {
+  color: #6ee7b7;
+}
+.ns-link-state.down {
+  color: #fda4af;
+}
+@media (max-width: 640px) {
+  .ns-physical-panel {
+    padding: 13px;
+  }
+  .ns-physical-title h2 {
+    font-size: 17px;
+  }
+  .ns-location-edit label {
+    min-width: 100px;
+  }
+  .ns-location-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ns-location-card {
+    padding: 10px;
+  }
+  .ns-location-card strong {
+    font-size: 11px;
+  }
+  .ns-location-edit .ns-button {
+    font-size: 9px;
+    padding: 7px;
+  }
+  .ns-rack-row {
+    padding: 4px;
+  }
+  .ns-physical-device {
+    gap: 6px;
+  }
+  .ns-physical-device strong {
+    font-size: 10px;
+  }
+  .ns-cable-length .ns-button {
+    font-size: 9px;
+  }
+}

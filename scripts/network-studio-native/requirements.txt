@@ -1,0 +1,2 @@
+packet-tracer-pkt-format==0.4.1
+lxml==6.0.2
