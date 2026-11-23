@@ -1,0 +1,89 @@
+name: Frontend feature validation
+
+on:
+  push:
+    branches:
+      - 'candidate/**'
+      - main
+      - feat/multi-exam-backend-delivery
+      - feat/site-wide-maintenance-boundary
+      - feat/ai901-package-v2-successor
+      - feat/protected-access-history-ai901-v2
+      - fix/production-authorized-access-contract
+      - integration/protected-production-cutover
+      - feat/r3a-protected-production-audit
+      - feat/performance-dashboard-assignment-scope
+  pull_request:
+    paths:
+      - .gitattributes
+      - .github/workflows/frontend-feature-validation.yml
+      - .github/pull_request_template.md
+      - README.md
+      - AGENTS.md
+      - docs/**
+      - src/**
+      - scripts/test-sc100-compact.mjs
+      - scripts/test-release-acceptance-safety.mjs
+      - scripts/test-generic-protected-lifecycle-integration.mjs
+      - scripts/assert-disposable-targets.mjs
+      - scripts/test-protected-access-history-integration.mjs
+      - scripts/generate-exam-portfolio.mjs
+      - scripts/validate-*.mjs
+      - scripts/serverplus-publication/**
+      - scripts/serverplus-publish-once.mjs
+      - scripts/test-serverplus-authority*.mjs
+      - services/python-executor/**
+      - services/python-executor-modal/**
+      - services/python-grading/**
+      - tests/r3g/**
+      - playwright.config.js
+      - scripts/validate-protected-build-custody.mjs
+      - scripts/validate-site-wide-maintenance.mjs
+      - scripts/build-certsim-delivery-mode.mjs
+      - package.json
+      - package-lock.json
+      - vite.config.js
+      - src/maintenance/**
+      - src/lib/maintenanceAccessService.js
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-build:
+    name: Validate and build (no deployment)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact private source and complete export manifest
+        run: node ci/verify-export.mjs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --prefer-offline
+      - name: Install routed-browser runtime
+        run: npx playwright install --with-deps chromium
+      - name: Verify disposable-only release acceptance guards
+        run: node --test scripts/test-release-acceptance-safety.mjs
+      - name: Verify routed renderer, lifecycle, numbering, timer, and navigation evidence
+        run: npm run test:r3g-browser
+      - name: Verify Server+ hidden and draft-enabled source registration
+        run: npx playwright test --config playwright.serverplus.config.js --workers=1
+      - name: Safe exact-source registry and presentation contracts
+        run: |
+          npm run validate:exam-library
+          node --test scripts/test-exam-mode-fidelity.mjs scripts/test-active-exam-catalogue.mjs scripts/test-domain-label-presentation.mjs
+      - name: Build
+        run: npm run build
+      - name: Validate maintenance and protected build boundaries
+        run: npm run validate:delivery-builds
+      - name: Confirm clean patch formatting
+        run: git diff --check
