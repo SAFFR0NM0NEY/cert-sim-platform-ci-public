@@ -1,4 +1,5 @@
 name: Backend exam-delivery database validation
+# Exact-source export includes the shared read-only query builder used by release tests.
 
 on:
   push:
